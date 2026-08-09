@@ -2,11 +2,14 @@
 
 **Transform your iPad into an Android Auto display screen.**
 
-> This project enables iPads (especially iPad mini 6) to act as a Headunit display/host for Android Auto, connecting wirelessly to your Android phone.
+> This project enables iPads (especially iPad mini 6) to act as a Headunit display/host for Android Auto, over a USB cable or wirelessly.
+
+> **Wired USB requires a TrollStore install.** It needs USB Host entitlements that an ordinary re-signed sideload cannot keep. Wireless works on any install.
 
 ## Features
 
 ### Core Functionality
+- **Wired USB Connection** *(TrollStore only)* - Talks to the phone directly over the cable using Android Open Accessory, with no Android Auto Server, no WiFi, and no helper app
 - **Wireless Connection** - Connects to Android Auto Server via WiFi (TCP port 5277)
 - **Video Streaming** - Receives and renders H.264 video frames from Android Auto
 - **Audio Playback** - PCM audio output via AVAudioEngine
@@ -24,6 +27,25 @@
 ## How It Works
 
 ### Connection Flow
+
+Two transports, one protocol. Both feed the same AAP session, so video, audio,
+touch, microphone, and GPS behave identically once connected.
+
+**Wired (USB)** — the iPad is the USB host:
+
+```
+┌─────────────┐   USB-C cable   ┌─────────────────┐
+│    iPad     │ ◄─────────────► │  Android Phone  │
+│   (host)    │                 │   (accessory)   │
+└──────┬──────┘                 └────────┬────────┘
+       │  1. AOA negotiation (GET_PROTOCOL, identity, START)
+       │  2. Phone re-enumerates as 0x18D1:0x2D01
+       │  3. Claim the accessory interface, bulk IN/OUT
+       │  4. Same AAP handshake as below, over the bulk pipe
+       ▼                                 ▼
+```
+
+**Wireless (WiFi)**:
 
 ```
 ┌─────────────┐         WiFi          ┌─────────────────┐
@@ -68,17 +90,51 @@ Well, You told me
 
 - **iPad** (iPad mini 6 recommended for best performance)
 - **iOS/iPadOS 16.6+**
-- **Android phone** running Android Auto Server from the dev option
-- **WiFi network** (both devices on same network)
+- **Android phone** with Android Auto
+
+For **wired USB**:
+
+- **TrollStore**, to install the IPA with its USB Host entitlements intact
+- A **USB-C data cable** (charge-only cables do not enumerate)
+- A **USB-C iPad**; the iPad acts as USB host, so the phone appears as an accessory
+
+For **wireless**:
+
+- **Android Auto Server** from the phone's developer options, or Headunit Revived's Wireless Helper
+- **WiFi network** (both devices on the same network)
 
 ## Installation
 
-### Sideloading (Recommended for Personal Use)
+### TrollStore (required for wired USB)
+
+1. Download `HeadunitPad.ipa` from the [latest release](https://github.com/andyching168/HeadunitPad/releases/latest)
+2. Open it with TrollStore and install
+
+The wired path needs three entitlements that only a TrollStore install keeps:
+`com.apple.vm.device-access`, the `AppleUSBHostDeviceUserClient` /
+`AppleUSBHostInterfaceUserClient` IOKit user-client exceptions, and
+`com.apple.system.diagnostics.iokit-properties`. The app reads its own code
+signature at launch, so on an install without them the wired button says so
+instead of failing with a misleading "no USB device found".
+
+To build the IPA yourself:
+
+```bash
+scripts/build_trollstore_ipa.sh
+```
+
+It builds unsigned, applies the entitlements with `ldid`, and refuses to produce
+an IPA whose packaged executable lost any of them.
+
+### Sideloading (wireless only)
 
 1. Clone this repository
 2. Open `iPadOS/HeadunitPad/HeadunitPad.xcworkspace` in Xcode
 3. Configure your development team in Signing & Capabilities
 4. Build and run on your iPad
+
+Re-signing strips the USB Host entitlements, so the wired button will tell you
+it needs TrollStore. Everything wireless works normally.
 
 ### Dependencies
 

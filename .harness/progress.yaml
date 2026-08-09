@@ -9,12 +9,25 @@ current_phase:
 current_task:
   id: phase_4_task_1
   name: Wired USB and USB-first Auto connection modes, status text, and diagnostics
-  status: not_started
+  status: in_progress
 
 current_task_progress:
-  completed: []
+  completed:
+    - Labelled both home-screen paths as Wired or Wireless with matching icons, so the wired entry point is no longer indistinguishable from the wireless one.
+    - Widened the connection controls to 300 points after the added labels wrapped every button onto two lines in the simulator.
+    - Removed the success alert, which dumped the whole diagnostic report over the video the moment it appeared; the failure alert and Settings > Diagnostics keep the report available.
+    - Renamed the probe-era strings (Cancel USB Test, Wired USB Test Failed, USB test cancelled) and made the wireless running status say "over wireless" to match "over USB".
+    - Added USBHostEntitlements, which reads the running binary's code signature and reports present, missing, or unknown.
+    - Blocked the wired button with an explanatory alert when the signature is readable and genuinely lacks the entitlements, and left it available on unknown so a parser fault cannot break a working install.
+    - Added a USB host entitlements diagnostic line.
+    - Bumped the marketing version to 0.4.0 and documented the wired path and its TrollStore requirement in the README.
   verification:
-    - Nothing started yet; Phase 3 closed with physical video and a passing disconnect/reconnect cycle.
+    - Full HeadunitPadTests suite passed, including seven new entitlement tests covering present, missing, false/empty values, malformed blobs, a synthetic signed Mach-O, unsigned images, and truncated images.
+    - The Swift parser was compiled for macOS and run against real artifacts: the packaged TrollStore executable reads as present, and the same executable re-signed with ordinary sideload entitlements reads as missing all three keys.
+    - The simulator build reads as missing, which made the blocking alert directly observable; it was confirmed on screen.
+    - Home-screen labels and the failure alert were confirmed on screen after the width fix.
+    - The packaged IPA was unpacked and its executable checked for the new strings: the TrollStore alert, entitlement diagnostics, and both path labels are present, and the removed success alert is absent.
+    - Connection mode remains wireless-only by explicit decision; the Wired USB and USB-first Auto modes in PRD section 7 are deliberately not implemented yet.
 
 phase_3_task_3_archive:
   completed:
@@ -291,7 +304,7 @@ verification:
     - User physical confirmation that an app-initiated disconnect followed by a reconnect now succeeds after the device re-enumeration fix.
 
 current_phase_remaining:
-  - Phase 4 task 1: add the Wired USB and USB-first Auto connection modes with their status text and diagnostics.
+  - Phase 4 task 1 remainder: decide whether the wired path becomes a ProjectionConnectionMode with a USB-first Auto, or stays a separate labelled button as it is now.
   - Phase 4 task 2: verify wired video, audio, touch, microphone, and location on hardware.
   - Phase 4 task 3: pass the stability gate of at least ten unplug/replug cycles, background/foreground recovery, and thirty minutes of continuous playback, then complete the README and LGPL release notes.
 
@@ -301,10 +314,11 @@ known_risks:
   - The updated GitHub Actions workflow was validated locally but has not yet run on GitHub-hosted macOS.
   - Reconnect depends on USBDeviceReEnumerate, which the USB host user client gates behind kUSBHostUserClientPropertyEnableReset; if a future iOS build refuses it there is no software alternative and the user must replug.
   - Repeated unplug/replug and long-session stability are unproven; only a single disconnect/reconnect cycle has been physically verified.
-  - HeadunitPad commit b067e5b is local to feature/trollusb and has not been pushed or opened as a pull request.
+  - The wired path is not part of ProjectionConnectionMode, so the Mode line in diagnostics describes the wireless strategy only.
+  - HeadunitPad work sits on feature/trollusb and has not been merged to main.
   - The existing allowBluetooth deprecation warning remains unrelated to this task.
 
 next_task: >-
-  Start Phase 4 task 1: add the Wired USB and USB-first Auto connection modes so
-  the wired path is a first-class choice rather than a probe button, with the
-  matching status text and diagnostics.
+  Phase 4 task 2: verify wired video, audio, touch, microphone, and location on
+  hardware, then start the stability gate of ten unplug/replug cycles,
+  background/foreground recovery, and thirty minutes of continuous playback.

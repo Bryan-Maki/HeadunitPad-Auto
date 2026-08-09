@@ -9,7 +9,7 @@ current_phase:
 current_task:
   id: phase_4_task_1
   name: Wired USB and USB-first Auto connection modes, status text, and diagnostics
-  status: not_started
+  status: in_progress
 
 session_summary: >-
   Phase 3 is complete. The wired path now reaches running, renders video, and
@@ -30,6 +30,12 @@ session_summary: >-
   committed; TrollUSBHostKit 0.1.3 is published and resolved from GitHub.
 
 completed_this_session:
+  - Labelled both home-screen paths as Wired or Wireless with icons and widened the controls to 300 points, after the added labels wrapped every button onto two lines.
+  - Removed the success alert, which covered the video it was reporting on; the failure alert and Settings > Diagnostics still carry the report.
+  - Renamed the probe-era strings and made the wireless running status say "over wireless" to match "over USB".
+  - Added USBHostEntitlements, reading the running binary's code signature rather than the linker's __TEXT,__entitlements section, because that section survives re-signing and would claim the entitlements are present on exactly the installs that lack them.
+  - Blocked the wired button with an explanatory alert on a readable signature that lacks the keys, and deliberately left it available on unknown so a parser fault cannot break a working install.
+  - Bumped the marketing version to 0.4.0 and documented the wired path, its TrollStore requirement, and the packaging script in the README.
   - Changed the renderer's queue-overflow policy to protect any frame carrying NAL type 5, 7, or 8 so the stream's only SPS/PPS frame can no longer be discarded under pressure.
   - Allowed the pending queue to grow to twelve while every queued frame is essential, and added a renderer queue-drop counter to make the loss observable.
   - Changed the external watchdog recovery request to ignore the recent-packet guard, which had silently suppressed every attempt while undecodable packets kept arriving.
@@ -149,6 +155,9 @@ completed_this_session:
   - Installed and launched the simulator build to check application startup.
 
 files_changed:
+  - HeadunitPad/Core/USB/USBHostEntitlements.swift
+  - HeadunitPadTests/USBHostEntitlementsTests.swift
+  - README.md
   - TrollUSBHostKit Sources/CUSBShim/include/usbhost_shim.h (separate repository)
   - TrollUSBHostKit Sources/CUSBShim/usbhost_shim.c (separate repository)
   - TrollUSBHostKit Sources/USBHostKit/USBHostBackend.swift (separate repository)
@@ -181,6 +190,10 @@ files_changed:
   - .build/TrollStoreIPA/HeadunitPad.ipa (ignored build artifact)
 
 tests_and_verification:
+  - The entitlement parser was compiled for macOS and run against real artifacts: the packaged TrollStore executable reads as present, and the same executable re-signed with ordinary sideload entitlements reads as missing all three keys.
+  - The simulator build reads as missing, which made the blocking alert directly observable; it was confirmed on screen along with the home-screen labels and the failure alert.
+  - The packaged IPA was unpacked and its executable searched for the new strings; the removed success alert is absent and the new alert, diagnostics, and labels are present.
+  - Seven entitlement tests cover present, missing, false/empty values, malformed blobs, a synthetic signed Mach-O, unsigned images, and truncated images.
   - User physical confirmation that Android Auto video renders over USB after the renderer parameter-set fix.
   - User physical confirmation that an app-initiated disconnect followed by a reconnect now reaches running after the device re-enumeration fix.
   - Hardware evidence that repeated AOA on an accessory-mode phone is a no-op: the device never left the bus and 13-54 KB of the previous session's bytes drained out of the pipe on every attempt.
@@ -309,13 +322,14 @@ tests_and_verification:
   - Existing allowBluetooth deprecation warning remains unchanged and is outside this task.
 
 current_phase_remaining:
-  - Phase 4 task 1: Wired USB and USB-first Auto connection modes, status text, and diagnostics.
+  - Phase 4 task 1 remainder: decide whether the wired path becomes a ProjectionConnectionMode with a USB-first Auto, or stays the separate labelled button it is now.
   - Phase 4 task 2: physical verification of wired video, audio, touch, microphone, and location.
   - Phase 4 task 3: at least ten unplug/replug cycles, background/foreground recovery, thirty minutes of continuous playback, then README and LGPL release notes.
 
 future_phases_not_started: []
 
 known_issues_and_risks:
+  - The wired path is not part of ProjectionConnectionMode, so the Mode line in diagnostics describes the wireless strategy only.
   - The workflow logic passed locally but has not yet run on a GitHub-hosted macOS runner.
   - Reconnect depends on USBDeviceReEnumerate, which the USB host user client gates behind kUSBHostUserClientPropertyEnableReset; if it is ever refused there is no software alternative and the user must replug.
   - Repeated unplug/replug and long-session stability are unproven; only one disconnect/reconnect cycle has been physically verified.
@@ -323,9 +337,9 @@ known_issues_and_risks:
   - Use HeadunitPad.xcworkspace for app-integrated tests so CocoaPods OpenSSL is available.
 
 next_suggested_task: >-
-  Start Phase 4 task 1: promote the wired path from a probe button to real Wired
-  USB and USB-first Auto connection modes, with the matching status text and
-  diagnostics.
+  Phase 4 task 2: verify wired video, audio, touch, microphone, and location on
+  hardware, then begin the stability gate of ten unplug/replug cycles,
+  background/foreground recovery, and thirty minutes of continuous playback.
 
 continuation_notes:
   - Do not enable or start a new USB session before cleanupUSBResources has awaited the previous retained host's stop; that race caused the failed second connection.
@@ -347,6 +361,8 @@ continuation_notes:
   - Do not start Phase 3 until the physical Phase 2 evidence is recorded or a hardware failure is diagnosed.
   - Do not treat simulator launch or ldid readback as physical USB Host verification.
   - Keep TrollUSBHostKit pinned to remote v0.1.3 and do not vendor libusb; 0.1.3 is the first release exposing resetDevice().
+  - Never read entitlements from the linker's __TEXT,__entitlements section: it survives re-signing and reports present on the very installs that lack them. The code signature is the only truthful source.
+  - Treat an unreadable signature as unknown and allow the wired path; only a readable signature that genuinely lacks the keys may block it.
   - Reach for resetDevice() first for any "make the phone start over" problem. Re-sending AOA to a phone already in accessory mode and raw SET_CONFIGURATION were both proved useless on hardware.
   - Re-enumeration returns the phone in normal mode, not accessory mode; the restart path must fall back into cold-start negotiation rather than waiting for an accessory device.
   - Trust an observed detach, never an inferred one. didReenumerateAfterStart only mirrored didSendStart and cost three rounds of misdiagnosis.
