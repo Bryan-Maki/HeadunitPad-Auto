@@ -1,0 +1,353 @@
+schema_version: 1
+project: HeadunitPad Wired Android Auto
+
+current_phase:
+  id: phase_4
+  name: Product integration and acceptance
+  status: not_started
+
+current_task:
+  id: phase_4_task_1
+  name: Wired USB and USB-first Auto connection modes, status text, and diagnostics
+  status: not_started
+
+session_summary: >-
+  Phase 3 is complete. The wired path now reaches running, renders video, and
+  survives an app-initiated disconnect followed by a reconnect, all confirmed on
+  the physical Xiaomi 14T Pro. Two defects closed it out. First, the black screen
+  was never a parsing problem: renderer counters showed 488 input frames, zero
+  SPS/PPS, and 462 missing-config drops, because the pending-frame queue's
+  overflow policy protected IDR frames only and discarded the stream's single
+  parameter-set frame; the policy now protects NAL types 5, 7, and 8. Second,
+  reconnect failed because the phone never released its previous Android Auto
+  session, which was proved by an AAP trace type of 5891, a TLS
+  application-data record header arriving where a plaintext message was
+  expected. Re-sending the full AOA sequence to a phone already in accessory
+  mode turned out to be a no-op, and a raw SET_CONFIGURATION control transfer
+  was rejected by iOS, so TrollUSBHostKit v0.1.3 now exposes resetDevice() over
+  USBDeviceReEnumerate. The phone sees that as an unplug, returns in normal
+  mode, and goes through ordinary cold-start negotiation. Both repositories are
+  committed; TrollUSBHostKit 0.1.3 is published and resolved from GitHub.
+
+completed_this_session:
+  - Changed the renderer's queue-overflow policy to protect any frame carrying NAL type 5, 7, or 8 so the stream's only SPS/PPS frame can no longer be discarded under pressure.
+  - Allowed the pending queue to grow to twelve while every queued frame is essential, and added a renderer queue-drop counter to make the loss observable.
+  - Changed the external watchdog recovery request to ignore the recent-packet guard, which had silently suppressed every attempt while undecodable packets kept arriving.
+  - Added a bounded stale-input drain that waits for the bulk IN pipe to fall quiet across bursts before the handshake starts, with drained-byte and budget-exhausted diagnostics.
+  - Added a wired handshake profile of fifteen version attempts across forty seconds, leaving the network profile unchanged.
+  - Threaded a write completion through send/sendEncryptedMessage so the byebye can no longer be cancelled by the teardown it announces; the response wait now starts only once the write reaches the wire.
+  - Kept a teardown summary for the last transport that actually reached running so a failed reconnect no longer overwrites the evidence explaining it.
+  - Replaced the inferred re-enumeration diagnostic, which only mirrored didSendStart, with an observed accessory detach.
+  - Added a SET_CONFIGURATION fallback and recorded its hardware rejection, then added device re-enumeration as the first-choice restart mechanism.
+  - Modelled the restart result as restarted, rescan, or unchanged so a phone that returns in normal mode falls back into cold-start negotiation instead of waiting for an accessory that will never appear.
+  - Changed the failure message to tell the user to unplug and replug when the phone never releases the accessory.
+  - Published TrollUSBHostKit v0.1.3 with uhs_reset_device and USBDeviceSession.resetDevice(), treating NO_DEVICE and NOT_FOUND as success because a re-enumerated device no longer resolves through the old handle.
+  - Committed both repositories and moved HeadunitPad from a local package override back to the published 0.1.3 dependency.
+  - Recorded prior task-3 work below.
+  - Added AOAPreparedAccessory so a successful AOA switch can transfer ownership of the reopened accessory session and running USB host to connection orchestration.
+  - Added prepareFirstAvailableAccessory while retaining the Phase 2 probe-only method for its existing diagnostics tests.
+  - Changed ConnectionManager's wired button path from endpoint-only probing to USBAccessoryConnection creation, interface claim, and injection into AapTransport.
+  - Reused the existing AAP version, TLS, authentication, binding, media, input, microphone, and location implementation without adding a USB-specific AAP copy.
+  - Added visible wired state updates for version negotiation, TLS, authentication, binding, running, cancellation, failure, and disconnect.
+  - Added cleanup that stops the retained USB host and restores a fresh TCP-backed AapTransport after the wired session ends.
+  - Renamed Test Wired USB to Connect Wired USB and kept a cancellable UI entry visible during USB discovery.
+  - Added a prepared-accessory ownership regression test proving the host stays started until explicit close.
+  - Produced .build/TrollStoreIPA/HeadunitPad.ipa for physical Phase 3 validation.
+  - Recorded the physical Xiaomi result: ordinary mode to accessory mode succeeded, AAP reached Connected via USB, and audio played.
+  - Recorded the remaining physical defect: no visible video despite the running session and working audio.
+  - Changed first-frame tracking to advance only after AVSampleBufferDisplayLayer accepts a decoded sample rather than when raw H.264 bytes arrive.
+  - Recorded that the next physical build still had no picture and self-disconnected about one to two seconds after reaching Connected via USB.
+  - Reverted the aggressive external-watchdog video recovery request while retaining renderer-aware first-frame tracking.
+  - Added AAP video packet, completed-frame, last-completed-frame byte counters, and recent video-channel trace to Diagnostics.
+  - Persisted AAP video diagnostics before USB teardown and changed the automatic alert's Copy Diagnostics action to fetch the complete current diagnostic report.
+  - Added a regression test for retaining saved AAP video evidence after disconnect.
+  - Recorded physical confirmation that Android Auto video is now visible over the wired connection.
+  - Recorded that user disconnect followed by reconnect fails before AAP running even though the second attempt reaches accessory interface 0 and receives encrypted video-channel packets.
+  - Added ConnectionState.disconnecting and kept all reconnect controls unavailable through bulk cancellation, interface release, session close, and USB Host stop.
+  - Delayed TCP transport restoration and Ready to connect until the complete USB cleanup barrier finishes.
+  - Recorded that the cleanup-barrier build reconnects to AAP running but displays black despite 743 video packets, 440 completed frames, and a 4986-byte last frame.
+  - Confirmed HeadunitPad previously only answered phone-originated BYEBYE_REQUEST and did not send one for user disconnect.
+  - Added encrypted control-channel BYEBYE_REQUEST with USER_SELECTION reason, BYEBYE_RESPONSE completion, and a 250-millisecond fallback.
+  - Added AAP graceful-disconnect diagnostics and an exact serialized-frame regression test.
+  - Recorded that the graceful-disconnect build can detach before running when already in accessory mode; a fresh AOA run reached running but stayed black and later self-detached.
+  - Recorded 767 video packets, 446 completed frames, and a 4770-byte last frame on that black session; graceful disconnect was Not requested because the phone/USB ended it.
+  - Marked AVSampleBufferDisplayLayer samples DisplayImmediately for live-stream rendering independent of stale session timestamps.
+  - Added complete renderer-stage diagnostics and AAP recovery-request/peer-BYEBYE diagnostics to every copyable report.
+  - Recorded the definitive black-screen result: 600 video packets, 287 complete frames, zero SPS/PPS, zero format/sample/enqueue, and 259 missing-config drops.
+  - Confirmed zero watchdog recovery requests and no peer BYEBYE during that running session.
+  - Added a shared H.264 parser for Annex-B, avcC, length-prefixed NALs, and AAP type/timestamp prefixes.
+  - Normalized non-Annex-B SPS/PPS to Annex-B in AapTransport before renderer delivery and added three focused parser tests.
+  - Recorded a stable-but-black physical session with 809 packets, 561 frames, zero SPS/PPS, and 533 missing-config drops.
+  - Recorded the eventual physical detach after 2721 packets, 2426 frames, and five external-watchdog recovery requests while codec configuration remained absent.
+  - Preserved media type 1 for first/single encrypted video packets and inherited that type across codec-config continuation fragments.
+  - Routed fully assembled codec configuration through the shared normalization path rather than delivering it as an ordinary frame.
+  - Prioritized avcC and length-prefix parsing over Annex-B to avoid a false start code spanning a zero AAP timestamp and avcC's leading 0x01.
+  - Added video data/config message counts, last codec-config prefix diagnostics, and per-handshake reset of video assembly/recovery state.
+  - Added USBAccessoryConnection as a non-blocking ByteStreamConnection over an injectable USB accessory session.
+  - Added asynchronous interface claim/release and continuous bulk IN reads without blocking the UI main actor.
+  - Preserved non-empty partial read data recovered from timeout and continued cleanly after zero-byte timeouts.
+  - Added serialized bulk OUT writes with per-write completion and ordered delivery.
+  - Added idempotent detach and active disconnect cleanup that cancels transfers, releases the interface, closes the session, fails queued writes, and emits one disconnect callback.
+  - Added five USB accessory lifecycle tests for endpoint validation, claim/read/release, ordered writes, detach, and in-flight/queued cancellation.
+  - Marked TcpHandler as unchecked Sendable after moving the shared transport callback boundary off the default UI actor; its existing serial Network.framework queue remains unchanged.
+  - Recorded the user's physical regression result that both wired AOA probing and wireless Android Auto remain normal.
+  - Added ByteStreamConnection and ByteStreamConnectionDelegate for state, send, disconnect, and connect/receive/disconnect callbacks.
+  - Migrated AapTransport from a concrete TcpHandler dependency to the shared byte-stream boundary.
+  - Migrated TcpHandler callbacks to ByteStreamConnectionDelegate without changing connect/adopt/accept entry points used by ConnectionManager.
+  - Removed the dead ConnectionManager TcpHandlerDelegate extension.
+  - Removed unused AccessoryConnection, TcpAccessoryConnection, and TcpConnection implementations to retain one transport abstraction.
+  - Added protocol lifecycle and Network.framework loopback TCP regression tests.
+  - Closed the Phase 2 physical gate using the user's complete ordinary-mode-to-accessory-mode diagnostics.
+  - Recorded source 0x2717:0xFF08 at bus/address 0/1, AOA protocol 2, and START sent successfully.
+  - Recorded accessory 0x18D1:0x2D01 at bus/address 0/1, interface 0, bulk IN 0x81, and bulk OUT 0x01.
+  - Clarified the misleading Detach after START field into Detach during START response and added Re-enumeration after START.
+  - Added a regression test for a normal START response followed by successful re-enumeration.
+  - Recorded the successful physical accessory-mode probe at 0x18D1:0x2D01, interface 0, bulk IN 0x81, and bulk OUT 0x01.
+  - Determined that source/protocol/START/detach remained unknown because the phone was already in accessory mode before this probe began.
+  - Diagnosed the phone's no-installed-app generic USB accessory dialog as a mismatch caused by HeadunitPad's custom AOA identity strings.
+  - Updated PRD.md and AOAIdentity to the Android Auto head-unit identity: Android, Android Auto, Android Auto, 2.0.1, the Android Auto developer URI, and HU-AAAAAA001.
+  - Added a test that verifies the exact identity values and all six NUL-terminated request 52 payloads.
+  - Rebuilt the three-entitlement TrollStore IPA and installed/launched the simulator build.
+  - Updated PRD.md section 5 and the Phase 1 gate from two to three required USB Host entitlements after user approval.
+  - Added com.apple.system.diagnostics.iokit-properties=true to HeadunitPad.entitlements.
+  - Extended build_trollstore_ipa.sh to fail if the new entitlement is absent from either the signed build product or packaged executable.
+  - Produced a new TrollStore IPA with all three entitlements embedded and verified.
+  - Recorded the second physical diagnostic: both IOUSBHostDevice and IOUSBHostInterface exist for Xiaomi 14T Pro, proving physical attachment and USB role negotiation.
+  - Confirmed the registry returns no idVendor/idProduct numbers and libusb returns zero devices, so failure is below AOA and above physical attachment.
+  - Compared packaged entitlement requirements with the same-hardware iPadADB project; iPadADB's proven configuration includes com.apple.system.diagnostics.iokit-properties in addition to the two HeadunitPad entitlements.
+  - Stopped before modifying signing requirements because PRD.md section 5 explicitly limits HeadunitPad to the current two entitlements.
+  - Recorded the user's first physical probe result: zero enumerated USB devices, no source VID/PID, and no AOA GET_PROTOCOL or START attempt.
+  - Added an enumerated USB device count to copyable diagnostics.
+  - Added USBHostController registrySummary capture on both success and failure paths, independent of libusb enumeration.
+  - Added a regression test proving no-device failures still emit IORegistry diagnostics before host cleanup.
+  - Added the main-screen Test Wired USB button below Enter IP Manually and retained the existing connection-mode behavior.
+  - Added ConnectionManager-owned USB probe lifecycle, cancellation, live UI state, and result/error delivery.
+  - Added stage reporting for search, initial enumeration, negotiation, protocol version, identity, START, detach, re-enumeration, accessory readiness, and libusb log capture.
+  - Added AOAProbeDiagnostics with copyable connection kind, VID/PID, bus/address, protocol version, START/detach, interface, bulk IN/OUT, error, and libusb fields.
+  - Added understandable error descriptions and preserved permission, control-transfer timeout, and pre-START detach errors.
+  - Added three diagnostics/stage/error tests; the complete AndroidOpenAccessoryTests suite now has thirteen passing tests.
+  - Installed and launched the updated simulator build and visually checked the new button layout.
+  - Built .build/TrollStoreIPA/HeadunitPad.ipa and verified its executable entitlements after packaging.
+  - Added AOAUSBDevice, interface, and endpoint snapshots with Google accessory VID/PID recognition and same-interface bulk endpoint selection.
+  - Added TrollUSBHost as the production adapter over USBHostController start, probe, open, and stop operations.
+  - Added AOAModeSwitcher candidate enumeration, AOA negotiation, bounded re-enumeration polling, cancellation, and lifecycle cleanup.
+  - Treated USBHostError.disconnected from request 53 as a successful START that proceeds to re-enumeration.
+  - Added four mode-switch tests plus a START-detach negotiation test, bringing the AOA test suite to ten tests.
+  - Corrected re-enumeration timeout propagation so it is not collapsed into noAOACapableDevice.
+  - Added AOAIdentity, indexed AOA string requests, GET_PROTOCOL and START requests, little-endian protocol parsing, and explicit protocol errors.
+  - Added AOANegotiator with an injectable async control-transfer boundary and USBDeviceSession conformance.
+  - Added a standalone HeadunitPadTests target and shared HeadunitPad scheme without coupling the pure AOA tests to the app's OpenSSL dependency.
+  - Added six unit tests for the complete request 51/52/53 model and execution sequence.
+  - Confirmed the project-local .build/TrollStoreIPA/HeadunitPad.ipa installed through TrollStore, launched without a crash, and retained existing functionality.
+  - Copied the verified artifact to .build/TrollStoreIPA/HeadunitPad.ipa for manual TrollStore installation.
+  - Recorded the user's physical-iPad test report: TrollStore installation succeeded, the app did not crash, and existing functionality was unchanged.
+  - Added HeadunitPad.entitlements with only the two USB Host entitlement keys required by TrollUSBHostKit.
+  - Set CODE_SIGN_ENTITLEMENTS for the HeadunitPad Debug and Release configurations.
+  - Added scripts/build_trollstore_ipa.sh for unsigned build, ldid signing, entitlement assertions, packaging, and post-package verification.
+  - Updated the GitHub Actions workflow to install ldid, run the shared script, and fail if the IPA is missing.
+  - Produced and verified a local HeadunitPad.ipa.
+  - Installed and launched the simulator build to check application startup.
+
+files_changed:
+  - TrollUSBHostKit Sources/CUSBShim/include/usbhost_shim.h (separate repository)
+  - TrollUSBHostKit Sources/CUSBShim/usbhost_shim.c (separate repository)
+  - TrollUSBHostKit Sources/USBHostKit/USBHostBackend.swift (separate repository)
+  - TrollUSBHostKit Sources/USBHostKit/USBDeviceSession.swift (separate repository)
+  - TrollUSBHostKit Tests/USBHostKitTests/USBHostKitTests.swift (separate repository)
+  - HeadunitPad/Core/Video/H264VideoRendererView.swift
+  - HeadunitPad/Core/USB/USBAccessoryConnection.swift
+  - HeadunitPadTests/USBAccessoryConnectionTests.swift
+  - HeadunitPad/Core/Network/ByteStreamConnection.swift
+  - HeadunitPad/Core/Network/TcpHandler.swift
+  - HeadunitPad/Core/AAP/AapTransport.swift
+  - HeadunitPad/Core/Video/H264NALParser.swift
+  - HeadunitPadTests/H264NALParserTests.swift
+  - HeadunitPad/Core/Network/ConnectionManager.swift
+  - HeadunitPadTests/ByteStreamConnectionTests.swift
+  - HeadunitPad/Core/Network/AccessoryConnection.swift (removed)
+  - HeadunitPad/Core/Network/TcpAccessoryConnection.swift (removed)
+  - HeadunitPad/Core/Network/TcpConnection.swift (removed)
+  - HeadunitPad/MainViewController.swift
+  - HeadunitPad/Core/Network/ConnectionManager.swift
+  - HeadunitPad/Core/USB/AndroidOpenAccessory.swift
+  - HeadunitPadTests/AndroidOpenAccessoryTests.swift
+  - HeadunitPad.xcodeproj/xcshareddata/xcschemes/HeadunitPad.xcscheme
+  - HeadunitPad/HeadunitPad.entitlements
+  - HeadunitPad.xcodeproj/project.pbxproj
+  - scripts/build_trollstore_ipa.sh
+  - .github/workflows/build-trollstore-ipa.yml
+  - .harness/progress.yaml
+  - .harness/handoff.yaml
+  - .build/TrollStoreIPA/HeadunitPad.ipa (ignored build artifact)
+
+tests_and_verification:
+  - User physical confirmation that Android Auto video renders over USB after the renderer parameter-set fix.
+  - User physical confirmation that an app-initiated disconnect followed by a reconnect now reaches running after the device re-enumeration fix.
+  - Hardware evidence that repeated AOA on an accessory-mode phone is a no-op: the device never left the bus and 13-54 KB of the previous session's bytes drained out of the pipe on every attempt.
+  - Hardware evidence that a raw SET_CONFIGURATION control transfer is rejected by iOS with LIBUSB_ERROR_OTHER.
+  - TrollUSBHostKit swift test passed 26/26 after adding resetDevice, covering backend reach, failure propagation, and closed-session rejection.
+  - Full HeadunitPadTests suite passed on the iPad (A16) simulator with the renderer, drain, restart-outcome, and re-enumeration tests added.
+  - Xcode re-resolved TrollUSBHostKit from GitHub at 0.1.3 after the local package checkout was deleted, proving the build no longer depends on a local override.
+  - Final TrollStore IPA packaging and three-entitlement readback passed; artifact is 2780654 bytes with SHA-256 ad1edf5f426c00746cf5aae7f45f2d60610880ca5e386169aaf5c9facb97075d.
+  - User physical evidence: 809 video packets and 561 completed frames remained connected but produced zero SPS/PPS, zero format/sample/enqueue, and 533 missing-config drops.
+  - User physical evidence: after 2721 packets and 2426 frames without codec configuration, five external-watchdog recovery requests occurred and the USB device detached.
+  - Media-type/codec-config HeadunitPadTests suite passed 30/30, including the regression where AAP type plus a zero timestamp previously formed a false Annex-B start code before avcC.
+  - Media-type/codec-config TrollStore IPA packaging and three-entitlement readback passed; artifact is 2753497 bytes with SHA-256 72dc2a15a7d33deaa2637a60a8cf87371f308dc52adde4dfb969fdf5b4cf9c04.
+  - Updated simulator installation and launch succeeded with process id 97947.
+  - User physical evidence isolated the black screen to missing renderer codec configuration: SPS/PPS 0/0, format 0, sample 0, enqueue 0, missing-config drops 259.
+  - Codec-config normalization HeadunitPadTests suite passed 29/29, including Annex-B, avcC after AAP prefix, and length-prefixed parameter sets after timestamp.
+  - Codec-config normalization TrollStore IPA packaging and three-entitlement readback passed; artifact is 2751214 bytes with SHA-256 2c32b36756c9ed5f2a2c0fc917d5717216d820cb72a775b2c313b90720b86e2f.
+  - Updated simulator installation and launch succeeded with process id 87974.
+  - User physical evidence: the graceful-disconnect build remained black despite 767 packets and 446 complete frames, then reported The USB device disconnected without a user BYEBYE request.
+  - DisplayImmediately/renderer-diagnostic HeadunitPadTests suite passed 26/26.
+  - DisplayImmediately/renderer-diagnostic TrollStore IPA packaging and three-entitlement readback passed; artifact is 2746380 bytes with SHA-256 414c2b69939b49aa608b027e38b157ccac8e214aa695391481c3f827a404d743.
+  - Updated simulator installation and launch succeeded with process id 82755.
+  - User physical evidence: the cleanup barrier reaches Connected on the next session, but the renderer remains black despite 743 packets and 440 completed frames.
+  - Graceful-disconnect HeadunitPadTests suite passed 26/26, including exact BYEBYE_REQUEST channel, flags, type, protobuf payload, and serialized bytes.
+  - Graceful-disconnect TrollStore IPA packaging and three-entitlement readback passed; artifact is 2734587 bytes with SHA-256 9049472124fa524fd3f8169c7fb69998b1f68b140fb7f88995d7393280a150b5.
+  - Graceful-disconnect simulator installation and launch succeeded with process id 76016.
+  - User physical evidence: the first wired session displayed video and audio; after selecting disconnect, the second attempt failed before AAP running.
+  - The second attempt reached 0x18D1:0x2D01 interface 0 endpoints 0x81/0x01 and logged flags 0x0B video-channel packets, so USB re-enumeration and endpoint claim were alive.
+  - Reconnect-barrier HeadunitPadTests suite passed 25/25.
+  - Reconnect-barrier TrollStore IPA packaging and three-entitlement readback passed; artifact is 2731092 bytes with SHA-256 e94930861530ff6b01956b533d06960aa32db92ea5e9a0a3a9563bcabe5b7ee8.
+  - Reconnect-barrier simulator installation and launch succeeded with process id 67980.
+  - Final diagnostic/reverted-recovery HeadunitPadTests suite passed 25/25: eighteen AOA/ownership/diagnostics, five USB lifecycle, and two byte-stream/TCP tests.
+  - Final TrollStore IPA packaging and three-entitlement executable readback passed; artifact is 2730185 bytes with SHA-256 30ad3b82b6dbc931365fb78940bfd7b46ad28a8d653caabe21511aa2201e0274.
+  - Final simulator installation and launch succeeded with process id 62603.
+  - Final compileall, plist/project/scheme validation, shell syntax, and git diff checks passed.
+  - User physical evidence: the prior recovery build reached Connected via USB but remained black and self-disconnected after about one to two seconds.
+  - Full HeadunitPadTests suite on the iPad (A16) simulator: 24/24 passed after USB-to-AAP injection.
+  - Prepared-accessory ownership test confirmed lifecycle start, probe, accessory reopen, retained host, then explicit close and stop.
+  - Release generic iOS device build and TrollStore IPA packaging passed.
+  - Packaged executable readback contains com.apple.vm.device-access, both AppleUSBHost user-client classes, and com.apple.system.diagnostics.iokit-properties=true.
+  - Physical validation reached Connected via USB and played audio; video remained black on the pre-recovery build.
+  - Video-recovery build retained 24/24 passing simulator tests.
+  - Updated Phase 3 task 3 IPA is 2729391 bytes; SHA-256: 5e54a0cb37c01d71a497787de1e837f865294979a1043b8f4c1b957dbdd136cf.
+  - Final simulator install and launch after the recovery change succeeded with process id 56445.
+  - Final simulator install and launch succeeded with process id 53083; visual inspection confirmed Connect Wired USB is visible without layout overlap.
+  - uv run python -m compileall -q ., plist/project/entitlement validation, scheme XML validation, shell syntax, and git diff --check passed.
+  - Full HeadunitPadTests suite on the iPad (A16) simulator: 23/23 passed.
+  - Five USB accessory tests passed for endpoint validation, claim/release, recovered-timeout read bytes, ordered writes, detach, and cancellation cleanup.
+  - Phase 3 task 2 HeadunitPad generic iOS device Debug build passed at arm64-apple-ios16.6 with signing disabled.
+  - Phase 3 task 2 simulator installation and launch succeeded with process id 42233.
+  - uv run python -m compileall -q ., project/plist/entitlement validation, scheme XML validation, shell syntax, and git diff --check passed.
+  - User physical regression verification: both wired AOA probing and wireless Android Auto are normal after the transport-boundary change.
+  - Full HeadunitPadTests suite on iPad (A16) simulator: 18/18 passed.
+  - Byte-stream lifecycle test covered connect, send, receive, disconnect, and isConnected behavior.
+  - TCP loopback test covered connect callback, client-to-server transfer, server-to-client transfer, and send completion.
+  - HeadunitPad generic iOS device Debug build passed at arm64-apple-ios16.6 with signing disabled.
+  - Simulator install and launch succeeded with process id 32327.
+  - uv run python -m compileall ., project/entitlement plist validation, scheme XML validation, shell syntax, and git diff --check passed.
+  - User physical Phase 2 validation: ordinary Xiaomi 0x2717:0xFF08, AOA protocol 2, START Yes, accessory 0x18D1:0x2D01, interface 0, bulk IN 0x81, and bulk OUT 0x01.
+  - AndroidOpenAccessoryTests on the iPad (A16) simulator: 16/16 passed after clarifying diagnostic semantics.
+  - Final Phase 2 Release generic iOS device build and TrollStore packaging passed.
+  - Final Phase 2 IPA is 2706500 bytes; SHA-256: ea6b40fb28cdd9ecfae8e80bb9b571047a94bbcb10dd91d0d6db32d75fcb8ed4.
+  - Packaged executable readback retains all three required USB Host entitlements.
+  - Final simulator install and launch succeeded with process id 27299.
+  - uv run python -m compileall ., YAML parsing, shell syntax, plist/scheme validation, and git diff --check passed.
+  - AndroidOpenAccessoryTests on the iPad (A16) simulator: 15/15 passed after the Android Auto identity correction.
+  - Release generic iOS device build and TrollStore packaging passed after the identity correction.
+  - Updated IPA is 2706484 bytes; SHA-256: 6a8b03498e1c0a27bda148e91da5908e0888aa67900fd73db28d5305f200d0c5.
+  - Packaged executable readback retains com.apple.vm.device-access, both AppleUSBHost user-client classes, and com.apple.system.diagnostics.iokit-properties=true.
+  - Updated simulator app installed and launched successfully as andyching168.HeadunitPad with process id 21718.
+  - User physical evidence: accessory mode ready at 0x18D1:0x2D01 with interface 0, bulk IN 0x81, and bulk OUT 0x01.
+  - Phone screenshot showed the old generic accessory identity was not matched by an installed app; the corrected identity has not yet been physically verified.
+  - AndroidOpenAccessoryTests on the iPad (A16) simulator: 14/14 passed.
+  - Release generic iOS device build and TrollStore packaging passed.
+  - Packaged executable readback contains com.apple.vm.device-access, both AppleUSBHost user-client classes, and com.apple.system.diagnostics.iokit-properties=true.
+  - New IPA is 2706563 bytes; SHA-256: 215325870afcbcb5f658b15dbc366429ce7eb6dc4bb7a1531340b2fa23e142e4.
+  - Updated simulator app installed and launched successfully with process id 13855.
+  - uv run python -m compileall ., shell syntax, plist/scheme validation, and git diff --check passed.
+  - User physical evidence: IORegistry lists Xiaomi 14T Pro and ADB Interface under both modern and legacy USB classes, but provides no VID/PID properties; libusb count remains zero.
+  - Source comparison: iPadADB's entitlements contain com.apple.system.diagnostics.iokit-properties and its harness records successful Xiaomi enumeration as 0x2717:0xFF08, interface claim, and bulk endpoint discovery on the same hardware.
+  - No product code or signing files were changed in this investigation; prior 14/14 tests and IPA build remain the latest offline verification.
+  - AndroidOpenAccessoryTests on the iPad (A16) simulator: 14/14 passed after adding IORegistry diagnostics.
+  - No-device regression test passed and confirmed stages include zero devices plus the registry summary before stop.
+  - Diagnostic Release generic iOS device build and TrollStore IPA packaging passed.
+  - Diagnostic IPA is 2706522 bytes; SHA-256: 837bbd0b91d7ec18e7d58023e38439317bae8aedfb83ee9d5c66150b0eba7911.
+  - Packaged executable readback retained com.apple.vm.device-access and both AppleUSBHost user-client classes.
+  - Updated simulator app installed and launched successfully with process id 98139.
+  - uv run python -m compileall ., plist/scheme validation, YAML parsing, and git diff --check passed.
+  - AndroidOpenAccessoryTests on the iPad (A16) simulator: 13/13 passed.
+  - Updated simulator app installed and launched as andyching168.HeadunitPad; the Test Wired USB button was visually confirmed without layout overlap.
+  - Release generic iOS device build through the TrollStore packaging script: passed at arm64-apple-ios16.6.
+  - .build/TrollStoreIPA/HeadunitPad.ipa was packaged successfully and is 2705606 bytes.
+  - IPA SHA-256: 0c62c62dbb41992156e677299d561b9281d3bd40869c695caea1d46948c17946.
+  - Packaged executable readback contains com.apple.vm.device-access=true and both required AppleUSBHost user-client classes.
+  - uv run python -m compileall ., plist/scheme validation, YAML parsing, and git diff --check passed.
+  - The first packaging retry used a relative output path and failed only while creating the ZIP; rerunning with the absolute output path succeeded.
+  - xcodebuild test through HeadunitPad.xcworkspace on the iPad (A16) simulator: 10/10 AndroidOpenAccessoryTests passed.
+  - HeadunitPad generic iOS device Debug build through HeadunitPad.xcworkspace at arm64-apple-ios16.6: passed.
+  - uv run python -m compileall .: passed after the mode-switch changes.
+  - project.pbxproj and entitlements plutil validation, shared-scheme xmllint validation, and git diff --check: passed.
+  - A project-only test attempt could not resolve the CocoaPods OpenSSL module; the correct workspace-based test command passed.
+  - xcodebuild test on the iPad (A16) simulator: 6/6 AndroidOpenAccessoryTests passed.
+  - HeadunitPad generic iOS device Debug build at arm64-apple-ios16.6: passed after the AOA changes.
+  - xmllint validation of the shared HeadunitPad scheme: passed.
+  - project.pbxproj plutil validation and git diff --check: passed.
+  - uv run python -m compileall .: passed after the AOA changes.
+  - The project-local IPA is 2407235 bytes and matches the verified SHA-256 exactly.
+  - User-reported physical test: a TrollStore installation passed; no crash; existing functionality unchanged.
+  - bash -n scripts/build_trollstore_ipa.sh: passed.
+  - uv run python -m compileall .: passed; no Python product source was changed.
+  - Entitlements plist and project.pbxproj plutil validation: passed.
+  - GitHub Actions workflow YAML syntax parsing: passed.
+  - HeadunitPad Release generic iOS device build at arm64-apple-ios16.6: passed.
+  - HeadunitPad generic iOS Simulator build: passed.
+  - >-
+    scripts/build_trollstore_ipa.sh produced
+    /tmp/HeadunitPad-TrollStoreIPA/HeadunitPad.ipa and verified both the build
+    product and the executable extracted from the IPA with ldid.
+  - >-
+    Entitlement readback contains com.apple.vm.device-access=true plus
+    AppleUSBHostDeviceUserClient and AppleUSBHostInterfaceUserClient, with no
+    additional requested entitlements.
+  - The verifier rejected a negative fixture missing com.apple.vm.device-access.
+  - IPA contains the app executable, Info.plist, LaunchScreen resources, and OpenSSL.framework.
+  - IPA SHA-256: 24c885aad8181f938d44048b07763437a5c1ba17a19138b72c8acaa6f2893d25.
+  - Simulator install and launch succeeded for andyching168.HeadunitPad with pid 77661; the app was then terminated.
+  - Existing allowBluetooth deprecation warning remains unchanged and is outside this task.
+
+current_phase_remaining:
+  - Phase 4 task 1: Wired USB and USB-first Auto connection modes, status text, and diagnostics.
+  - Phase 4 task 2: physical verification of wired video, audio, touch, microphone, and location.
+  - Phase 4 task 3: at least ten unplug/replug cycles, background/foreground recovery, thirty minutes of continuous playback, then README and LGPL release notes.
+
+future_phases_not_started: []
+
+known_issues_and_risks:
+  - The workflow logic passed locally but has not yet run on a GitHub-hosted macOS runner.
+  - Reconnect depends on USBDeviceReEnumerate, which the USB host user client gates behind kUSBHostUserClientPropertyEnableReset; if it is ever refused there is no software alternative and the user must replug.
+  - Repeated unplug/replug and long-session stability are unproven; only one disconnect/reconnect cycle has been physically verified.
+  - HeadunitPad commit b067e5b is local to feature/trollusb and has not been pushed or opened as a pull request.
+  - Use HeadunitPad.xcworkspace for app-integrated tests so CocoaPods OpenSSL is available.
+
+next_suggested_task: >-
+  Start Phase 4 task 1: promote the wired path from a probe button to real Wired
+  USB and USB-first Auto connection modes, with the matching status text and
+  diagnostics.
+
+continuation_notes:
+  - Do not enable or start a new USB session before cleanupUSBResources has awaited the previous retained host's stop; that race caused the failed second connection.
+  - USBAccessoryConnection now has a production creation/injection path through ConnectionManager.startUSBProbe; do not restore the former endpoint-only success behavior.
+  - A successful physical run changes diagnostics to Connected via USB; failures retain the exact last handshake stage and USB error for copy/paste.
+  - Keep AapTransport transport-neutral in task 3; create and own TrollUSBHostKit-backed objects at the connection-orchestration boundary.
+  - ConnectionManager still owns the concrete TcpHandler only for TCP-specific connect/adopt/accept orchestration.
+  - ByteStreamConnection is the only active AAP byte-stream abstraction; do not restore the removed blocking adapters.
+  - Detach during START response is optional: No means request 53 returned normally; successful re-enumeration is independently proven when the later accessory device appears.
+  - Phase 2 physical evidence is complete; do not request another AOA-only probe unless a regression is introduced.
+  - The user explicitly approved the third entitlement and PRD.md now records it as required.
+  - The entitlement verifier asserts all three keys in both the build product and packaged executable.
+  - Interpret an empty IORegistry summary as a physical attachment, data-cable, hub/power, or USB-role problem; an IORegistry entry with zero libusb devices points to the TrollUSBHostKit/libusb access path.
+  - Read the four source-of-truth files in order before recording the physical validation.
+  - Keep USB work off the UI main thread when device access is introduced.
+  - Treat an immediate detach after request 53 as waiting for re-enumeration, not as a failed START.
+  - Preserve the AOAModeSwitcher result fields for VID/PID, bus/address, protocol version, interface, and endpoints when adding diagnostics.
+  - The physical test UI is on the main screen; use Copy Diagnostics in the result alert or Settings > Diagnostics.
+  - Do not start Phase 3 until the physical Phase 2 evidence is recorded or a hardware failure is diagnosed.
+  - Do not treat simulator launch or ldid readback as physical USB Host verification.
+  - Keep TrollUSBHostKit pinned to remote v0.1.3 and do not vendor libusb; 0.1.3 is the first release exposing resetDevice().
+  - Reach for resetDevice() first for any "make the phone start over" problem. Re-sending AOA to a phone already in accessory mode and raw SET_CONFIGURATION were both proved useless on hardware.
+  - Re-enumeration returns the phone in normal mode, not accessory mode; the restart path must fall back into cold-start negotiation rather than waiting for an accessory device.
+  - Trust an observed detach, never an inferred one. didReenumerateAfterStart only mirrored didSendStart and cost three rounds of misdiagnosis.
+  - The renderer must never drop a frame carrying NAL type 7 or 8: the stream sends parameter sets once, and losing them makes every later frame undecodable.
