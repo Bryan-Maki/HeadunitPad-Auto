@@ -105,3 +105,14 @@ enum AapFlags {
     static let CONTROL_RESPONSE: UInt8 = 2
     static let NORMAL_MESSAGE: UInt8 = 0
 }
+
+extension AapMessage {
+    static var userSelectionByebyeRequest: AapMessage {
+        AapMessage(
+            channel: Channel.ID_CTR,
+            flags: AapFlags.CONTROL_MESSAGE,
+            type: AapMessageType.BYEBYE_REQUEST.rawValue,
+            payload: Data([0x08, 0x01])
+        )
+    }
+}

@@ -18,15 +18,8 @@ enum TcpHandlerError: Error {
     case timeout
 }
 
-protocol TcpHandlerDelegate: AnyObject {
-    func tcpHandlerDidConnect(_ handler: TcpHandler)
-    func tcpHandler(_ handler: TcpHandler, didFailWithError error: Error)
-    func tcpHandler(_ handler: TcpHandler, didReceiveData data: Data)
-    func tcpHandlerDidDisconnect(_ handler: TcpHandler)
-}
-
-class TcpHandler {
-    weak var delegate: TcpHandlerDelegate?
+nonisolated class TcpHandler: ByteStreamConnection, @unchecked Sendable {
+    weak var delegate: ByteStreamConnectionDelegate?
 
     private var connection: NWConnection?
     private let queue = DispatchQueue(label: "com.headunitpad.tcp", qos: .userInitiated)
@@ -51,7 +44,7 @@ class TcpHandler {
 
         isConnected = true
         DispatchQueue.main.async {
-            self.delegate?.tcpHandlerDidConnect(self)
+            self.delegate?.byteStreamConnectionDidConnect(self)
         }
         startReceiving()
     }
@@ -110,7 +103,7 @@ class TcpHandler {
                 self.connectionTimer?.cancel()
                 self.isConnected = true
                 DispatchQueue.main.async {
-                    self.delegate?.tcpHandlerDidConnect(self)
+                    self.delegate?.byteStreamConnectionDidConnect(self)
                 }
                 self.startReceiving()
 
@@ -119,7 +112,7 @@ class TcpHandler {
                 self.connectionTimer?.cancel()
                 self.isConnected = false
                 DispatchQueue.main.async {
-                    self.delegate?.tcpHandler(self, didFailWithError: error)
+                    self.delegate?.byteStreamConnection(self, didDisconnect: error)
                 }
 
             case .cancelled:
@@ -127,7 +120,7 @@ class TcpHandler {
                 self.connectionTimer?.cancel()
                 self.isConnected = false
                 DispatchQueue.main.async {
-                    self.delegate?.tcpHandlerDidDisconnect(self)
+                    self.delegate?.byteStreamConnection(self, didDisconnect: nil)
                 }
 
             case .waiting(let error):
@@ -145,7 +138,7 @@ class TcpHandler {
             if !self.isConnected {
                 print("TcpHandler: Connection timeout after \(self.connectionTimeout)s")
                 DispatchQueue.main.async {
-                    self.delegate?.tcpHandler(self, didFailWithError: TcpHandlerError.timeout)
+                    self.delegate?.byteStreamConnection(self, didDisconnect: TcpHandlerError.timeout)
                 }
                 self.disconnect()
             }
@@ -163,7 +156,7 @@ class TcpHandler {
         isConnected = false
     }
 
-    func send(_ data: Data, completion: ((Error?) -> Void)? = nil) {
+    func send(_ data: Data, completion: ((Error?) -> Void)?) {
         guard let connection = connection, isConnected else {
             print("TcpHandler: send called but not connected")
             completion?(TcpHandlerError.invalidState)
@@ -178,17 +171,13 @@ class TcpHandler {
         })
     }
 
-    func send(_ data: Data) {
-        send(data, completion: nil)
-    }
-
     private func startReceiving() {
         connection?.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, isComplete, error in
             guard let self = self else { return }
 
             if let data = data, !data.isEmpty {
                 self.receiveQueue.async {
-                    self.delegate?.tcpHandler(self, didReceiveData: data)
+                    self.delegate?.byteStreamConnection(self, didReceive: data)
                 }
             }
 

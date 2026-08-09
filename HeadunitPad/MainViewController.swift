@@ -113,6 +113,17 @@ class MainViewController: UIViewController {
         return button
     }()
 
+    private lazy var usbProbeButton: UIButton = {
+        var config = UIButton.Configuration.tinted()
+        config.title = "Connect Wired USB"
+        config.cornerStyle = .medium
+
+        let button = UIButton(configuration: config)
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.addTarget(self, action: #selector(usbProbeButtonTapped), for: .touchUpInside)
+        return button
+    }()
+
     private lazy var disconnectButton: UIButton = {
         var config = UIButton.Configuration.filled()
         config.title = "Disconnect"
@@ -134,6 +145,11 @@ class MainViewController: UIViewController {
         setupUI()
         setupConstraints()
         connectionManager.delegate = self
+        videoRenderer.onFrameDisplayed = { [weak self] in
+            guard let self else { return }
+            self.hasReceivedFirstVideoFrame = true
+            self.lastVideoFrameTs = Date().timeIntervalSince1970
+        }
         TrackpadInputBridge.shared.setTouchSender { [weak self] pointers, action, actionIndex in
             self?.connectionManager.sendTouchEvent(pointers: pointers, action: action, actionIndex: actionIndex)
         }
@@ -217,6 +233,7 @@ class MainViewController: UIViewController {
         view.addSubview(activityIndicator)
         view.addSubview(settingsButton)
         view.addSubview(manualIPButton)
+        view.addSubview(usbProbeButton)
         view.addSubview(disconnectButton)
 
         NSLayoutConstraint.activate([
@@ -278,6 +295,11 @@ class MainViewController: UIViewController {
             manualIPButton.topAnchor.constraint(equalTo: connectButton.bottomAnchor, constant: 16),
             manualIPButton.widthAnchor.constraint(equalToConstant: 200),
 
+            // Wired USB Probe Button
+            usbProbeButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            usbProbeButton.topAnchor.constraint(equalTo: manualIPButton.bottomAnchor, constant: 12),
+            usbProbeButton.widthAnchor.constraint(equalToConstant: 200),
+
             // Disconnect Button
             disconnectButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             disconnectButton.topAnchor.constraint(equalTo: statusLabel.bottomAnchor, constant: 48),
@@ -285,7 +307,7 @@ class MainViewController: UIViewController {
 
             // Activity Indicator
             activityIndicator.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            activityIndicator.topAnchor.constraint(equalTo: manualIPButton.bottomAnchor, constant: 32),
+            activityIndicator.topAnchor.constraint(equalTo: usbProbeButton.bottomAnchor, constant: 24),
 
             // Settings Button
             settingsButton.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16),
@@ -312,6 +334,7 @@ class MainViewController: UIViewController {
             connectButton.isEnabled = true
             updateConnectButtonTitle()
             manualIPButton.isHidden = false
+            usbProbeButton.isHidden = false
             disconnectButton.isHidden = true
             activityIndicator.stopAnimating()
 
@@ -326,6 +349,7 @@ class MainViewController: UIViewController {
             statusLabel.textColor = .secondaryLabel
             connectButton.isHidden = true
             manualIPButton.isHidden = true
+            usbProbeButton.isHidden = true
             disconnectButton.isHidden = true
             activityIndicator.startAnimating()
 
@@ -340,6 +364,7 @@ class MainViewController: UIViewController {
             statusLabel.textColor = .secondaryLabel
             connectButton.isHidden = true
             manualIPButton.isHidden = true
+            usbProbeButton.isHidden = true
             disconnectButton.isHidden = false
             activityIndicator.startAnimating()
 
@@ -354,6 +379,7 @@ class MainViewController: UIViewController {
             statusLabel.textColor = .secondaryLabel
             connectButton.isHidden = true
             manualIPButton.isHidden = true
+            usbProbeButton.isHidden = !connectionManager.usbProbeState.isRunning
             disconnectButton.isHidden = true
             activityIndicator.startAnimating()
 
@@ -368,7 +394,8 @@ class MainViewController: UIViewController {
             statusLabel.textColor = .systemBlue
             connectButton.isHidden = true
             manualIPButton.isHidden = true
-            disconnectButton.isHidden = true
+            usbProbeButton.isHidden = true
+            disconnectButton.isHidden = false
             activityIndicator.startAnimating()
 
         case .running:
@@ -382,8 +409,25 @@ class MainViewController: UIViewController {
             statusLabel.textColor = .systemGreen
             connectButton.isHidden = true
             manualIPButton.isHidden = true
+            usbProbeButton.isHidden = true
             disconnectButton.isHidden = true
             activityIndicator.stopAnimating()
+
+        case .disconnecting:
+            stopVideoWatchdog()
+            videoContainerView.isHidden = true
+            audioPlayer.reset()
+            settingsButton.isHidden = false
+            titleLabel.isHidden = false
+            subtitleLabel.isHidden = false
+            statusLabel.isHidden = false
+            statusLabel.text = connectionManager.statusDetail
+            statusLabel.textColor = .secondaryLabel
+            connectButton.isHidden = true
+            manualIPButton.isHidden = true
+            usbProbeButton.isHidden = true
+            disconnectButton.isHidden = true
+            activityIndicator.startAnimating()
 
         case .error(let message):
             stopVideoWatchdog()
@@ -399,6 +443,7 @@ class MainViewController: UIViewController {
             connectButton.isEnabled = true
             updateConnectButtonTitle()
             manualIPButton.isHidden = false
+            usbProbeButton.isHidden = false
             disconnectButton.isHidden = true
             activityIndicator.stopAnimating()
         }
@@ -486,6 +531,14 @@ class MainViewController: UIViewController {
         })
 
         present(alert, animated: true)
+    }
+
+    @objc private func usbProbeButtonTapped() {
+        if connectionManager.usbProbeState.isRunning {
+            connectionManager.stopUSBProbe()
+        } else {
+            connectionManager.startUSBProbe()
+        }
     }
 
     @objc private func disconnectButtonTapped() {
@@ -737,12 +790,62 @@ class MainViewController: UIViewController {
     private func presentDiagnostics() {
         let alert = UIAlertController(
             title: "Diagnostics",
-            message: connectionManager.diagnosticLines().joined(separator: "\n"),
+            message: combinedDiagnosticLines().joined(separator: "\n"),
             preferredStyle: .alert
         )
 
         alert.addAction(UIAlertAction(title: "Close", style: .cancel))
+        alert.addAction(UIAlertAction(title: "Copy", style: .default) { [weak self] _ in
+            UIPasteboard.general.string = self?.combinedDiagnosticLines().joined(separator: "\n")
+        })
         present(alert, animated: true)
+    }
+
+    private func updateUSBProbeUI(_ state: USBProbeState) {
+        switch state {
+        case .idle:
+            usbProbeButton.configuration?.title = "Connect Wired USB"
+        case .running(let status):
+            usbProbeButton.configuration?.title = "Cancel USB Test"
+            connectButton.isEnabled = false
+            manualIPButton.isEnabled = false
+            statusLabel.text = status
+            statusLabel.textColor = .systemBlue
+            activityIndicator.startAnimating()
+        case .succeeded:
+            finishUSBProbeUI(status: "Android Auto is running over USB", color: .systemGreen)
+            presentUSBProbeResult(title: "Wired Android Auto Connected")
+        case .failed(let message):
+            finishUSBProbeUI(status: message, color: .systemRed)
+            presentUSBProbeResult(title: "Wired USB Test Failed")
+        case .cancelled:
+            finishUSBProbeUI(status: "USB test cancelled", color: .secondaryLabel)
+        }
+    }
+
+    private func finishUSBProbeUI(status: String, color: UIColor) {
+        usbProbeButton.configuration?.title = "Connect Wired USB"
+        connectButton.isEnabled = true
+        manualIPButton.isEnabled = true
+        statusLabel.text = status
+        statusLabel.textColor = color
+        activityIndicator.stopAnimating()
+    }
+
+    private func presentUSBProbeResult(title: String) {
+        let details = combinedDiagnosticLines().joined(separator: "\n")
+        let alert = UIAlertController(title: title, message: details, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "Copy Diagnostics", style: .default) { [weak self] _ in
+            UIPasteboard.general.string = self?.combinedDiagnosticLines().joined(separator: "\n")
+        })
+        alert.addAction(UIAlertAction(title: "Close", style: .cancel))
+        present(alert, animated: true)
+    }
+
+    private func combinedDiagnosticLines() -> [String] {
+        connectionManager.diagnosticLines()
+            + [""]
+            + videoRenderer.diagnosticLines()
     }
 
     private func configurePopoverSource(for alert: UIAlertController) {
@@ -814,7 +917,7 @@ extension MainViewController: ConnectionManagerDelegate {
 
     func connectionManager(_ manager: ConnectionManager, didUpdateStatus status: String) {
         switch manager.state {
-        case .disconnected, .discovering, .waitingForWirelessHelper, .connecting, .handshaking, .error:
+        case .disconnected, .discovering, .waitingForWirelessHelper, .connecting, .handshaking, .disconnecting, .error:
             statusLabel.text = status
         case .running:
             break
@@ -844,13 +947,15 @@ extension MainViewController: ConnectionManagerDelegate {
         VideoFrameBus.shared.publish(frame: data)
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            self.hasReceivedFirstVideoFrame = true
-            self.lastVideoFrameTs = Date().timeIntervalSince1970
             self.videoRenderer.enqueueAnnexBFrame(data)
         }
     }
 
     func connectionManager(_ manager: ConnectionManager, didReceiveAudioData data: Data, on channel: UInt8) {
         audioPlayer.playPCM(data, on: channel)
+    }
+
+    func connectionManager(_ manager: ConnectionManager, didChangeUSBProbeState state: USBProbeState) {
+        updateUSBProbeUI(state)
     }
 }

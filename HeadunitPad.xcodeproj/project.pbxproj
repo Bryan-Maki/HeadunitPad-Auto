@@ -8,10 +8,27 @@
 
 /* Begin PBXBuildFile section */
 		8AAEAAEFAB8BE6DC23321C48 /* Pods_HeadunitPad.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BFD3A5C41BAB9748091B8410 /* Pods_HeadunitPad.framework */; };
+		A0A00000000000000000000D /* AndroidOpenAccessory.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0A00000000000000000000E /* AndroidOpenAccessory.swift */; };
+		A0A00000000000000000000F /* USBHostKit in Frameworks */ = {isa = PBXBuildFile; productRef = D4C8A6E0F1B2435C9A7D8E12 /* USBHostKit */; };
+		B5B000000000000000000001 /* ByteStreamConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5B000000000000000000003 /* ByteStreamConnection.swift */; };
+		B5B000000000000000000002 /* TcpHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5B000000000000000000004 /* TcpHandler.swift */; };
+		B5B000000000000000000005 /* USBAccessoryConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5B000000000000000000006 /* USBAccessoryConnection.swift */; };
+		C6B000000000000000000001 /* AapMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6B000000000000000000003 /* AapMessage.swift */; };
+		C6B000000000000000000002 /* Channel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6B000000000000000000004 /* Channel.swift */; };
+		D7B000000000000000000001 /* H264NALParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7B000000000000000000002 /* H264NALParser.swift */; };
+		D4C8A6E0F1B2435C9A7D8E10 /* USBHostKit in Frameworks */ = {isa = PBXBuildFile; productRef = D4C8A6E0F1B2435C9A7D8E12 /* USBHostKit */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		62EB88A32F935A6900D2526F /* HeadunitPad.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HeadunitPad.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A0A000000000000000000001 /* HeadunitPadTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HeadunitPadTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A0A00000000000000000000E /* AndroidOpenAccessory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/USB/AndroidOpenAccessory.swift; sourceTree = SOURCE_ROOT; };
+		B5B000000000000000000003 /* ByteStreamConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Network/ByteStreamConnection.swift; sourceTree = SOURCE_ROOT; };
+		B5B000000000000000000004 /* TcpHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Network/TcpHandler.swift; sourceTree = SOURCE_ROOT; };
+		B5B000000000000000000006 /* USBAccessoryConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/USB/USBAccessoryConnection.swift; sourceTree = SOURCE_ROOT; };
+		C6B000000000000000000003 /* AapMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/AAP/AapMessage.swift; sourceTree = SOURCE_ROOT; };
+		C6B000000000000000000004 /* Channel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/AAP/Protocol/Channel.swift; sourceTree = SOURCE_ROOT; };
+		D7B000000000000000000002 /* H264NALParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Video/H264NALParser.swift; sourceTree = SOURCE_ROOT; };
 		A4C8F5B6582F6D160A3B1E70 /* Pods-HeadunitPad.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-HeadunitPad.release.xcconfig"; path = "Target Support Files/Pods-HeadunitPad/Pods-HeadunitPad.release.xcconfig"; sourceTree = "<group>"; };
 		BFD3A5C41BAB9748091B8410 /* Pods_HeadunitPad.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_HeadunitPad.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		F905FD5D0DB5B38B0AFB8A40 /* Pods-HeadunitPad.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-HeadunitPad.debug.xcconfig"; path = "Target Support Files/Pods-HeadunitPad/Pods-HeadunitPad.debug.xcconfig"; sourceTree = "<group>"; };
@@ -36,6 +53,11 @@
 			path = HeadunitPad;
 			sourceTree = "<group>";
 		};
+		A0A000000000000000000003 /* HeadunitPadTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = HeadunitPadTests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -44,6 +66,15 @@
 			buildActionMask = 2147483647;
 			files = (
 				8AAEAAEFAB8BE6DC23321C48 /* Pods_HeadunitPad.framework in Frameworks */,
+				D4C8A6E0F1B2435C9A7D8E10 /* USBHostKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A0A000000000000000000004 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A0A00000000000000000000F /* USBHostKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -54,6 +85,7 @@
 			isa = PBXGroup;
 			children = (
 				62EB88A52F935A6900D2526F /* HeadunitPad */,
+				A0A000000000000000000003 /* HeadunitPadTests */,
 				62EB89822F936B6600D2526F /* Frameworks */,
 				62EB88A42F935A6900D2526F /* Products */,
 				975DB175E64C57DAFFB915DE /* Pods */,
@@ -64,6 +96,7 @@
 			isa = PBXGroup;
 			children = (
 				62EB88A32F935A6900D2526F /* HeadunitPad.app */,
+				A0A000000000000000000001 /* HeadunitPadTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -106,9 +139,35 @@
 				62EB88A52F935A6900D2526F /* HeadunitPad */,
 			);
 			name = HeadunitPad;
+			packageProductDependencies = (
+				D4C8A6E0F1B2435C9A7D8E12 /* USBHostKit */,
+			);
 			productName = HeadunitPad;
 			productReference = 62EB88A32F935A6900D2526F /* HeadunitPad.app */;
 			productType = "com.apple.product-type.application";
+		};
+		A0A000000000000000000005 /* HeadunitPadTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A0A00000000000000000000C /* Build configuration list for PBXNativeTarget "HeadunitPadTests" */;
+			buildPhases = (
+				A0A000000000000000000006 /* Sources */,
+				A0A000000000000000000004 /* Frameworks */,
+				A0A000000000000000000007 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				A0A000000000000000000003 /* HeadunitPadTests */,
+			);
+			name = HeadunitPadTests;
+			packageProductDependencies = (
+				D4C8A6E0F1B2435C9A7D8E12 /* USBHostKit */,
+			);
+			productName = HeadunitPadTests;
+			productReference = A0A000000000000000000001 /* HeadunitPadTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
 
@@ -123,6 +182,9 @@
 					62EB88A22F935A6900D2526F = {
 						CreatedOnToolsVersion = 26.3;
 					};
+					A0A000000000000000000005 = {
+						CreatedOnToolsVersion = 26.3;
+					};
 				};
 			};
 			buildConfigurationList = 62EB889E2F935A6900D2526F /* Build configuration list for PBXProject "HeadunitPad" */;
@@ -134,18 +196,29 @@
 			);
 			mainGroup = 62EB889A2F935A6900D2526F;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				D4C8A6E0F1B2435C9A7D8E11 /* XCRemoteSwiftPackageReference "TrollUSBHostKit" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 62EB88A42F935A6900D2526F /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
 				62EB88A22F935A6900D2526F /* HeadunitPad */,
+				A0A000000000000000000005 /* HeadunitPadTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		62EB88A12F935A6900D2526F /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A0A000000000000000000007 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -208,15 +281,58 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A0A000000000000000000006 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A0A00000000000000000000D /* AndroidOpenAccessory.swift in Sources */,
+				B5B000000000000000000001 /* ByteStreamConnection.swift in Sources */,
+				B5B000000000000000000002 /* TcpHandler.swift in Sources */,
+				B5B000000000000000000005 /* USBAccessoryConnection.swift in Sources */,
+				C6B000000000000000000001 /* AapMessage.swift in Sources */,
+				C6B000000000000000000002 /* Channel.swift in Sources */,
+				D7B000000000000000000001 /* H264NALParser.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
+		A0A000000000000000000009 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 5NMV3622HL;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.6;
+				PRODUCT_BUNDLE_IDENTIFIER = andyching168.HeadunitPadTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 2;
+			};
+			name = Debug;
+		};
+		A0A00000000000000000000A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 5NMV3622HL;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.6;
+				PRODUCT_BUNDLE_IDENTIFIER = andyching168.HeadunitPadTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 2;
+			};
+			name = Release;
+		};
 		62EB88BA2F935A6A00D2526F /* Debug */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = F905FD5D0DB5B38B0AFB8A40 /* Pods-HeadunitPad.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = HeadunitPad/HeadunitPad.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 5NMV3622HL;
@@ -253,6 +369,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = HeadunitPad/HeadunitPad.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 5NMV3622HL;
@@ -407,6 +524,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		A0A00000000000000000000C /* Build configuration list for PBXNativeTarget "HeadunitPadTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A0A000000000000000000009 /* Debug */,
+				A0A00000000000000000000A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		62EB889E2F935A6900D2526F /* Build configuration list for PBXProject "HeadunitPad" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -426,6 +552,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		D4C8A6E0F1B2435C9A7D8E11 /* XCRemoteSwiftPackageReference "TrollUSBHostKit" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/andyching168/TrollUSBHostKit.git";
+			requirement = {
+				kind = exactVersion;
+				version = 0.1.3;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		D4C8A6E0F1B2435C9A7D8E12 /* USBHostKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D4C8A6E0F1B2435C9A7D8E11 /* XCRemoteSwiftPackageReference "TrollUSBHostKit" */;
+			productName = USBHostKit;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 62EB889B2F935A6900D2526F /* Project object */;
 }

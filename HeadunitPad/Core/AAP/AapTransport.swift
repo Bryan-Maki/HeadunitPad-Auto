@@ -40,6 +40,11 @@ struct AapPlaybackStatus {
     let playbackSeconds: UInt64?
 }
 
+enum AapTransportError: Error {
+    case encryptionFailed
+    case transportGone
+}
+
 enum AapTransportState: Equatable {
     case idle
     case waitingForVersion
@@ -55,18 +60,18 @@ enum AapTransportState: Equatable {
 class AapTransport {
     weak var delegate: AapTransportDelegate?
 
-    private let tcpHandler: TcpHandler
+    private let connection: ByteStreamConnection
     private let tlsHandler = OpenSslTlsHandler()
     private let handshakeQueue = DispatchQueue(label: "com.headunitpad.aap.handshake", qos: .userInitiated)
     private let processingQueue = DispatchQueue(label: "com.headunitpad.aap.processing", qos: .userInitiated)
     private let mediaAckQueue = DispatchQueue(label: "com.headunitpad.aap.media-ack", qos: .utility)
     private var state: AapTransportState = .idle
     private var handshakeTimer: DispatchWorkItem?
-    private let versionHandshakeTimeout: TimeInterval = 10.0
+    private let versionHandshakeTimeout: TimeInterval
     private let tlsHandshakeTimeout: TimeInterval = 15.0
     private let initialVersionRequestDelay: TimeInterval = 0.5
     private let versionRetryInterval: TimeInterval = 2.0
-    private let maxVersionRequestAttempts = 3
+    private let maxVersionRequestAttempts: Int
     private var versionRequestAttempts = 0
     private var versionRetryWorkItem: DispatchWorkItem?
     private var delayedVersionStartWorkItem: DispatchWorkItem?
@@ -77,6 +82,7 @@ class AapTransport {
     private var tlsIdentityReady = false
     private var mediaSessionIds: [UInt8: UInt64] = [:]
     private var videoAssemblyBuffer = Data()
+    private var videoAssemblyMessageType: UInt16 = 0
     private var videoFirstFragmentAtMs: UInt64 = 0
     private var lastVideoRecoveryRequestAtMs: UInt64 = 0
     private var mediaPlaybackMetadataBuffer = Data()
@@ -101,14 +107,56 @@ class AapTransport {
     private let maxAapTraceEntries = 40
     private let aapTraceLock = NSLock()
     private var lastVideoPacketRxAtMs: UInt64 = 0
+    private let videoDiagnosticsLock = NSLock()
+    private var videoPacketCount = 0
+    private var completedVideoFrameCount = 0
+    private var lastCompletedVideoFrameBytes = 0
+    private var videoDataMessageCount = 0
+    private var videoCodecConfigMessageCount = 0
+    private var lastVideoCodecConfigPrefix = "None"
+    private var videoRecoveryRequestCount = 0
+    private var lastVideoRecoveryReason = "None"
+    private let gracefulDisconnectLock = NSLock()
+    private var gracefulDisconnectTimeout: DispatchWorkItem?
+    private var gracefulDisconnectCompletion: (() -> Void)?
+    private var gracefulDisconnectDiagnostic = "Not requested"
+    private var gracefulDisconnectWriteFlushed = false
+    private let byebyeWriteTimeout: TimeInterval = 2.5
+    private let byebyeResponseTimeout: TimeInterval = 1.5
+    private var peerDisconnectDiagnostic = "None"
 
     private var receiveBuffer = Data()
     private var encryptedReceiveBuffer = Data()
     private let bufferLock = NSLock()
 
-    init(tcpHandler: TcpHandler) {
-        self.tcpHandler = tcpHandler
-        self.tcpHandler.delegate = self
+    /// A phone whose accessory function has just been restarted needs time to
+    /// hand the new accessory back to Android Auto, so the wired path keeps asking
+    /// for a version response far longer than a headunit server on the network
+    /// ever needs. Giving up early is what leaves the phone half-attached.
+    enum HandshakeProfile {
+        case network
+        case wired
+
+        var versionTimeout: TimeInterval {
+            switch self {
+            case .network: return 10.0
+            case .wired: return 40.0
+            }
+        }
+
+        var versionAttempts: Int {
+            switch self {
+            case .network: return 3
+            case .wired: return 15
+            }
+        }
+    }
+
+    init(connection: ByteStreamConnection, handshakeProfile: HandshakeProfile = .network) {
+        self.connection = connection
+        self.versionHandshakeTimeout = handshakeProfile.versionTimeout
+        self.maxVersionRequestAttempts = handshakeProfile.versionAttempts
+        self.connection.delegate = self
         setupTls()
     }
 
@@ -170,6 +218,25 @@ class AapTransport {
         delayedVersionStartWorkItem = nil
         versionRequestAttempts = 0
         hasTriggeredLauncherPoke = false
+        videoAssemblyBuffer.removeAll(keepingCapacity: true)
+        videoAssemblyMessageType = 0
+        videoFirstFragmentAtMs = 0
+        lastVideoPacketRxAtMs = 0
+        lastVideoRecoveryRequestAtMs = 0
+        videoDiagnosticsLock.lock()
+        videoPacketCount = 0
+        completedVideoFrameCount = 0
+        lastCompletedVideoFrameBytes = 0
+        videoDataMessageCount = 0
+        videoCodecConfigMessageCount = 0
+        lastVideoCodecConfigPrefix = "None"
+        videoRecoveryRequestCount = 0
+        lastVideoRecoveryReason = "None"
+        videoDiagnosticsLock.unlock()
+        gracefulDisconnectLock.lock()
+        gracefulDisconnectDiagnostic = "Not requested"
+        peerDisconnectDiagnostic = "None"
+        gracefulDisconnectLock.unlock()
         setState(.waitingForVersion)
 
         let delayedStart = DispatchWorkItem { [weak self] in
@@ -215,6 +282,9 @@ class AapTransport {
     private func setState(_ newState: AapTransportState) {
         print("AapTransport: State changed from \(state) to \(newState)")
         state = newState
+        if newState == .running {
+            didReachRunning = true
+        }
 
         if newState != .waitingForVersion && newState != .tlsHandshaking {
             handshakeTimer?.cancel()
@@ -328,20 +398,24 @@ class AapTransport {
         sendRaw(message.toData())
     }
 
-    func send(message: AapMessage) {
+    func send(message: AapMessage, completion: ((Error?) -> Void)? = nil) {
         recordAapTrace(direction: "TX", channel: message.channel, flags: message.flags, type: message.type, payloadSize: message.payload.count)
 
         if state == .authenticating || state == .authenticatingComplete || state == .binding || state == .running {
             processingQueue.async { [weak self] in
-                self?.sendEncryptedMessage(message)
+                guard let self else {
+                    completion?(AapTransportError.transportGone)
+                    return
+                }
+                self.sendEncryptedMessage(message, completion: completion)
             }
         } else {
             let data = message.toData()
-            tcpHandler.send(data)
+            connection.send(data, completion: completion)
         }
     }
 
-    private func sendEncryptedMessage(_ message: AapMessage) {
+    private func sendEncryptedMessage(_ message: AapMessage, completion: ((Error?) -> Void)? = nil) {
         var plain = Data()
         plain.append(UInt8((message.type >> 8) & 0xFF))
         plain.append(UInt8(message.type & 0xFF))
@@ -350,6 +424,7 @@ class AapTransport {
         guard let encryptedPayload = tlsHandler.encrypt(data: plain) else {
             print("AapTransport: Failed to encrypt message type=\(message.type)")
             registerTlsEncryptFailure(context: "message-type-\(message.type)")
+            completion?(AapTransportError.encryptionFailed)
             return
         }
         consecutiveTlsEncryptFailures = 0
@@ -364,7 +439,7 @@ class AapTransport {
         packet.append(UInt8(encLen & 0xFF))
         packet.append(encryptedPayload)
 
-        tcpHandler.send(packet)
+        connection.send(packet, completion: completion)
     }
 
     private func encryptedFlags(for message: AapMessage) -> UInt8 {
@@ -379,15 +454,123 @@ class AapTransport {
     }
 
     func sendRaw(_ data: Data) {
-        tcpHandler.send(data)
+        connection.send(data)
     }
 
     func requestVideoRecovery() {
-        requestVideoRecoveryIfNeeded(reason: "external-watchdog", ignoreRecentVideoGuard: false)
+        // The caller watches displayed frames, not received packets, so a stream
+        // that keeps delivering undecodable data still needs its config resent.
+        requestVideoRecoveryIfNeeded(reason: "external-watchdog", ignoreRecentVideoGuard: true)
+    }
+
+    /// How this session ended. Worth keeping after the transport is gone: a
+    /// reconnect that fails is usually explained by how the previous session was
+    /// torn down, and by then this object no longer exists.
+    /// Whether this transport ever carried a live session. A teardown summary is
+    /// only worth keeping for one that did: an attempt that never got going has
+    /// nothing to say about why the phone refused it.
+    private(set) var didReachRunning = false
+
+    func teardownDiagnosticLines() -> [String] {
+        gracefulDisconnectLock.lock()
+        let graceful = gracefulDisconnectDiagnostic
+        let flushed = gracefulDisconnectWriteFlushed
+        let peer = peerDisconnectDiagnostic
+        gracefulDisconnectLock.unlock()
+        return [
+            "Previous session graceful disconnect: \(graceful)",
+            "Previous session byebye reached the wire: \(flushed ? "Yes" : "No")",
+            "Previous session peer disconnect: \(peer)",
+        ]
+    }
+
+    func videoDiagnosticLines() -> [String] {
+        videoDiagnosticsLock.lock()
+        let packets = videoPacketCount
+        let frames = completedVideoFrameCount
+        let lastFrameBytes = lastCompletedVideoFrameBytes
+        let dataMessages = videoDataMessageCount
+        let codecConfigMessages = videoCodecConfigMessageCount
+        let codecConfigPrefix = lastVideoCodecConfigPrefix
+        let recoveryRequests = videoRecoveryRequestCount
+        let recoveryReason = lastVideoRecoveryReason
+        videoDiagnosticsLock.unlock()
+        aapTraceLock.lock()
+        let videoTrace = lastAapTrace
+            .filter { $0.channel == Channel.ID_VID }
+            .suffix(12)
+            .map { entry in
+                "AAP video trace: \(entry.direction) flags=0x\(String(format: "%02x", entry.flags)) type=\(entry.type) bytes=\(entry.payloadSize)"
+            }
+        aapTraceLock.unlock()
+        gracefulDisconnectLock.lock()
+        let gracefulDisconnect = gracefulDisconnectDiagnostic
+        let byebyeFlushed = gracefulDisconnectWriteFlushed
+        let peerDisconnect = peerDisconnectDiagnostic
+        gracefulDisconnectLock.unlock()
+        var lines = [
+            "AAP video packets: \(packets)",
+            "AAP completed video frames: \(frames)",
+            "AAP last completed frame bytes: \(lastFrameBytes)",
+            "AAP video data/config messages: \(dataMessages)/\(codecConfigMessages)",
+            "AAP last codec config prefix: \(codecConfigPrefix)",
+            "AAP video recovery requests: \(recoveryRequests)",
+            "AAP last video recovery reason: \(recoveryReason)",
+            "AAP graceful disconnect: \(gracefulDisconnect)",
+            "AAP byebye reached the wire: \(byebyeFlushed ? "Yes" : "No")",
+            "AAP peer disconnect: \(peerDisconnect)",
+        ]
+        if videoTrace.isEmpty {
+            lines.append("AAP video trace: None")
+        } else {
+            lines.append(contentsOf: videoTrace)
+        }
+        return lines
     }
 
     func requestVideoRecoveryForNewDisplay() {
         requestVideoRecoveryIfNeeded(reason: "new-display", ignoreRecentVideoGuard: true)
+    }
+
+    func requestGracefulDisconnect(completion: @escaping () -> Void) {
+        guard state == .running else {
+            DispatchQueue.main.async(execute: completion)
+            return
+        }
+
+        let timeout = DispatchWorkItem { [weak self] in
+            self?.finishGracefulDisconnect(reason: "timeout")
+        }
+        gracefulDisconnectLock.lock()
+        guard gracefulDisconnectCompletion == nil else {
+            gracefulDisconnectLock.unlock()
+            return
+        }
+        gracefulDisconnectCompletion = completion
+        gracefulDisconnectTimeout = timeout
+        gracefulDisconnectDiagnostic = "Request sent"
+        gracefulDisconnectLock.unlock()
+
+        // The byebye has to reach the wire before the transport is torn down:
+        // disconnect() cancels queued writes, and a phone that never hears the
+        // goodbye keeps its projection session alive and refuses the next one.
+        // So wait for the write to flush before counting for a response, with an
+        // outer cap so a stalled write cannot leave the disconnect hanging.
+        send(message: .userSelectionByebyeRequest) { [weak self] error in
+            guard let self else { return }
+            print("AapTransport: Byebye write finished, error=\(error.map(String.init(describing:)) ?? "none")")
+            self.gracefulDisconnectLock.lock()
+            self.gracefulDisconnectWriteFlushed = error == nil
+            self.gracefulDisconnectLock.unlock()
+            DispatchQueue.main.asyncAfter(
+                deadline: .now() + self.byebyeResponseTimeout,
+                execute: timeout
+            )
+        }
+        print("AapTransport: Sent byebye request for user selection")
+        DispatchQueue.main.asyncAfter(deadline: .now() + byebyeWriteTimeout) { [weak self] in
+            self?.finishGracefulDisconnect(reason: "write-timeout")
+        }
     }
 
     func sendTouchEvent(x: Int, y: Int, action: TouchAction, pointerId: Int = 0) {
@@ -532,7 +715,7 @@ class AapTransport {
             packet.append(UInt8(encLen & 0xFF))
             packet.append(encryptedPayload)
 
-            self.tcpHandler.send(packet)
+            self.connection.send(packet)
         }
     }
 
@@ -612,6 +795,29 @@ class AapTransport {
             let msgType = UInt16(decrypted[0]) << 8 | UInt16(decrypted[1])
             let payload = decrypted.subdata(in: 2..<decrypted.count)
 
+            // The first (0x09) and single (0x0b) video packets always carry the
+            // AAP media message type. Preserve type 1 so codec configuration is
+            // not mistaken for ordinary H.264 frame data. Middle/final packets
+            // contain only continuation bytes and inherit the first fragment's
+            // type through processVideoStreamPacket.
+            if channel == Channel.ID_VID && isMediaStreamFlags(flags) {
+                if (flags == 0x09 || flags == 0x0b), msgType == 0 || msgType == 1 {
+                    recordVideoMessageType(msgType, payload: payload)
+                    handleMessage(AapMessage(channel: channel, flags: flags, type: msgType, payload: payload))
+                    continue
+                }
+
+                if flags == 0x08 || flags == 0x0a {
+                    handleMessage(AapMessage(
+                        channel: channel,
+                        flags: flags,
+                        type: videoAssemblyMessageType,
+                        payload: decrypted
+                    ))
+                    continue
+                }
+            }
+
             // Streaming packets on media channels may be continuation chunks without
             // a message type prefix. Treat them as raw stream data unless the packet
             // looks like a small control/media command frame.
@@ -650,7 +856,7 @@ class AapTransport {
         print("AapTransport: Too many TLS failures, forcing disconnect, reason=\(reason)")
         dumpRecentAapTrace(reason: reason)
         setState(.error("TLS stream failure (\(reason))"))
-        tcpHandler.disconnect()
+        connection.disconnect()
         delegate?.aapTransportDidDisconnect(self)
     }
 
@@ -685,6 +891,19 @@ class AapTransport {
 
         // Keep only small packets as control/media command candidates.
         return payloadSize <= 512
+    }
+
+    private func recordVideoMessageType(_ type: UInt16, payload: Data) {
+        videoDiagnosticsLock.lock()
+        if type == 1 {
+            videoCodecConfigMessageCount += 1
+            lastVideoCodecConfigPrefix = payload.prefix(24)
+                .map { String(format: "%02x", $0) }
+                .joined(separator: " ")
+        } else {
+            videoDataMessageCount += 1
+        }
+        videoDiagnosticsLock.unlock()
     }
 
     private func appendAndProcessBuffer(_ data: Data) {
@@ -1034,7 +1253,15 @@ class AapTransport {
             sendNavFocusNotification(on: message.channel)
 
         case AapMessageType.BYEBYE_REQUEST.rawValue:
+            let reason = ProtoWire.extractFirstVarint(from: message.payload, fieldNumber: 1)
+            gracefulDisconnectLock.lock()
+            peerDisconnectDiagnostic = reason.map { "ByeBye reason \($0)" } ?? "ByeBye without reason"
+            gracefulDisconnectLock.unlock()
             sendByebyeResponse(on: message.channel)
+
+        case AapMessageType.BYEBYE_RESPONSE.rawValue:
+            print("AapTransport: Received byebye response")
+            finishGracefulDisconnect(reason: "response")
 
         case AapMessageType.CHANNEL_OPEN_RESPONSE.rawValue:
             print("AapTransport: Channel open response received")
@@ -1276,6 +1503,39 @@ class AapTransport {
         )
         send(message: message)
         print("AapTransport: Sent byebye response")
+    }
+
+    private func finishGracefulDisconnect(reason: String) {
+        gracefulDisconnectLock.lock()
+        let completion = gracefulDisconnectCompletion
+        gracefulDisconnectCompletion = nil
+        switch reason {
+        case "response":
+            gracefulDisconnectDiagnostic = "Response received"
+        case "write-timeout":
+            gracefulDisconnectDiagnostic = "Timed out before byebye reached the wire"
+        default:
+            gracefulDisconnectDiagnostic = "Timed out waiting for response"
+        }
+        let timeout = gracefulDisconnectTimeout
+        gracefulDisconnectTimeout = nil
+        gracefulDisconnectLock.unlock()
+        timeout?.cancel()
+        guard let completion else { return }
+        print("AapTransport: Graceful disconnect finished via \(reason)")
+        DispatchQueue.main.async(execute: completion)
+    }
+
+    private func cancelGracefulDisconnect() {
+        gracefulDisconnectLock.lock()
+        if gracefulDisconnectCompletion != nil {
+            gracefulDisconnectDiagnostic = "Transport closed before response"
+        }
+        gracefulDisconnectCompletion = nil
+        let timeout = gracefulDisconnectTimeout
+        gracefulDisconnectTimeout = nil
+        gracefulDisconnectLock.unlock()
+        timeout?.cancel()
     }
 
     private func buildMinimalServiceDiscoveryResponsePayload() -> Data {
@@ -1563,6 +1823,9 @@ private enum ProtoWire {
         let payload = message.payload
         let nowMs = uptimeMs()
         lastVideoPacketRxAtMs = nowMs
+        videoDiagnosticsLock.lock()
+        videoPacketCount += 1
+        videoDiagnosticsLock.unlock()
 
         if videoFirstFragmentAtMs > 0,
            nowMs > videoFirstFragmentAtMs,
@@ -1570,19 +1833,27 @@ private enum ProtoWire {
            flags == 0x09 {
             print("AapTransport: Video assembly timeout \(nowMs - videoFirstFragmentAtMs)ms, dropping stale fragments")
             videoAssemblyBuffer.removeAll(keepingCapacity: true)
+            videoAssemblyMessageType = 0
             videoFirstFragmentAtMs = 0
             requestVideoRecoveryIfNeeded(reason: "assembly-timeout", ignoreRecentVideoGuard: false)
         }
 
         switch flags {
         case 0x0b: // single fragment
+            videoAssemblyBuffer.removeAll(keepingCapacity: true)
+            videoAssemblyMessageType = 0
             videoFirstFragmentAtMs = 0
             processVideoPayloadAsSingleFrame(payload)
 
         case 0x09: // first fragment
             videoFirstFragmentAtMs = nowMs
+            videoAssemblyMessageType = message.type
             videoAssemblyBuffer.removeAll(keepingCapacity: true)
-            if let offset = findAnnexBStartOffset(in: payload) {
+            if message.type == 1 {
+                // Codec configuration may be avcC or length-prefixed and only
+                // becomes parseable after all fragments have been assembled.
+                videoAssemblyBuffer.append(payload)
+            } else if let offset = findAnnexBStartOffset(in: payload) {
                 videoAssemblyBuffer.append(payload.subdata(in: offset..<payload.count))
             } else {
                 print("AapTransport: First video fragment missing Annex-B start code")
@@ -1598,6 +1869,7 @@ private enum ProtoWire {
             if videoAssemblyBuffer.count + payload.count > maxVideoAssemblyBytes {
                 print("AapTransport: Video assembly overflow on middle fragment, dropping")
                 videoAssemblyBuffer.removeAll(keepingCapacity: true)
+                videoAssemblyMessageType = 0
                 videoFirstFragmentAtMs = 0
                 requestVideoRecoveryIfNeeded(reason: "assembly-overflow-middle", ignoreRecentVideoGuard: false)
                 return
@@ -1608,6 +1880,7 @@ private enum ProtoWire {
             if videoAssemblyBuffer.count + payload.count > maxVideoAssemblyBytes {
                 print("AapTransport: Video assembly overflow on final fragment, dropping")
                 videoAssemblyBuffer.removeAll(keepingCapacity: true)
+                videoAssemblyMessageType = 0
                 videoFirstFragmentAtMs = 0
                 requestVideoRecoveryIfNeeded(reason: "assembly-overflow-final", ignoreRecentVideoGuard: false)
                 return
@@ -1615,9 +1888,10 @@ private enum ProtoWire {
             videoFirstFragmentAtMs = 0
             videoAssemblyBuffer.append(payload)
             if !videoAssemblyBuffer.isEmpty {
-                delegate?.aapTransport(self, didReceiveVideoData: videoAssemblyBuffer)
+                processVideoPayloadAsSingleFrame(videoAssemblyBuffer)
             }
             videoAssemblyBuffer.removeAll(keepingCapacity: true)
+            videoAssemblyMessageType = 0
 
         default:
             // Unknown media flag variant: best-effort pass through.
@@ -1628,8 +1902,19 @@ private enum ProtoWire {
     private func processVideoPayloadAsSingleFrame(_ payload: Data) {
         lastVideoPacketRxAtMs = uptimeMs()
         if let offset = findAnnexBStartOffset(in: payload) {
-            delegate?.aapTransport(self, didReceiveVideoData: payload.subdata(in: offset..<payload.count))
+            deliverVideoFrame(payload.subdata(in: offset..<payload.count))
+        } else if let parameterSets = H264NALParser.annexBParameterSets(from: payload) {
+            print("AapTransport: Normalized non-Annex-B H.264 codec configuration")
+            deliverVideoFrame(parameterSets)
         }
+    }
+
+    private func deliverVideoFrame(_ frame: Data) {
+        videoDiagnosticsLock.lock()
+        completedVideoFrameCount += 1
+        lastCompletedVideoFrameBytes = frame.count
+        videoDiagnosticsLock.unlock()
+        delegate?.aapTransport(self, didReceiveVideoData: frame)
     }
 
     private func findAnnexBStartOffset(in data: Data) -> Int? {
@@ -1817,6 +2102,10 @@ private enum ProtoWire {
         }
 
         lastVideoRecoveryRequestAtMs = nowMs
+        videoDiagnosticsLock.lock()
+        videoRecoveryRequestCount += 1
+        lastVideoRecoveryReason = reason
+        videoDiagnosticsLock.unlock()
         print("AapTransport: Requesting video recovery, reason=\(reason)")
         sendMediaConfig(on: Channel.ID_VID)
         sendVideoFocusNotification(on: Channel.ID_VID, reason: "recovery-\(reason)")
@@ -1893,28 +2182,28 @@ private enum ProtoWire {
     }
 }
 
-extension AapTransport: TcpHandlerDelegate {
-    func tcpHandlerDidConnect(_ handler: TcpHandler) {
-        print("AapTransport: TCP connected, starting handshake")
+extension AapTransport: ByteStreamConnectionDelegate {
+    func byteStreamConnectionDidConnect(_ connection: ByteStreamConnection) {
+        print("AapTransport: byte stream connected, starting handshake")
         startHandshake()
     }
 
-    func tcpHandler(_ handler: TcpHandler, didFailWithError error: Error) {
-        print("AapTransport: TCP error: \(error)")
-        dumpRecentAapTrace(reason: "tcp-error")
-        setState(.error(error.localizedDescription))
-        delegate?.aapTransportDidDisconnect(self)
-    }
-
-    func tcpHandler(_ handler: TcpHandler, didReceiveData data: Data) {
+    func byteStreamConnection(_ connection: ByteStreamConnection, didReceive data: Data) {
         processingQueue.async { [weak self] in
             self?.handleReceivedData(data)
         }
     }
 
-    func tcpHandlerDidDisconnect(_ handler: TcpHandler) {
-        print("AapTransport: TCP disconnected")
-        dumpRecentAapTrace(reason: "tcp-disconnect")
+    func byteStreamConnection(_ connection: ByteStreamConnection, didDisconnect error: Error?) {
+        cancelGracefulDisconnect()
+        if let error {
+            print("AapTransport: byte stream error: \(error)")
+            dumpRecentAapTrace(reason: "connection-error")
+            setState(.error(error.localizedDescription))
+        } else {
+            print("AapTransport: byte stream disconnected")
+            dumpRecentAapTrace(reason: "connection-disconnect")
+        }
         delayedVersionStartWorkItem?.cancel()
         delayedVersionStartWorkItem = nil
         versionRetryWorkItem?.cancel()

@@ -3,6 +3,27 @@ import AVFoundation
 import CoreMedia
 
 final class H264VideoRendererView: UIView {
+    private struct RendererDiagnostics {
+        var inputFrames = 0
+        var parsedFrames = 0
+        var spsNALs = 0
+        var ppsNALs = 0
+        var idrFrames = 0
+        var formatDescriptions = 0
+        var formatFailures = 0
+        var missingConfigDrops = 0
+        var awaitingIDRDrops = 0
+        var sampleBuffers = 0
+        var sampleFailures = 0
+        var enqueuedSamples = 0
+        var notReadyDrops = 0
+        var layerFailures = 0
+        var queueDrops = 0
+        var lastNALTypes: [UInt8] = []
+    }
+
+    var onFrameDisplayed: (() -> Void)?
+
     override class var layerClass: AnyClass { AVSampleBufferDisplayLayer.self }
 
     private var displayLayer: AVSampleBufferDisplayLayer {
@@ -19,7 +40,12 @@ final class H264VideoRendererView: UIView {
     private var pendingFrames: [Data] = []
     private var isProcessingFrame = false
     private let maxPendingFrames = 4
+    // Parameter sets arrive once per session, so a backlog of frames the decoder
+    // still needs is allowed to grow well past the normal cap before anything goes.
+    private let maxPendingEssentialFrames = 12
     private var hasDecodedKeyframe = false
+    private let diagnosticsLock = NSLock()
+    private var diagnostics = RendererDiagnostics()
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -37,6 +63,9 @@ final class H264VideoRendererView: UIView {
     }
 
     func reset() {
+        diagnosticsLock.lock()
+        diagnostics = RendererDiagnostics()
+        diagnosticsLock.unlock()
         frameQueueLock.lock()
         pendingFrames.removeAll()
         isProcessingFrame = false
@@ -60,27 +89,59 @@ final class H264VideoRendererView: UIView {
 
     func enqueueAnnexBFrame(_ frame: Data) {
         guard !frame.isEmpty else { return }
+        updateDiagnostics { $0.inputFrames += 1 }
         enqueueFrameForProcessing(frame)
     }
 
+    func diagnosticLines() -> [String] {
+        diagnosticsLock.lock()
+        let snapshot = diagnostics
+        diagnosticsLock.unlock()
+        let nalTypes = snapshot.lastNALTypes.isEmpty
+            ? "None"
+            : snapshot.lastNALTypes.map(String.init).joined(separator: ",")
+        return [
+            "Renderer input frames: \(snapshot.inputFrames)",
+            "Renderer parsed frames: \(snapshot.parsedFrames)",
+            "Renderer SPS/PPS NALs: \(snapshot.spsNALs)/\(snapshot.ppsNALs)",
+            "Renderer IDR frames: \(snapshot.idrFrames)",
+            "Renderer format descriptions/failures: \(snapshot.formatDescriptions)/\(snapshot.formatFailures)",
+            "Renderer drops missing config/awaiting IDR: \(snapshot.missingConfigDrops)/\(snapshot.awaitingIDRDrops)",
+            "Renderer sample buffers/failures: \(snapshot.sampleBuffers)/\(snapshot.sampleFailures)",
+            "Renderer enqueued/not-ready/layer failures: \(snapshot.enqueuedSamples)/\(snapshot.notReadyDrops)/\(snapshot.layerFailures)",
+            "Renderer queue drops: \(snapshot.queueDrops)",
+            "Renderer last NAL types: \(nalTypes)",
+            "Renderer display status: \(displayStatusDescription())",
+            "Renderer display error: \(displayLayer.error?.localizedDescription ?? "None")",
+        ]
+    }
+
     private func enqueueFrameForProcessing(_ frame: Data) {
+        var droppedFrames = 0
+
         frameQueueLock.lock()
         if pendingFrames.count >= maxPendingFrames {
-            if let dropIndex = pendingFrames.firstIndex(where: { !containsIDRNal($0) }) {
+            if let dropIndex = pendingFrames.firstIndex(where: { !isEssentialFrame($0) }) {
                 pendingFrames.remove(at: dropIndex)
-            } else {
+                droppedFrames = 1
+            } else if pendingFrames.count >= maxPendingEssentialFrames {
                 pendingFrames.removeFirst()
+                droppedFrames = 1
             }
         }
         pendingFrames.append(frame)
 
-        if isProcessingFrame {
-            frameQueueLock.unlock()
-            return
+        let shouldStartProcessing = !isProcessingFrame
+        if shouldStartProcessing {
+            isProcessingFrame = true
         }
-        isProcessingFrame = true
         frameQueueLock.unlock()
 
+        if droppedFrames > 0 {
+            updateDiagnostics { $0.queueDrops += droppedFrames }
+        }
+
+        guard shouldStartProcessing else { return }
         processQueue.async { [weak self] in
             self?.processFrameLoop()
         }
@@ -104,12 +165,20 @@ final class H264VideoRendererView: UIView {
     }
 
     private func processSingleFrame(_ frame: Data) {
-        let nalUnits = splitAnnexBNALUnits(frame)
+        let nalUnits = H264NALParser.nalUnits(from: frame)
         guard !nalUnits.isEmpty else { return }
 
-        let hasIDR = nalUnits.contains { nal in
-            guard let header = nal.first else { return false }
-            return (header & 0x1F) == 5
+        let nalTypes = nalUnits.compactMap { $0.first.map { $0 & 0x1F } }
+        updateDiagnostics {
+            $0.parsedFrames += 1
+            $0.lastNALTypes = nalTypes
+            $0.spsNALs += nalTypes.filter { $0 == 7 }.count
+            $0.ppsNALs += nalTypes.filter { $0 == 8 }.count
+        }
+
+        let hasIDR = nalTypes.contains(5)
+        if hasIDR {
+            updateDiagnostics { $0.idrFrames += 1 }
         }
 
         for nal in nalUnits {
@@ -119,29 +188,42 @@ final class H264VideoRendererView: UIView {
             if nalType == 8 { pps = nal }
         }
 
-        if formatDescription == nil,
-           let sps,
-           let pps,
-           let desc = createFormatDescription(sps: sps, pps: pps) {
-            formatDescription = desc
+        if formatDescription == nil, let sps, let pps {
+            if let desc = createFormatDescription(sps: sps, pps: pps) {
+                formatDescription = desc
+                updateDiagnostics { $0.formatDescriptions += 1 }
+            } else {
+                updateDiagnostics { $0.formatFailures += 1 }
+            }
         }
 
-        guard let formatDescription else { return }
+        guard let formatDescription else {
+            updateDiagnostics { $0.missingConfigDrops += 1 }
+            return
+        }
 
         // Drop predictive frames until first keyframe to avoid startup block artifacts.
         if !hasDecodedKeyframe {
-            guard hasIDR else { return }
+            guard hasIDR else {
+                updateDiagnostics { $0.awaitingIDRDrops += 1 }
+                return
+            }
             hasDecodedKeyframe = true
         }
 
         let avccData = makeAVCCSample(from: nalUnits)
         guard !avccData.isEmpty else { return }
-        guard let sampleBuffer = makeSampleBuffer(data: avccData, formatDescription: formatDescription) else { return }
+        guard let sampleBuffer = makeSampleBuffer(data: avccData, formatDescription: formatDescription) else {
+            updateDiagnostics { $0.sampleFailures += 1 }
+            return
+        }
+        updateDiagnostics { $0.sampleBuffers += 1 }
 
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
 
             if self.displayLayer.status == .failed {
+                self.updateDiagnostics { $0.layerFailures += 1 }
                 // Full reset helps recover from persistent AVSampleBufferDisplayLayer failures.
                 self.displayLayer.flushAndRemoveImage()
                 self.processQueue.async {
@@ -154,6 +236,7 @@ final class H264VideoRendererView: UIView {
             }
 
             guard self.displayLayer.isReadyForMoreMediaData else {
+                self.updateDiagnostics { $0.notReadyDrops += 1 }
                 self.notReadyStreak += 1
 
                 if self.notReadyStreak == 30 {
@@ -172,16 +255,23 @@ final class H264VideoRendererView: UIView {
 
             self.notReadyStreak = 0
             self.displayLayer.enqueue(sampleBuffer)
+            self.updateDiagnostics { $0.enqueuedSamples += 1 }
+            self.onFrameDisplayed?()
         }
     }
 
-    private func containsIDRNal(_ frame: Data) -> Bool {
-        let nalUnits = splitAnnexBNALUnits(frame)
+    /// Frames carrying parameter sets or a keyframe must survive queue pressure.
+    /// The stream sends SPS/PPS once, so dropping that frame costs the decoder its
+    /// only chance to build a format description and every later frame is wasted.
+    private func isEssentialFrame(_ frame: Data) -> Bool {
+        let nalUnits = H264NALParser.nalUnits(from: frame)
         for nal in nalUnits {
             guard let header = nal.first else { continue }
-            let nalType = header & 0x1F
-            if nalType == 5 {
+            switch header & 0x1F {
+            case 5, 7, 8:
                 return true
+            default:
+                continue
             }
         }
         return false
@@ -270,48 +360,37 @@ final class H264VideoRendererView: UIView {
             sampleSizeArray: &sampleSize,
             sampleBufferOut: &sampleBuffer
         )
-        guard sampleStatus == noErr else { return nil }
+        guard sampleStatus == noErr, let sampleBuffer else { return nil }
+        if let attachments = CMSampleBufferGetSampleAttachmentsArray(
+            sampleBuffer,
+            createIfNecessary: true
+        ), CFArrayGetCount(attachments) > 0 {
+            let dictionary = unsafeBitCast(
+                CFArrayGetValueAtIndex(attachments, 0),
+                to: CFMutableDictionary.self
+            )
+            CFDictionarySetValue(
+                dictionary,
+                Unmanaged.passUnretained(kCMSampleAttachmentKey_DisplayImmediately).toOpaque(),
+                Unmanaged.passUnretained(kCFBooleanTrue).toOpaque()
+            )
+        }
         return sampleBuffer
     }
 
-    private func splitAnnexBNALUnits(_ data: Data) -> [Data] {
-        let bytes = [UInt8](data)
-        guard !bytes.isEmpty else { return [] }
-
-        func startCodeLength(at i: Int) -> Int {
-            if i + 3 <= bytes.count,
-               bytes[i] == 0, bytes[i + 1] == 0, bytes[i + 2] == 1 {
-                return 3
-            }
-            if i + 4 <= bytes.count,
-               bytes[i] == 0, bytes[i + 1] == 0, bytes[i + 2] == 0, bytes[i + 3] == 1 {
-                return 4
-            }
-            return 0
-        }
-
-        var starts: [(Int, Int)] = []
-        var i = 0
-        while i < bytes.count {
-            let len = startCodeLength(at: i)
-            if len > 0 {
-                starts.append((i, len))
-                i += len
-            } else {
-                i += 1
-            }
-        }
-
-        guard !starts.isEmpty else { return [data] }
-
-        var units: [Data] = []
-        for idx in 0..<starts.count {
-            let nalStart = starts[idx].0 + starts[idx].1
-            let nalEnd = (idx + 1 < starts.count) ? starts[idx + 1].0 : bytes.count
-            if nalStart < nalEnd {
-                units.append(data.subdata(in: nalStart..<nalEnd))
-            }
-        }
-        return units
+    private func updateDiagnostics(_ update: (inout RendererDiagnostics) -> Void) {
+        diagnosticsLock.lock()
+        update(&diagnostics)
+        diagnosticsLock.unlock()
     }
+
+    private func displayStatusDescription() -> String {
+        switch displayLayer.status {
+        case .unknown: return "Unknown"
+        case .rendering: return "Rendering"
+        case .failed: return "Failed"
+        @unknown default: return "Other"
+        }
+    }
+
 }
