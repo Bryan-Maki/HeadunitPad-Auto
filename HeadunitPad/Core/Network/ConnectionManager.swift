@@ -364,6 +364,15 @@ class ConnectionManager {
         let liveVideoLines = usbProbeDiagnostics.aapVideoDiagnostics.isEmpty
             ? (aapTransport?.videoDiagnosticLines() ?? [])
             : []
+        let entitlements: String
+        switch USBHostEntitlements.current() {
+        case .present:
+            entitlements = "Present"
+        case .missing(let keys):
+            entitlements = "Missing (\(keys.joined(separator: ", ")))"
+        case .unknown(let reason):
+            entitlements = "Unknown (\(reason))"
+        }
         let connectionLines = [
             "State: \(state.description)",
             "Status: \(statusDetail)",
@@ -379,6 +388,7 @@ class ConnectionManager {
             "Helper triggered: \(hasTriggeredWirelessHelper ? "Yes" : "No")",
             "Connected device: \(device?.displayName ?? "None")",
             "Connected endpoint: \(device.map { "\($0.ip):\($0.port)" } ?? "None")",
+            "USB host entitlements: \(entitlements)",
             "",
         ]
         var usbLines = usbProbeDiagnostics

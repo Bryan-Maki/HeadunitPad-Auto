@@ -550,9 +550,29 @@ class MainViewController: UIViewController {
     @objc private func usbProbeButtonTapped() {
         if connectionManager.usbProbeState.isRunning {
             connectionManager.stopUSBProbe()
-        } else {
-            connectionManager.startUSBProbe()
+            return
         }
+        guard case .missing = USBHostEntitlements.current() else {
+            connectionManager.startUSBProbe()
+            return
+        }
+        presentMissingUSBEntitlementsAlert()
+    }
+
+    /// Without the entitlements libusb simply enumerates nothing, which reads as
+    /// "no phone attached" and sends people looking for a cable fault they do not
+    /// have. Say what is actually wrong instead of starting a doomed attempt.
+    private func presentMissingUSBEntitlementsAlert() {
+        let alert = UIAlertController(
+            title: "Wired USB Needs TrollStore",
+            message: "This copy of HeadunitPad was installed without the USB Host "
+                + "entitlements, so it cannot talk to the phone over the cable. "
+                + "Install the TrollStore IPA to use the wired connection. "
+                + "Wireless Android Auto works either way.",
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "OK", style: .cancel))
+        present(alert, animated: true)
     }
 
     @objc private func disconnectButtonTapped() {
