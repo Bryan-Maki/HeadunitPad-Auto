@@ -137,7 +137,7 @@ class ConnectionManager {
         case .disconnected, .error:
             break
         default:
-            usbProbeState = .failed("Disconnect the current session before testing wired USB.")
+            usbProbeState = .failed("Disconnect the current session before connecting over USB.")
             return
         }
 
@@ -200,14 +200,14 @@ class ConnectionManager {
 
     func stopUSBProbe() {
         guard let usbProbeTask else { return }
-        usbProbeState = .running("Cancelling USB test...")
+        usbProbeState = .running("Cancelling wired connection...")
         usbProbeTask.cancel()
     }
 
     func startDiscovery() {
         print("ConnectionManager: startDiscovery called")
         guard usbProbeTask == nil else {
-            print("ConnectionManager: Cannot start wireless discovery during USB test")
+            print("ConnectionManager: Cannot start wireless discovery while a wired connection is in progress")
             return
         }
         reconnectWorkItem?.cancel()
@@ -616,7 +616,7 @@ extension ConnectionManager: AapTransportDelegate {
                 usbProbeState = .succeeded
                 updateStatus("Android Auto is running over USB")
             } else {
-                updateStatus("Android Auto is running")
+                updateStatus("Android Auto is running over wireless")
             }
         case .error(let msg):
             NowPlayingCoordinator.shared.deactivate()

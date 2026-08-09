@@ -58,6 +58,8 @@ class MainViewController: UIViewController {
         return label
     }()
 
+    private static let wiredConnectTitle = "Wired: Connect via USB"
+
     private let statusLabel: UILabel = {
         let label = UILabel()
         label.text = "Ready to connect"
@@ -70,7 +72,9 @@ class MainViewController: UIViewController {
 
     private lazy var connectButton: UIButton = {
         var config = UIButton.Configuration.filled()
-        config.title = "Scan for Devices"
+        config.title = "Wireless: Scan for Devices"
+        config.image = UIImage(systemName: "wifi")
+        config.imagePadding = 8
         config.cornerStyle = .large
         config.buttonSize = .large
 
@@ -104,7 +108,9 @@ class MainViewController: UIViewController {
 
     private lazy var manualIPButton: UIButton = {
         var config = UIButton.Configuration.tinted()
-        config.title = "Enter IP Manually"
+        config.title = "Wireless: Enter IP Manually"
+        config.image = UIImage(systemName: "keyboard")
+        config.imagePadding = 8
         config.cornerStyle = .medium
 
         let button = UIButton(configuration: config)
@@ -115,7 +121,9 @@ class MainViewController: UIViewController {
 
     private lazy var usbProbeButton: UIButton = {
         var config = UIButton.Configuration.tinted()
-        config.title = "Connect Wired USB"
+        config.title = Self.wiredConnectTitle
+        config.image = UIImage(systemName: "cable.connector")
+        config.imagePadding = 8
         config.cornerStyle = .medium
 
         let button = UIButton(configuration: config)
@@ -266,6 +274,9 @@ class MainViewController: UIViewController {
         videoContainerView.isHidden = true
     }
 
+    /// Wide enough that the Wired and Wireless labels stay on one line.
+    private let connectControlWidth: CGFloat = 300
+
     private func setupConstraints() {
         NSLayoutConstraint.activate([
             videoContainerView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
@@ -288,17 +299,17 @@ class MainViewController: UIViewController {
             // Connect Button
             connectButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             connectButton.topAnchor.constraint(equalTo: statusLabel.bottomAnchor, constant: 48),
-            connectButton.widthAnchor.constraint(equalToConstant: 200),
+            connectButton.widthAnchor.constraint(equalToConstant: connectControlWidth),
 
             // Manual IP Button
             manualIPButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             manualIPButton.topAnchor.constraint(equalTo: connectButton.bottomAnchor, constant: 16),
-            manualIPButton.widthAnchor.constraint(equalToConstant: 200),
+            manualIPButton.widthAnchor.constraint(equalToConstant: connectControlWidth),
 
             // Wired USB Probe Button
             usbProbeButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             usbProbeButton.topAnchor.constraint(equalTo: manualIPButton.bottomAnchor, constant: 12),
-            usbProbeButton.widthAnchor.constraint(equalToConstant: 200),
+            usbProbeButton.widthAnchor.constraint(equalToConstant: connectControlWidth),
 
             // Disconnect Button
             disconnectButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
@@ -449,15 +460,18 @@ class MainViewController: UIViewController {
         }
     }
 
+    /// The connection mode setting only selects between wireless strategies, so
+    /// every title here stays under the Wireless label. The wired path has its own
+    /// button and does not participate in the mode.
     private func updateConnectButtonTitle() {
         let title: String
         switch ProjectionSettings.connectionMode {
         case .auto:
-            title = "Auto Connect"
+            title = "Wireless: Auto Connect"
         case .wirelessHelper:
-            title = "Start Wireless Helper"
+            title = "Wireless: Start Helper"
         case .directHeadunit:
-            title = "Scan Headunit Server"
+            title = "Wireless: Scan Headunit"
         }
         connectButton.configuration?.title = title
     }
@@ -804,27 +818,28 @@ class MainViewController: UIViewController {
     private func updateUSBProbeUI(_ state: USBProbeState) {
         switch state {
         case .idle:
-            usbProbeButton.configuration?.title = "Connect Wired USB"
+            usbProbeButton.configuration?.title = Self.wiredConnectTitle
         case .running(let status):
-            usbProbeButton.configuration?.title = "Cancel USB Test"
+            usbProbeButton.configuration?.title = "Cancel Wired Connection"
             connectButton.isEnabled = false
             manualIPButton.isEnabled = false
             statusLabel.text = status
             statusLabel.textColor = .systemBlue
             activityIndicator.startAnimating()
         case .succeeded:
+            // No alert on success: the video has just appeared and an alert would
+            // cover it. Settings > Diagnostics still has the full report.
             finishUSBProbeUI(status: "Android Auto is running over USB", color: .systemGreen)
-            presentUSBProbeResult(title: "Wired Android Auto Connected")
         case .failed(let message):
             finishUSBProbeUI(status: message, color: .systemRed)
-            presentUSBProbeResult(title: "Wired USB Test Failed")
+            presentUSBProbeResult(title: "Wired Connection Failed")
         case .cancelled:
-            finishUSBProbeUI(status: "USB test cancelled", color: .secondaryLabel)
+            finishUSBProbeUI(status: "Wired connection cancelled", color: .secondaryLabel)
         }
     }
 
     private func finishUSBProbeUI(status: String, color: UIColor) {
-        usbProbeButton.configuration?.title = "Connect Wired USB"
+        usbProbeButton.configuration?.title = Self.wiredConnectTitle
         connectButton.isEnabled = true
         manualIPButton.isEnabled = true
         statusLabel.text = status
