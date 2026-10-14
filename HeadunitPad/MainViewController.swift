@@ -150,7 +150,31 @@ class MainViewController: UIViewController {
         }
         requestMicrophonePermissionIfNeeded()
         connectionManager.requestLocationPermissionIfNeeded()
+        HeadUnitScreenConfig.shared.onMarginsDiverged = { [weak self] left, top, right, bottom in
+            self?.connectionManager.sendUpdateUiConfigRequest(left: left, top: top, right: right, bottom: bottom)
+        }
         updateUIForConnectionState(.disconnected)
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        let scale = UIScreen.main.scale
+        let panelW = Int(view.bounds.width * scale)
+        let panelH = Int(view.bounds.height * scale)
+        if panelW > 0 && panelH > 0 {
+            _ = HeadUnitScreenConfig.shared.updateDimensions(width: panelW, height: panelH)
+        }
+    }
+
+    override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
+        super.viewWillTransition(to: size, with: coordinator)
+        coordinator.animate(alongsideTransition: { [weak self] _ in
+            guard let self = self else { return }
+            let scale = UIScreen.main.scale
+            let panelW = Int(size.width * scale)
+            let panelH = Int(size.height * scale)
+            _ = HeadUnitScreenConfig.shared.updateDimensions(width: panelW, height: panelH)
+        })
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -538,7 +562,7 @@ class MainViewController: UIViewController {
 
         let alert = UIAlertController(
             title: "Settings",
-            message: "Changes apply on next connection.\nMode: \(connectionMode)\nAuto reconnect: \(autoReconnect)\nOrientation: \(orientation)\nResolution: \(resolution)\nFPS: \(fps)\(fps != effectiveFps ? " (effective: \(effectiveFps))" : "")\nDPI: \(dpi)\(dpi != effectiveDpi ? " (effective: \(effectiveDpi))" : "")\nGPS: \(gpsSource)",
+            message: "Changes apply on next connection.\nMode: \(connectionMode)\nAuto reconnect: \(autoReconnect)\nOrientation: \(orientation)\nResolution: \(resolution)\nFPS: \(fps)\(fps != effectiveFps ? " (effective: \(effectiveFps))" : "")\nDPI: \(dpi)\(dpi != effectiveDpi ? " (effective: \(effectiveDpi))" : "")\nFit: \(ProjectionSettings.videoFitMode.title)\nPosition: \(ProjectionSettings.driverPosition == .left ? "LHD" : "RHD")\nGPS: \(gpsSource)",
             preferredStyle: .actionSheet
         )
 
@@ -551,6 +575,18 @@ class MainViewController: UIViewController {
             ProjectionSettings.autoReconnect.toggle()
             self?.updateConnectButtonTitle()
             self?.presentSettingsMenu()
+        })
+
+        alert.addAction(UIAlertAction(title: "Display Fit Mode: \(ProjectionSettings.videoFitMode.title)", style: .default) { [weak self] _ in
+            self?.presentFitModeMenu()
+        })
+
+        alert.addAction(UIAlertAction(title: "Driving Position: \(ProjectionSettings.driverPosition == .left ? "LHD (Left)" : "RHD (Right)")", style: .default) { [weak self] _ in
+            self?.presentDrivingPositionMenu()
+        })
+
+        alert.addAction(UIAlertAction(title: "Coolwalk Split-Screen & DPI Preview", style: .default) { [weak self] _ in
+            self?.presentDpiPreviewModal()
         })
 
         alert.addAction(UIAlertAction(title: "Orientation", style: .default) { [weak self] _ in
@@ -748,6 +784,121 @@ class MainViewController: UIViewController {
         present(alert, animated: true)
     }
 
+    private func presentFitModeMenu() {
+        let alert = UIAlertController(title: "Display Fit Mode", message: "Choose how Android Auto fits the iPad display.", preferredStyle: .actionSheet)
+
+        let modes: [VideoFitMode] = [.fillMargin, .fit, .stretch]
+        for mode in modes {
+            let isCurrent = mode == ProjectionSettings.videoFitMode
+            let title = isCurrent ? "\(mode.title) (Current)" : mode.title
+            alert.addAction(UIAlertAction(title: title, style: .default) { [weak self] _ in
+                ProjectionSettings.videoFitMode = mode
+                HeadUnitScreenConfig.shared.videoFitMode = mode
+                HeadUnitScreenConfig.shared.recalculate()
+                HeadUnitScreenConfig.shared.checkAndNotifyMarginDivergence()
+                self?.presentSettingsMenu()
+            })
+        }
+
+        alert.addAction(UIAlertAction(title: "Back", style: .cancel) { [weak self] _ in
+            self?.presentSettingsMenu()
+        })
+        configurePopoverSource(for: alert)
+        present(alert, animated: true)
+    }
+
+    private func presentDrivingPositionMenu() {
+        let alert = UIAlertController(title: "Driving Position", message: "Sets the position of the Coolwalk navigation rail.", preferredStyle: .actionSheet)
+
+        let leftTitle = ProjectionSettings.driverPosition == .left ? "Left-Hand Drive (LHD) (Current)" : "Left-Hand Drive (LHD)"
+        alert.addAction(UIAlertAction(title: leftTitle, style: .default) { [weak self] _ in
+            ProjectionSettings.driverPosition = .left
+            self?.presentSettingsMenu()
+        })
+
+        let rightTitle = ProjectionSettings.driverPosition == .right ? "Right-Hand Drive (RHD) (Current)" : "Right-Hand Drive (RHD)"
+        alert.addAction(UIAlertAction(title: rightTitle, style: .default) { [weak self] _ in
+            ProjectionSettings.driverPosition = .right
+            self?.presentSettingsMenu()
+        })
+
+        alert.addAction(UIAlertAction(title: "Back", style: .cancel) { [weak self] _ in
+            self?.presentSettingsMenu()
+        })
+        configurePopoverSource(for: alert)
+        present(alert, animated: true)
+    }
+
+    private func presentDpiPreviewModal() {
+        let previewVC = UIViewController()
+        previewVC.view.backgroundColor = .systemBackground
+        previewVC.title = "Coolwalk DPI Preview"
+
+        let previewView = DpiPreviewView()
+        previewView.translatesAutoresizingMaskIntoConstraints = false
+        previewView.dpi = ProjectionSettings.effectiveDpi
+        let scale = UIScreen.main.scale
+        previewView.panelWidthPx = Int(view.bounds.width * scale)
+        previewView.panelHeightPx = Int(view.bounds.height * scale)
+        previewView.isRightHandDrive = ProjectionSettings.driverPosition == .right
+        previewView.fitMode = ProjectionSettings.videoFitMode
+
+        let slider = UISlider()
+        slider.translatesAutoresizingMaskIntoConstraints = false
+        slider.minimumValue = Float(ProjectionSettings.minDpi)
+        slider.maximumValue = Float(ProjectionSettings.maxDpi)
+        slider.value = Float(ProjectionSettings.effectiveDpi)
+
+        let dpiLabel = UILabel()
+        dpiLabel.translatesAutoresizingMaskIntoConstraints = false
+        dpiLabel.text = "DPI: \(ProjectionSettings.effectiveDpi)"
+        dpiLabel.font = .monospacedDigitSystemFont(ofSize: 18, weight: .bold)
+        dpiLabel.textAlignment = .center
+
+        let closeButton = UIButton(type: .system)
+        closeButton.translatesAutoresizingMaskIntoConstraints = false
+        closeButton.setTitle("Done", for: .normal)
+        closeButton.titleLabel?.font = .systemFont(ofSize: 17, weight: .bold)
+
+        previewVC.view.addSubview(previewView)
+        previewVC.view.addSubview(slider)
+        previewVC.view.addSubview(dpiLabel)
+        previewVC.view.addSubview(closeButton)
+
+        NSLayoutConstraint.activate([
+            closeButton.topAnchor.constraint(equalTo: previewVC.view.safeAreaLayoutGuide.topAnchor, constant: 16),
+            closeButton.trailingAnchor.constraint(equalTo: previewVC.view.trailingAnchor, constant: -20),
+
+            previewView.topAnchor.constraint(equalTo: closeButton.bottomAnchor, constant: 16),
+            previewView.leadingAnchor.constraint(equalTo: previewVC.view.leadingAnchor, constant: 20),
+            previewView.trailingAnchor.constraint(equalTo: previewVC.view.trailingAnchor, constant: -20),
+            previewView.heightAnchor.constraint(equalToConstant: 240),
+
+            dpiLabel.topAnchor.constraint(equalTo: previewView.bottomAnchor, constant: 20),
+            dpiLabel.centerXAnchor.constraint(equalTo: previewVC.view.centerXAnchor),
+
+            slider.topAnchor.constraint(equalTo: dpiLabel.bottomAnchor, constant: 12),
+            slider.leadingAnchor.constraint(equalTo: previewVC.view.leadingAnchor, constant: 36),
+            slider.trailingAnchor.constraint(equalTo: previewVC.view.trailingAnchor, constant: -36)
+        ])
+
+        slider.addAction(UIAction { [weak slider, weak previewView, weak dpiLabel] _ in
+            guard let slider, let previewView, let dpiLabel else { return }
+            let val = Int(slider.value)
+            previewView.dpi = val
+            dpiLabel.text = "DPI: \(val)"
+            ProjectionSettings.dpi = val
+        }, for: .valueChanged)
+
+        closeButton.addAction(UIAction { [weak previewVC] _ in
+            previewVC?.dismiss(animated: true)
+        }, for: .touchUpInside)
+
+        let nav = UINavigationController(rootViewController: previewVC)
+        nav.modalPresentationStyle = .formSheet
+        present(nav, animated: true)
+    }
+
     private func presentConnectionDetails() {
         let device = connectionManager.connectedDevice
         let details = [
@@ -813,34 +964,22 @@ class MainViewController: UIViewController {
     }
 
     private func mapTouchPointToAa(_ point: CGPoint) -> (x: Int, y: Int) {
-        let targetSize = ProjectionSettings.effectiveVideoDimensions
-        let width = max(touchOverlayView.bounds.width, 1)
-        let height = max(touchOverlayView.bounds.height, 1)
+        let screenConfig = HeadUnitScreenConfig.shared
+        let width = Float(max(touchOverlayView.bounds.width, 1))
+        let height = Float(max(touchOverlayView.bounds.height, 1))
 
-        // Match AVSampleBufferDisplayLayer.resizeAspect: map only inside active video rect.
-        let targetAspect = CGFloat(targetSize.width) / CGFloat(targetSize.height)
-        let viewAspect = width / height
-
-        let activeRect: CGRect
-        if viewAspect > targetAspect {
-            let contentWidth = height * targetAspect
-            let x = (width - contentWidth) / 2
-            activeRect = CGRect(x: x, y: 0, width: contentWidth, height: height)
-        } else {
-            let contentHeight = width / targetAspect
-            let y = (height - contentHeight) / 2
-            activeRect = CGRect(x: 0, y: y, width: width, height: contentHeight)
-        }
-
-        let clampedX = min(max(point.x, activeRect.minX), activeRect.maxX)
-        let clampedY = min(max(point.y, activeRect.minY), activeRect.maxY)
-
-        let nx = (clampedX - activeRect.minX) / activeRect.width
-        let ny = (clampedY - activeRect.minY) / activeRect.height
-
-        let x = Int(nx * CGFloat(targetSize.width - 1))
-        let y = Int(ny * CGFloat(targetSize.height - 1))
-        return (x, y)
+        let coord = TouchCoordinateMapper.map(
+            rawX: Float(point.x),
+            rawY: Float(point.y),
+            inputSurfaceWidth: width,
+            inputSurfaceHeight: height,
+            negotiatedWidth: screenConfig.getNegotiatedWidth(),
+            negotiatedHeight: screenConfig.getNegotiatedHeight(),
+            marginWidth: Float(screenConfig.getWidthMargin()),
+            marginHeight: Float(screenConfig.getHeightMargin()),
+            fitMode: screenConfig.videoFitMode
+        )
+        return (coord.x, coord.y)
     }
 }
 

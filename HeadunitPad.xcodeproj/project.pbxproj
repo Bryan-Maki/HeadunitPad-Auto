@@ -13,6 +13,39 @@
 		C6B000000000000000000001 /* AapMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6B000000000000000000003 /* AapMessage.swift */; };
 		C6B000000000000000000002 /* Channel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6B000000000000000000004 /* Channel.swift */; };
 		D7B000000000000000000001 /* H264NALParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7B000000000000000000002 /* H264NALParser.swift */; };
+		E1B000000000000000000001 /* ProtoWire.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2F000000000000000000001 /* ProtoWire.swift */; };
+		E1B000000000000000000002 /* CommonProto.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2F000000000000000000002 /* CommonProto.swift */; };
+		E1B000000000000000000003 /* MediaProto.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2F000000000000000000003 /* MediaProto.swift */; };
+		E1B000000000000000000004 /* InputProto.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2F000000000000000000004 /* InputProto.swift */; };
+		E1B000000000000000000005 /* PlaybackProto.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2F000000000000000000005 /* PlaybackProto.swift */; };
+		E1B000000000000000000006 /* SensorsProto.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2F000000000000000000006 /* SensorsProto.swift */; };
+		E1B000000000000000000007 /* ControlProto.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2F000000000000000000007 /* ControlProto.swift */; };
+		E1B000000000000000000008 /* NavigationProto.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2F000000000000000000008 /* NavigationProto.swift */; };
+		E1B000000000000000000009 /* WirelessProto.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2F000000000000000000009 /* WirelessProto.swift */; };
+		E1B00000000000000000000A /* MsgType.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2F00000000000000000000A /* MsgType.swift */; };
+		E1B00000000000000000000B /* AudioConfigs.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2F00000000000000000000B /* AudioConfigs.swift */; };
+		E1B00000000000000000000C /* MicCaptureFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2F00000000000000000000C /* MicCaptureFormat.swift */; };
+		E1B00000000000000000000D /* AapMessageFraming.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2F00000000000000000000D /* AapMessageFraming.swift */; };
+		E1B00000000000000000000E /* FragmentedMessageAudit.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2F00000000000000000000E /* FragmentedMessageAudit.swift */; };
+		E1B00000000000000000000F /* AapMessageReassembler.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2F00000000000000000000F /* AapMessageReassembler.swift */; };
+		E1B000000000000000000010 /* UpdateUiConfigRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2F000000000000000000010 /* UpdateUiConfigRequest.swift */; };
+		E1B000000000000000000011 /* TouchEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2F000000000000000000011 /* TouchEvent.swift */; };
+		E1B000000000000000000012 /* VideoFocusEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2F000000000000000000012 /* VideoFocusEvent.swift */; };
+		E1B000000000000000000013 /* ServiceDiscoveryResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2F000000000000000000013 /* ServiceDiscoveryResponse.swift */; };
+		E1B000000000000000000014 /* AapVersionNegotiation.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2F000000000000000000014 /* AapVersionNegotiation.swift */; };
+		E1B000000000000000000015 /* ProjectionGeometryPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2F000000000000000000015 /* ProjectionGeometryPolicy.swift */; };
+		E1B000000000000000000016 /* VideoFitPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2F000000000000000000016 /* VideoFitPolicy.swift */; };
+		E1B000000000000000000017 /* MarginStrategyPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2F000000000000000000017 /* MarginStrategyPolicy.swift */; };
+		E1B000000000000000000018 /* MarginAnnouncementPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2F000000000000000000018 /* MarginAnnouncementPolicy.swift */; };
+		E1B000000000000000000019 /* NegotiatedResolutionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2F000000000000000000019 /* NegotiatedResolutionPolicy.swift */; };
+		E1B00000000000000000001A /* ProjectionCanvasPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2F00000000000000000001A /* ProjectionCanvasPolicy.swift */; };
+		E1B00000000000000000001B /* ScreenOrientationPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2F00000000000000000001B /* ScreenOrientationPolicy.swift */; };
+		E1B00000000000000000001C /* ScreenSettingsHash.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2F00000000000000000001C /* ScreenSettingsHash.swift */; };
+		E1B00000000000000000001D /* AnnouncedDensityPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2F00000000000000000001D /* AnnouncedDensityPolicy.swift */; };
+		E1B00000000000000000001E /* HeadUnitScreenConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2F00000000000000000001E /* HeadUnitScreenConfig.swift */; };
+		E1B00000000000000000001F /* TouchCoordinateMapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2F00000000000000000001F /* TouchCoordinateMapper.swift */; };
+		E1B000000000000000000020 /* DpiPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2F000000000000000000020 /* DpiPreviewView.swift */; };
+		E1B000000000000000000021 /* Phase1ScreenAndFramingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2F000000000000000000021 /* Phase1ScreenAndFramingTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -23,6 +56,39 @@
 		C6B000000000000000000003 /* AapMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/AAP/AapMessage.swift; sourceTree = SOURCE_ROOT; };
 		C6B000000000000000000004 /* Channel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/AAP/Protocol/Channel.swift; sourceTree = SOURCE_ROOT; };
 		D7B000000000000000000002 /* H264NALParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Video/H264NALParser.swift; sourceTree = SOURCE_ROOT; };
+		E2F000000000000000000001 /* ProtoWire.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/AAP/Proto/ProtoWire.swift; sourceTree = SOURCE_ROOT; };
+		E2F000000000000000000002 /* CommonProto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/AAP/Proto/CommonProto.swift; sourceTree = SOURCE_ROOT; };
+		E2F000000000000000000003 /* MediaProto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/AAP/Proto/MediaProto.swift; sourceTree = SOURCE_ROOT; };
+		E2F000000000000000000004 /* InputProto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/AAP/Proto/InputProto.swift; sourceTree = SOURCE_ROOT; };
+		E2F000000000000000000005 /* PlaybackProto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/AAP/Proto/PlaybackProto.swift; sourceTree = SOURCE_ROOT; };
+		E2F000000000000000000006 /* SensorsProto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/AAP/Proto/SensorsProto.swift; sourceTree = SOURCE_ROOT; };
+		E2F000000000000000000007 /* ControlProto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/AAP/Proto/ControlProto.swift; sourceTree = SOURCE_ROOT; };
+		E2F000000000000000000008 /* NavigationProto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/AAP/Proto/NavigationProto.swift; sourceTree = SOURCE_ROOT; };
+		E2F000000000000000000009 /* WirelessProto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/AAP/Proto/WirelessProto.swift; sourceTree = SOURCE_ROOT; };
+		E2F00000000000000000000A /* MsgType.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/AAP/Proto/MsgType.swift; sourceTree = SOURCE_ROOT; };
+		E2F00000000000000000000B /* AudioConfigs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/AAP/Proto/AudioConfigs.swift; sourceTree = SOURCE_ROOT; };
+		E2F00000000000000000000C /* MicCaptureFormat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/AAP/Proto/MicCaptureFormat.swift; sourceTree = SOURCE_ROOT; };
+		E2F00000000000000000000D /* AapMessageFraming.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/AAP/Framing/AapMessageFraming.swift; sourceTree = SOURCE_ROOT; };
+		E2F00000000000000000000E /* FragmentedMessageAudit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/AAP/Framing/FragmentedMessageAudit.swift; sourceTree = SOURCE_ROOT; };
+		E2F00000000000000000000F /* AapMessageReassembler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/AAP/Framing/AapMessageReassembler.swift; sourceTree = SOURCE_ROOT; };
+		E2F000000000000000000010 /* UpdateUiConfigRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/AAP/Messages/UpdateUiConfigRequest.swift; sourceTree = SOURCE_ROOT; };
+		E2F000000000000000000011 /* TouchEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/AAP/Messages/TouchEvent.swift; sourceTree = SOURCE_ROOT; };
+		E2F000000000000000000012 /* VideoFocusEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/AAP/Messages/VideoFocusEvent.swift; sourceTree = SOURCE_ROOT; };
+		E2F000000000000000000013 /* ServiceDiscoveryResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/AAP/Messages/ServiceDiscoveryResponse.swift; sourceTree = SOURCE_ROOT; };
+		E2F000000000000000000014 /* AapVersionNegotiation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/AAP/AapVersionNegotiation.swift; sourceTree = SOURCE_ROOT; };
+		E2F000000000000000000015 /* ProjectionGeometryPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Settings/ProjectionGeometryPolicy.swift; sourceTree = SOURCE_ROOT; };
+		E2F000000000000000000016 /* VideoFitPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Settings/VideoFitPolicy.swift; sourceTree = SOURCE_ROOT; };
+		E2F000000000000000000017 /* MarginStrategyPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Settings/MarginStrategyPolicy.swift; sourceTree = SOURCE_ROOT; };
+		E2F000000000000000000018 /* MarginAnnouncementPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Settings/MarginAnnouncementPolicy.swift; sourceTree = SOURCE_ROOT; };
+		E2F000000000000000000019 /* NegotiatedResolutionPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Settings/NegotiatedResolutionPolicy.swift; sourceTree = SOURCE_ROOT; };
+		E2F00000000000000000001A /* ProjectionCanvasPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Settings/ProjectionCanvasPolicy.swift; sourceTree = SOURCE_ROOT; };
+		E2F00000000000000000001B /* ScreenOrientationPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Settings/ScreenOrientationPolicy.swift; sourceTree = SOURCE_ROOT; };
+		E2F00000000000000000001C /* ScreenSettingsHash.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Settings/ScreenSettingsHash.swift; sourceTree = SOURCE_ROOT; };
+		E2F00000000000000000001D /* AnnouncedDensityPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Settings/AnnouncedDensityPolicy.swift; sourceTree = SOURCE_ROOT; };
+		E2F00000000000000000001E /* HeadUnitScreenConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Settings/HeadUnitScreenConfig.swift; sourceTree = SOURCE_ROOT; };
+		E2F00000000000000000001F /* TouchCoordinateMapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/UI/TouchCoordinateMapper.swift; sourceTree = SOURCE_ROOT; };
+		E2F000000000000000000020 /* DpiPreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/UI/DpiPreviewView.swift; sourceTree = SOURCE_ROOT; };
+		E2F000000000000000000021 /* Phase1ScreenAndFramingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPadTests/Phase1ScreenAndFramingTests.swift; sourceTree = SOURCE_ROOT; };
 		A4C8F5B6582F6D160A3B1E70 /* Pods-HeadunitPad.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-HeadunitPad.release.xcconfig"; path = "Target Support Files/Pods-HeadunitPad/Pods-HeadunitPad.release.xcconfig"; sourceTree = "<group>"; };
 		BFD3A5C41BAB9748091B8410 /* Pods_HeadunitPad.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_HeadunitPad.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		F905FD5D0DB5B38B0AFB8A40 /* Pods-HeadunitPad.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-HeadunitPad.debug.xcconfig"; path = "Target Support Files/Pods-HeadunitPad/Pods-HeadunitPad.debug.xcconfig"; sourceTree = "<group>"; };
@@ -174,6 +240,7 @@
 					};
 					A0A000000000000000000005 = {
 						CreatedOnToolsVersion = 26.3;
+						TestTargetID = 62EB88A22F935A6900D2526F;
 					};
 				};
 			};
@@ -267,6 +334,38 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E1B000000000000000000001 /* ProtoWire.swift in Sources */,
+				E1B000000000000000000002 /* CommonProto.swift in Sources */,
+				E1B000000000000000000003 /* MediaProto.swift in Sources */,
+				E1B000000000000000000004 /* InputProto.swift in Sources */,
+				E1B000000000000000000005 /* PlaybackProto.swift in Sources */,
+				E1B000000000000000000006 /* SensorsProto.swift in Sources */,
+				E1B000000000000000000007 /* ControlProto.swift in Sources */,
+				E1B000000000000000000008 /* NavigationProto.swift in Sources */,
+				E1B000000000000000000009 /* WirelessProto.swift in Sources */,
+				E1B00000000000000000000A /* MsgType.swift in Sources */,
+				E1B00000000000000000000B /* AudioConfigs.swift in Sources */,
+				E1B00000000000000000000C /* MicCaptureFormat.swift in Sources */,
+				E1B00000000000000000000D /* AapMessageFraming.swift in Sources */,
+				E1B00000000000000000000E /* FragmentedMessageAudit.swift in Sources */,
+				E1B00000000000000000000F /* AapMessageReassembler.swift in Sources */,
+				E1B000000000000000000010 /* UpdateUiConfigRequest.swift in Sources */,
+				E1B000000000000000000011 /* TouchEvent.swift in Sources */,
+				E1B000000000000000000012 /* VideoFocusEvent.swift in Sources */,
+				E1B000000000000000000013 /* ServiceDiscoveryResponse.swift in Sources */,
+				E1B000000000000000000014 /* AapVersionNegotiation.swift in Sources */,
+				E1B000000000000000000015 /* ProjectionGeometryPolicy.swift in Sources */,
+				E1B000000000000000000016 /* VideoFitPolicy.swift in Sources */,
+				E1B000000000000000000017 /* MarginStrategyPolicy.swift in Sources */,
+				E1B000000000000000000018 /* MarginAnnouncementPolicy.swift in Sources */,
+				E1B000000000000000000019 /* NegotiatedResolutionPolicy.swift in Sources */,
+				E1B00000000000000000001A /* ProjectionCanvasPolicy.swift in Sources */,
+				E1B00000000000000000001B /* ScreenOrientationPolicy.swift in Sources */,
+				E1B00000000000000000001C /* ScreenSettingsHash.swift in Sources */,
+				E1B00000000000000000001D /* AnnouncedDensityPolicy.swift in Sources */,
+				E1B00000000000000000001E /* HeadUnitScreenConfig.swift in Sources */,
+				E1B00000000000000000001F /* TouchCoordinateMapper.swift in Sources */,
+				E1B000000000000000000020 /* DpiPreviewView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -279,6 +378,7 @@
 				C6B000000000000000000001 /* AapMessage.swift in Sources */,
 				C6B000000000000000000002 /* Channel.swift in Sources */,
 				D7B000000000000000000001 /* H264NALParser.swift in Sources */,
+				E1B000000000000000000021 /* Phase1ScreenAndFramingTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -288,6 +388,7 @@
 		A0A000000000000000000009 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 5NMV3622HL;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -296,12 +397,15 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 2;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/HeadunitPad.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/HeadunitPad";
+				TEST_TARGET_NAME = HeadunitPad;
 			};
 			name = Debug;
 		};
 		A0A00000000000000000000A /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 5NMV3622HL;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -310,6 +414,8 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 2;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/HeadunitPad.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/HeadunitPad";
+				TEST_TARGET_NAME = HeadunitPad;
 			};
 			name = Release;
 		};

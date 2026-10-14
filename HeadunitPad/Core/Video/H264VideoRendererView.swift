@@ -60,6 +60,69 @@ final class H264VideoRendererView: UIView {
     private func commonInit() {
         backgroundColor = .black
         displayLayer.videoGravity = .resizeAspect
+        applyGeometry()
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        applyGeometry()
+    }
+
+    func updateGeometry() {
+        DispatchQueue.main.async { [weak self] in
+            self?.applyGeometry()
+        }
+    }
+
+    func applyGeometry() {
+        let screenConfig = HeadUnitScreenConfig.shared
+        let fitMode = screenConfig.videoFitMode
+        let videoW = screenConfig.getNegotiatedWidth()
+        let videoH = screenConfig.getNegotiatedHeight()
+        let marginW = screenConfig.getWidthMargin()
+        let marginH = screenConfig.getHeightMargin()
+
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+
+        switch fitMode {
+        case .fillMargin:
+            if videoW > 0 && videoH > 0 && (marginW > 0 || marginH > 0) {
+                let leftMargin = marginW / 2
+                let topMargin = marginH / 2
+                let uiW = videoW - marginW
+                let uiH = videoH - marginH
+
+                let normX = CGFloat(leftMargin) / CGFloat(videoW)
+                let normY = CGFloat(topMargin) / CGFloat(videoH)
+                let normW = CGFloat(uiW) / CGFloat(videoW)
+                let normH = CGFloat(uiH) / CGFloat(videoH)
+
+                displayLayer.contentsRect = CGRect(x: normX, y: normY, width: normW, height: normH)
+                displayLayer.videoGravity = .resize
+            } else {
+                displayLayer.contentsRect = CGRect(x: 0, y: 0, width: 1, height: 1)
+                displayLayer.videoGravity = .resize
+            }
+
+        case .contain:
+            displayLayer.contentsRect = CGRect(x: 0, y: 0, width: 1, height: 1)
+            displayLayer.videoGravity = .resizeAspect
+
+        case .cover:
+            displayLayer.contentsRect = CGRect(x: 0, y: 0, width: 1, height: 1)
+            displayLayer.videoGravity = .resizeAspectFill
+
+        case .fill:
+            displayLayer.contentsRect = CGRect(x: 0, y: 0, width: 1, height: 1)
+            displayLayer.videoGravity = .resize
+
+        case .stretch:
+            displayLayer.contentsRect = CGRect(x: 0, y: 0, width: 1, height: 1)
+            displayLayer.videoGravity = .resize
+        }
+
+        CATransaction.commit()
     }
 
     func reset() {

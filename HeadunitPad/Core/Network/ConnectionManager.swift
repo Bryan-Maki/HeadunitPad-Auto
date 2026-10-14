@@ -240,6 +240,10 @@ class ConnectionManager {
         aapTransport?.sendMediaKeyEvent(keyCode: keyCode)
     }
 
+    func sendUpdateUiConfigRequest(left: Int, top: Int, right: Int, bottom: Int) {
+        aapTransport?.sendUpdateUiConfigRequest(left: left, top: top, right: right, bottom: bottom)
+    }
+
     func diagnosticLines() -> [String] {
         let device = connectedDevice
         let liveVideoLines = aapTransport?.videoDiagnosticLines() ?? []
