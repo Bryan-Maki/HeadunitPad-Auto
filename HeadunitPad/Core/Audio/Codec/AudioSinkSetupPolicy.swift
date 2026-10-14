@@ -12,7 +12,20 @@ import Foundation
 /// The phone re-sends setup for every channel mid-session.
 /// The channel's rate and channel count are fixed by AudioConfigs, so the codec is the whole of
 /// what a setup can change.
-public enum AudioSinkSetupPolicy {
+public struct AudioSinkSetupPolicy {
+    public init() {}
+
+    public func shouldRebuild(
+        currentCodec: AudioSinkCodec,
+        newCodec: AudioSinkCodec,
+        currentRate: Int,
+        newRate: Int,
+        currentChannels: Int,
+        newChannels: Int
+    ) -> Bool {
+        return currentCodec != newCodec || currentRate != newRate || currentChannels != newChannels
+    }
+
     /// `builtCodec` is the codec the live track was actually built with, and `setupCodec` the one this
     /// setup names. A nil `setupCodec` is a setup that named no audio codec, which leaves the sink
     /// alone rather than rebuilding it on no information.
