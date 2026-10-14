@@ -66,6 +66,35 @@ public final class WppHandshakeSession {
         self.credentialsKnown = credentialsKnown
     }
 
+    public enum State: Equatable {
+        case waitingForVersionRequest
+        case waitingForSecurityOrStart
+        case completed
+        case failed
+    }
+
+    public typealias SendCallback = (WppMessageType, Data) -> Void
+    private var sendCallback: SendCallback?
+    public var currentState: State = .waitingForVersionRequest
+
+    public convenience init(sendCallback: @escaping SendCallback) {
+        self.init(credentialsKnown: true)
+        self.sendCallback = sendCallback
+    }
+
+    public func onMessageReceived(type: WppMessageType, payload: Data) throws {
+        switch type {
+        case .versionRequest, .wifiVersionRequest:
+            currentState = .waitingForSecurityOrStart
+            sendCallback?(.wifiVersionResponse, Data())
+        case .startRequest, .wifiStartRequest:
+            currentState = .completed
+            sendCallback?(.wifiStartResponse, Data())
+        default:
+            break
+        }
+    }
+
     public var currentStageTimeoutMs: Int64? {
         switch stage {
         case .awaitVersion:

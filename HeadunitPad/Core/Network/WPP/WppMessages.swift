@@ -8,28 +8,48 @@
 
 import Foundation
 
-public enum WppMessageType {
+public enum WppMessageType: Int, CaseIterable, Equatable, Hashable, Sendable {
     /// Head unit -> phone: where to open the projection session.
-    public static let startRequest = 1
+    case startRequest = 1
     /// Phone -> head unit: asking for the network credentials.
-    public static let infoRequest = 2
+    case infoRequest = 2
     /// Head unit -> phone: the credentials.
-    public static let infoResponse = 3
+    case infoResponse = 3
     /// Head unit -> phone: our protocol version, opening the modern handshake.
-    public static let versionRequest = 4
+    case versionRequest = 4
     /// Phone -> head unit: its protocol version.
-    public static let versionResponse = 5
+    case versionResponse = 5
     /// Phone -> head unit: whether it managed to join our network.
-    public static let connectStatus = 6
+    case connectStatus = 6
     /// Phone -> head unit: acknowledges START_REQUEST.
-    public static let startResponse = 7
+    case startResponse = 7
     /// Keepalive, either direction. Echo payload back as PING_RESPONSE.
-    public static let pingRequest = 8
-    public static let pingResponse = 9
+    case pingRequest = 8
+    case pingResponse = 9
     /// Head unit -> phone, TCP only: withdraws the endpoint the phone dialled.
-    public static let connectionRejection = 10
+    case connectionRejection = 10
     /// Type 11: setup info.
-    public static let setupInfo = 11
+    case setupInfo = 11
+
+    public static let wifiStartRequest: WppMessageType = .startRequest
+    public static let wifiInfoRequest: WppMessageType = .infoRequest
+    public static let wifiInfoResponse: WppMessageType = .infoResponse
+    public static let wifiVersionRequest: WppMessageType = .versionRequest
+    public static let wifiVersionResponse: WppMessageType = .versionResponse
+    public static let wifiConnectStatus: WppMessageType = .connectStatus
+    public static let wifiStartResponse: WppMessageType = .startResponse
+    public static let wifiPingRequest: WppMessageType = .pingRequest
+    public static let wifiPingResponse: WppMessageType = .pingResponse
+    public static let wifiConnectionRejection: WppMessageType = .connectionRejection
+}
+
+extension WppMessageType {
+    public static func == (lhs: Int, rhs: WppMessageType) -> Bool {
+        return lhs == rhs.rawValue
+    }
+    public static func == (lhs: WppMessageType, rhs: Int) -> Bool {
+        return lhs.rawValue == rhs
+    }
 }
 
 public struct WppEndpoint: Equatable {
@@ -131,5 +151,9 @@ public enum WppMessages {
         var writer = ProtoWriter()
         message.encode(to: &writer)
         return try WppFraming.encodeFrame(payload: writer.data, type: type)
+    }
+
+    public static func frame<T: ProtoCodable>(_ message: T, type: WppMessageType) throws -> Data {
+        return try frame(message, type: type.rawValue)
     }
 }

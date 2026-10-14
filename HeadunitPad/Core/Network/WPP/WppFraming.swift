@@ -84,8 +84,12 @@ public enum WppFraming {
         return (hi << 8) | lo
     }
 
+    public static func encodeFrame(payload: Data, type: WppMessageType) throws -> Data {
+        return try encodeFrame(payload: payload, type: type.rawValue)
+    }
+
     public static func frame(type: WppMessageType, payload: Data) -> Data {
-        return (try? encodeFrame(payload: payload, type: Int(type.rawValue))) ?? Data()
+        return (try? encodeFrame(payload: payload, type: type.rawValue)) ?? Data()
     }
 
     public static func unframe(data: Data) throws -> (WppMessageType, Data) {
@@ -94,7 +98,7 @@ public enum WppFraming {
         }
         let size = try decodePayloadSize(header: data.prefix(headerSize))
         let typeRaw = try decodeType(header: data.prefix(headerSize))
-        guard let type = WppMessageType(rawValue: Int32(typeRaw)) else {
+        guard let type = WppMessageType(rawValue: typeRaw) else {
             throw WppFramingError.invalidType(typeRaw)
         }
         let payload = data.count > headerSize ? data.subdata(in: headerSize..<min(data.count, headerSize + size)) : Data()
