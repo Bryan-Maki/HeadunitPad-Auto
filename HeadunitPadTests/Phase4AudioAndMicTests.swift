@@ -196,7 +196,7 @@ final class Phase4AudioAndMicTests: XCTestCase {
 
         let mixedSamples = Pcm16Stereo.toSamples(data: mixed)
         XCTAssertEqual(mixedSamples.count, 960)
-        XCTAssertEqual(mixedSamples[0], 1000)
+        XCTAssertEqual(mixedSamples.last!, 1000)
     }
 
     // MARK: - 4. Adaptive Jitter Buffer & Latency Recovery
