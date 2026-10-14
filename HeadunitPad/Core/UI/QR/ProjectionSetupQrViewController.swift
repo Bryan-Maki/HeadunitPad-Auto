@@ -73,6 +73,16 @@ public final class ProjectionSetupQrViewController: UIViewController {
         modalTransitionStyle = .crossDissolve
     }
 
+    public convenience init(ssid: String, passphrase: String?, ipAddress: String, port: Int) {
+        let uri = ProjectionDeepLink.generateUri(
+            ssid: ssid,
+            passphrase: passphrase ?? "",
+            ipAddress: ipAddress,
+            port: port
+        )
+        self.init(contentUrl: uri, ip: ipAddress, port: port, ssid: ssid)
+    }
+
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }

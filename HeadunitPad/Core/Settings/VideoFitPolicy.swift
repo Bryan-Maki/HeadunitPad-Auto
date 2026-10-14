@@ -19,6 +19,8 @@ public enum VideoFitMode: Int, CaseIterable {
     /// Non-uniform stretch to touch all edges
     case stretch = 4
 
+    public static let fit = VideoFitMode.contain
+
     public var title: String {
         switch self {
         case .contain:

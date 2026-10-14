@@ -17,6 +17,10 @@ public enum VideoCodecPreference: String, CaseIterable, Codable {
     case h264 = "H.264"
     case hevc = "HEVC (H.265)"
 
+    public var title: String {
+        return rawValue
+    }
+
     public var effectiveCodecType: VideoCodecType? {
         switch self {
         case .auto: return nil

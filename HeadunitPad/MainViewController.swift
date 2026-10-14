@@ -163,7 +163,7 @@ class MainViewController: UIViewController {
         }
         requestMicrophonePermissionIfNeeded()
         connectionManager.requestLocationPermissionIfNeeded()
-        HeadUnitScreenConfig.shared.onMarginsDiverged = { [weak self] left, top, right, bottom in
+        HeadUnitScreenConfig.shared.onMarginsDivergedDetailed = { [weak self] left, top, right, bottom in
             self?.connectionManager.sendUpdateUiConfigRequest(left: left, top: top, right: right, bottom: bottom)
         }
         updateUIForConnectionState(.disconnected)
