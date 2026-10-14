@@ -317,6 +317,22 @@ public enum ProjectionSettings {
         return false
 #else
         let monitor = NWPathMonitor()
+        let hasCellular = monitor.currentPath.availableInterfaces.contains { $0.type == .cellular }
+        if hasCellular {
+            cachedCellularSupport = true
+            return true
+        }
+
+        if Thread.isMainThread {
+            let queue = DispatchQueue(label: "com.headunitpad.cellular-detect")
+            monitor.pathUpdateHandler = { path in
+                cachedCellularSupport = path.availableInterfaces.contains { $0.type == .cellular }
+                monitor.cancel()
+            }
+            monitor.start(queue: queue)
+            return false
+        }
+
         let queue = DispatchQueue(label: "com.headunitpad.cellular-detect")
         let semaphore = DispatchSemaphore(value: 0)
         var hasCellularInterface = false
@@ -327,7 +343,7 @@ public enum ProjectionSettings {
         }
 
         monitor.start(queue: queue)
-        _ = semaphore.wait(timeout: .now() + 0.35)
+        _ = semaphore.wait(timeout: .now() + 0.15)
         monitor.cancel()
 
         cachedCellularSupport = hasCellularInterface

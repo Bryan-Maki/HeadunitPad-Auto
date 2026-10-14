@@ -117,6 +117,7 @@ public final class HeadUnitScreenConfig {
     }
 
     public func getWidthMargin() -> Int {
+        guard screenWidthPx > 0 && screenHeightPx > 0 else { return 0 }
         let (videoW, _) = activeSize()
         // In FillMargin mode on iPad 4:3 display (e.g. 2048x1536 / 1024x768):
         // iPad aspect ratio is 4:3 (1.333), while AA video is 16:9 (1.777).
@@ -134,6 +135,7 @@ public final class HeadUnitScreenConfig {
     }
 
     public func getHeightMargin() -> Int {
+        guard screenWidthPx > 0 && screenHeightPx > 0 else { return 0 }
         let (videoW, videoH) = activeSize()
         if videoFitMode == .fillMargin {
             let targetVideoHeightFor4to3 = (videoW * screenHeightPx) / screenWidthPx

@@ -204,23 +204,27 @@ class AapTransport {
         if tlsHandler.setup() {
             print("AapTransport: OpenSSL TLS handler initialized")
 
-            let bundle = Bundle.main
-            let candidateCertPaths = [
-                bundle.path(forResource: "cert", ofType: nil, inDirectory: "HeadunitPad/Resources/Raw"),
-                bundle.path(forResource: "cert", ofType: nil, inDirectory: "Resources/Raw"),
-                bundle.path(forResource: "cert", ofType: nil, inDirectory: "Raw"),
-                bundle.path(forResource: "cert", ofType: nil)
+            let bundles = [Bundle.main, Bundle(for: AapTransport.self)]
+            let candidateSubdirs: [String?] = [
+                "HeadunitPad/Resources/Raw",
+                "Resources/Raw",
+                "Raw",
+                nil
             ]
 
-            let candidateKeyPaths = [
-                bundle.path(forResource: "privkey", ofType: nil, inDirectory: "HeadunitPad/Resources/Raw"),
-                bundle.path(forResource: "privkey", ofType: nil, inDirectory: "Resources/Raw"),
-                bundle.path(forResource: "privkey", ofType: nil, inDirectory: "Raw"),
-                bundle.path(forResource: "privkey", ofType: nil)
-            ]
+            var certPath: String?
+            var keyPath: String?
 
-            let certPath = candidateCertPaths.compactMap { $0 }.first
-            let keyPath = candidateKeyPaths.compactMap { $0 }.first
+            for b in bundles {
+                for dir in candidateSubdirs {
+                    if certPath == nil, let p = b.path(forResource: "cert", ofType: nil, inDirectory: dir), FileManager.default.fileExists(atPath: p) {
+                        certPath = p
+                    }
+                    if keyPath == nil, let p = b.path(forResource: "privkey", ofType: nil, inDirectory: dir), FileManager.default.fileExists(atPath: p) {
+                        keyPath = p
+                    }
+                }
+            }
 
             guard let certPath, let keyPath else {
                 print("AapTransport: Certificate resources not found in app bundle")

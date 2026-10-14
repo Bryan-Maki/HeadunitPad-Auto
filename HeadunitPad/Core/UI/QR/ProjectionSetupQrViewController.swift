@@ -73,6 +73,10 @@ public final class ProjectionSetupQrViewController: UIViewController {
         modalTransitionStyle = .crossDissolve
     }
 
+    public convenience init() {
+        self.init(contentUrl: "androidauto://wireless?ip=192.168.1.100&port=5277", ip: "192.168.1.100", port: 5277, ssid: "HeadunitPad-Hotspot")
+    }
+
     public convenience init(ssid: String, passphrase: String?, ipAddress: String, port: Int) {
         let uri = ProjectionDeepLink.generateUri(
             ssid: ssid,

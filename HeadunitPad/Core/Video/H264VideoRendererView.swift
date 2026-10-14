@@ -117,7 +117,7 @@ public class H264VideoRendererView: UIView {
 
         switch fitMode {
         case .fillMargin:
-            if videoW > 0 && videoH > 0 && (marginW > 0 || marginH > 0) {
+            if videoW > 0 && videoH > 0 && (marginW > 0 || marginH > 0) && videoW > marginW && videoH > marginH {
                 let leftMargin = marginW / 2
                 let topMargin = marginH / 2
                 let uiW = videoW - marginW

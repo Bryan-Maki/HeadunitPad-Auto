@@ -16,7 +16,6 @@ class MainViewController: UIViewController {
     private let connectionManager = ConnectionManager()
     private let videoRenderer = H264VideoRendererView()
     private let audioPlayer = PCMAudioPlayer()
-    private let locationPermissionManager = CLLocationManager()
     private var videoWatchdogTimer: Timer?
     private var runningSinceTs: TimeInterval = 0
     private var lastVideoFrameTs: TimeInterval = 0
@@ -161,8 +160,6 @@ class MainViewController: UIViewController {
         TrackpadInputBridge.shared.setTouchSender { [weak self] pointers, action, actionIndex in
             self?.connectionManager.sendTouchEvent(pointers: pointers, action: action, actionIndex: actionIndex)
         }
-        requestMicrophonePermissionIfNeeded()
-        connectionManager.requestLocationPermissionIfNeeded()
         HeadUnitScreenConfig.shared.onMarginsDivergedDetailed = { [weak self] left, top, right, bottom in
             self?.connectionManager.sendUpdateUiConfigRequest(left: left, top: top, right: right, bottom: bottom)
         }
@@ -223,7 +220,7 @@ class MainViewController: UIViewController {
 
         let targetMask = supportedInterfaceOrientations
         if #available(iOS 16.0, *) {
-            guard let scene = view.window?.windowScene else { return }
+            guard let window = view.window, let scene = window.windowScene else { return }
             let prefs = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: targetMask)
             scene.requestGeometryUpdate(prefs) { error in
                 print("MainViewController: Failed to apply orientation lock: \(error)")
@@ -859,7 +856,6 @@ class MainViewController: UIViewController {
         let ipadActionTitle = ProjectionGpsSource.ipad == ProjectionSettings.gpsSource ? "Use iPad GPS (Current)" : "Use iPad GPS"
         let ipadAction = UIAlertAction(title: ipadActionTitle, style: .default) { [weak self] _ in
             ProjectionSettings.gpsSource = .ipad
-            self?.locationPermissionManager.requestWhenInUseAuthorization()
             self?.connectionManager.requestLocationPermissionIfNeeded()
             self?.presentSettingsMenu()
         }

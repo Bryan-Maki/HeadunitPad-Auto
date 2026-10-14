@@ -34,7 +34,7 @@ public enum ProjectionGeometryPolicy {
 
     public static func fit(panelW: Int, panelH: Int, videoW: Int, videoH: Int) -> Fit {
         let small = isSmallScreen(panelW: panelW, panelH: panelH)
-        if small || videoW <= 0 || videoH <= 0 {
+        if small || videoW <= 0 || videoH <= 0 || panelW <= 0 || panelH <= 0 {
             return Fit(scaleFactor: 1.0, isSmallScreen: small, isPortraitScaled: nil)
         }
         let sW = Float(panelW)
