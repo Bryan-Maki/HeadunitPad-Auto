@@ -296,6 +296,10 @@ public enum ProjectionSettings {
         return resolution.dimensions
     }
 
+    public static var effectiveResolution: (width: Int, height: Int) {
+        return resolution.dimensions
+    }
+
     public static func resetDpiToDefault() {
         dpi = defaultDpi
     }
