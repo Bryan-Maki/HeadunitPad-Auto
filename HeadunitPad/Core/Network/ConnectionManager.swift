@@ -180,7 +180,8 @@ class ConnectionManager {
         autoReconnect.cancel()
         isUserInitiatedDisconnect = false
 
-        guard ConnectionAdmission.admits(inFlight: state == .connecting || state == .connected, userInitiated: true) else {
+        let inFlight = (state == .connecting || state == .handshaking || state == .running)
+        guard ConnectionAdmission.admits(inFlight: inFlight, userInitiated: true) else {
             print("ConnectionManager: Admission refused connection to \(device.displayName)")
             return
         }
