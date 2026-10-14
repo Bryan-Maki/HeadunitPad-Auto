@@ -31,4 +31,12 @@ public enum AapMessageFraming {
     public static func completesMediaData(type: Int, flags: UInt8) -> Bool {
         return type == 0 && isLast(flags)
     }
+
+    public static func carriesTotalLength(flags: Int) -> Bool {
+        return carriesTotalLength(UInt8(flags & 0xFF))
+    }
+
+    public static func carriesMessageType(flags: Int) -> Bool {
+        return carriesMessageType(UInt8(flags & 0xFF))
+    }
 }

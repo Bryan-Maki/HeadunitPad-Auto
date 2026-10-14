@@ -88,6 +88,10 @@ public struct ProtoTouchEvent: ProtoCodable, Equatable {
         case touchActionOutside = 4
         case touchActionPointerDown = 5
         case touchActionPointerUp = 6
+
+        public static let press = PointerAction.touchActionDown
+        public static let release = PointerAction.touchActionUp
+        public static let drag = PointerAction.touchActionMove
     }
 
     public struct Pointer: ProtoCodable, Equatable {

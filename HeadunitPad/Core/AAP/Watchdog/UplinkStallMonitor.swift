@@ -30,8 +30,18 @@ public final class UplinkStallMonitor {
     private var blockedMs: Int64 = 0
     private var longestMs: Int64 = 0
     private var writes: Int = 0
+    private var writeStartMs: Int64 = 0
 
     public init() {}
+
+    public func onWriteStarted(nowMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000)) {
+        writeStartMs = nowMs
+    }
+
+    public func onWriteCompleted(nowMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000)) -> Report? {
+        let duration = max(0, nowMs - writeStartMs)
+        return onWrite(durationMs: duration, nowMs: nowMs)
+    }
 
     public func onWrite(durationMs: Int64, nowMs: Int64) -> Report? {
         if !started {

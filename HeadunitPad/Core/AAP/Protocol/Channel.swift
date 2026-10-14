@@ -44,6 +44,10 @@ enum Channel {
         }
     }
 
+    static func name(for channel: Int) -> String {
+        return name(for: UInt8(channel & 0xFF))
+    }
+
     static func isAudio(_ channel: UInt8) -> Bool {
         return channel == ID_AUD || channel == ID_AU1 || channel == ID_AU2
     }

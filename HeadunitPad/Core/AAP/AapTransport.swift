@@ -447,7 +447,7 @@ class AapTransport {
     }
 
     func send(message: AapMessage, completion: ((Error?) -> Void)? = nil) {
-        recordAapTrace(direction: "TX", channel: message.channel, flags: message.flags, type: message.type, payloadSize: message.payload.count)
+        recordAapTrace(direction: "TX", channel: message.channelUInt8, flags: message.flags, type: message.typeUInt16, payloadSize: message.payload.count)
 
         if state == .authenticating || state == .authenticatingComplete || state == .binding || state == .running {
             processingQueue.async { [weak self] in
@@ -479,7 +479,7 @@ class AapTransport {
 
         let flags = encryptedFlags(for: message)
         var packet = Data()
-        packet.append(message.channel)
+        packet.append(message.channelUInt8)
         packet.append(flags)
 
         let encLen = UInt16(encryptedPayload.count)
@@ -498,7 +498,7 @@ class AapTransport {
     }
 
     private func encryptedFlags(for message: AapMessage) -> UInt8 {
-        if message.channel != Channel.ID_CTR && isControlMessageType(message.type) {
+        if message.channel != Int(Channel.ID_CTR) && isControlMessageType(message.typeUInt16) {
             return 0x0f
         }
         return 0x0b
@@ -641,12 +641,12 @@ class AapTransport {
 
         let protoAction: ProtoTouchEvent.PointerAction
         switch action {
-        case .DOWN: protoAction = .press
-        case .UP: protoAction = .release
-        case .MOVE: protoAction = .drag
-        case .CANCEL: protoAction = .release
-        case .POINTER_DOWN: protoAction = .press
-        case .POINTER_UP: protoAction = .release
+        case .DOWN: protoAction = .touchActionDown
+        case .UP: protoAction = .touchActionUp
+        case .MOVE: protoAction = .touchActionMove
+        case .CANCEL: protoAction = .touchActionCancel
+        case .POINTER_DOWN: protoAction = .touchActionPointerDown
+        case .POINTER_UP: protoAction = .touchActionPointerUp
         }
 
         let message = AapTouchEventMessage.make(
@@ -822,7 +822,7 @@ class AapTransport {
                 continue
             }
 
-            let carriesTotal = AapMessageFraming.carriesTotalLength(flags: Int(flags))
+            let carriesTotal = AapMessageFraming.carriesTotalLength(flags)
             let headerExtra = carriesTotal ? 4 : 0
             let packetSize = 4 + headerExtra + encLen
             if encryptedReceiveBuffer.count < packetSize {
@@ -868,7 +868,7 @@ class AapTransport {
                 }
             }
 
-            let carriesType = AapMessageFraming.carriesMessageType(flags: Int(flags))
+            let carriesType = AapMessageFraming.carriesMessageType(flags)
             let msgType: Int
             if carriesType && decrypted.count >= 2 {
                 msgType = (Int(decrypted[0]) << 8) | Int(decrypted[1])
@@ -1862,21 +1862,21 @@ private enum ProtoWire {
     private func handleVideoMessage(_ message: AapMessage) {
         switch message.type {
         case 0x8000: // Media.MsgType.MEDIA_MESSAGE_SETUP
-            sendMediaConfig(on: message.channel)
-            sendVideoFocusNotification(on: message.channel, reason: "video-setup")
+            sendMediaConfig(on: message.channelUInt8)
+            sendVideoFocusNotification(on: message.channelUInt8, reason: "video-setup")
 
         case 0x8001: // Media.MsgType.MEDIA_MESSAGE_START
-            setMediaSessionId(fromStartPayload: message.payload, on: message.channel)
-            sendVideoFocusNotification(on: message.channel, reason: "video-start")
+            setMediaSessionId(fromStartPayload: message.payload, on: message.channelUInt8)
+            sendVideoFocusNotification(on: message.channelUInt8, reason: "video-start")
 
         case 0x8002: // Media.MsgType.MEDIA_MESSAGE_STOP
             break
 
         case 0, 1: // MEDIA_MESSAGE_DATA / MEDIA_MESSAGE_CODEC_CONFIG
             processVideoStreamPacket(message)
-            sendMediaAck(on: message.channel)
+            sendMediaAck(on: message.channelUInt8)
 
-        case AapMessageType.VIDEO_FRAME.rawValue:
+        case Int(AapMessageType.VIDEO_FRAME.rawValue):
             // Legacy fallback path.
             processVideoPayloadAsSingleFrame(message.payload)
 
@@ -1914,7 +1914,7 @@ private enum ProtoWire {
 
         case 0x09: // first fragment
             videoFirstFragmentAtMs = nowMs
-            videoAssemblyMessageType = message.type
+            videoAssemblyMessageType = message.typeUInt16
             videoAssemblyBuffer.removeAll(keepingCapacity: true)
             if message.type == 1 {
                 // Codec configuration may be avcC or length-prefixed and only
@@ -2021,13 +2021,13 @@ private enum ProtoWire {
         case 0x8000: // Media.MsgType.MEDIA_MESSAGE_SETUP
             if let codecVal = ProtoWire.extractFirstVarint(from: message.payload, fieldNumber: 1) {
                 let codec = AudioSinkCodecPolicy.codec(for: Int(codecVal))
-                sinkCodecs[message.channel] = codec
+                sinkCodecs[message.channelUInt8] = codec
             }
-            sendMediaConfig(on: message.channel)
+            sendMediaConfig(on: message.channelUInt8)
             sendAudioFocusGainUnsolicited()
 
         case 0x8001: // Media.MsgType.MEDIA_MESSAGE_START
-            setMediaSessionId(fromStartPayload: message.payload, on: message.channel)
+            setMediaSessionId(fromStartPayload: message.payload, on: message.channelUInt8)
 
         case 0x8002: // Media.MsgType.MEDIA_MESSAGE_STOP
             break
@@ -2036,27 +2036,27 @@ private enum ProtoWire {
             let payloadOffset = resolveAudioPayloadOffset(message.payload)
             if message.payload.count > payloadOffset {
                 let audioData = message.payload.subdata(in: payloadOffset..<message.payload.count)
-                let isAac = sinkCodecs[message.channel]?.isAac ?? (ProjectionSettings.audioCodecPreference != .pcm)
-                delegate?.aapTransport(self, didReceiveAudioData: audioData, on: message.channel, isAac: isAac)
+                let isAac = sinkCodecs[message.channelUInt8]?.isAac ?? (ProjectionSettings.audioCodecPreference != .pcm)
+                delegate?.aapTransport(self, didReceiveAudioData: audioData, on: message.channelUInt8, isAac: isAac)
             }
-            sendMediaAck(on: message.channel)
+            sendMediaAck(on: message.channelUInt8)
 
         case 1: // MEDIA_MESSAGE_CODEC_CONFIG
             // AudioSpecificConfig CSD from phone (starts directly at message.payload)
-            delegate?.aapTransport(self, didReceiveAudioCodecConfig: message.payload, on: message.channel)
+            delegate?.aapTransport(self, didReceiveAudioCodecConfig: message.payload, on: message.channelUInt8)
             // Per open-headunit AudioMediaPayload, CODEC_CONFIG consumes no ACK credit.
 
-        case AapMessageType.AUDIO_FRAME.rawValue:
+        case Int(AapMessageType.AUDIO_FRAME.rawValue):
             // Legacy fallback path.
             let payloadOffset = resolveAudioPayloadOffset(message.payload)
             if message.payload.count > payloadOffset {
                 let audioData = message.payload.subdata(in: payloadOffset..<message.payload.count)
-                let isAac = sinkCodecs[message.channel]?.isAac ?? false
-                delegate?.aapTransport(self, didReceiveAudioData: audioData, on: message.channel, isAac: isAac)
+                let isAac = sinkCodecs[message.channelUInt8]?.isAac ?? false
+                delegate?.aapTransport(self, didReceiveAudioData: audioData, on: message.channelUInt8, isAac: isAac)
             }
 
         default:
-            print("AapTransport: Unhandled audio message type=\(message.type) on channel \(Channel.name(for: message.channel))")
+            print("AapTransport: Unhandled audio message type=\(message.type) on channel \(Channel.name(for: message.channelUInt8))")
         }
     }
 
@@ -2078,11 +2078,11 @@ private enum ProtoWire {
         switch message.type {
         case 0x8000: // Media.MsgType.MEDIA_MESSAGE_SETUP
             print("AapTransport: Microphone setup request received")
-            sendMediaConfig(on: message.channel)
+            sendMediaConfig(on: message.channelUInt8)
 
         case 0x8001: // Media.MsgType.MEDIA_MESSAGE_START
             print("AapTransport: Microphone start request received")
-            setMediaSessionId(fromStartPayload: message.payload, on: message.channel)
+            setMediaSessionId(fromStartPayload: message.payload, on: message.channelUInt8)
 
         case 0x8002: // Media.MsgType.MEDIA_MESSAGE_STOP
             print("AapTransport: Microphone stop request received")
@@ -2098,7 +2098,7 @@ private enum ProtoWire {
                 // Assistant flow ended. Proactively restore media focus to unstick playback.
                 sendAudioFocusGainUnsolicited()
             }
-            sendMicrophoneResponse(on: message.channel, status: 0)
+            sendMicrophoneResponse(on: message.channelUInt8, status: 0)
 
         case 0x8006: // Media.MsgType.MEDIA_MESSAGE_MICROPHONE_RESPONSE
             break
