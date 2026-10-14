@@ -180,14 +180,12 @@ class ConnectionManager {
         autoReconnect.cancel()
         isUserInitiatedDisconnect = false
 
-        let offer = ConnectionAdmission.Offer(
-            source: .wirelessAuto,
-            isUserChoice: true,
-            canQuiesce: true
-        )
-        let admission = arbiter.request(offer: offer)
-        guard admission.granted else {
-            print("ConnectionManager: Arbiter refused connection offer: \(admission.reason)")
+        guard ConnectionAdmission.admits(inFlight: state == .connecting || state == .connected, userInitiated: true) else {
+            print("ConnectionManager: Admission refused connection to \(device.displayName)")
+            return
+        }
+        guard arbiter.claim(tier: .user, owner: .manual, what: device.displayName) != nil else {
+            print("ConnectionManager: Arbiter refused connection claim for \(device.displayName)")
             return
         }
 

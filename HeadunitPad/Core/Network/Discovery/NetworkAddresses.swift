@@ -31,6 +31,11 @@ public enum NetworkAddresses {
         return addresses.first?.ip
     }
 
+    /// Alias matching open-headunit naming convention for the active Wi-Fi IPv4 address.
+    public static func currentWifiIPv4Address() -> String? {
+        return stationIpv4()
+    }
+
     /// Complete list of non-loopback IPv4 interfaces currently active on the device.
     public static func allInterfaces() -> [InterfaceAddressInfo] {
         var results: [InterfaceAddressInfo] = []

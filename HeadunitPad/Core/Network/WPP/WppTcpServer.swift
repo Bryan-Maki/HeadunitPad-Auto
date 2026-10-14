@@ -22,6 +22,7 @@ public final class WppTcpServer {
     private let queue = DispatchQueue(label: "com.headunitpad.wpp.tcp", qos: .userInitiated)
     private var listener: NWListener?
     public private(set) var isListening: Bool = false
+    public var isRunning: Bool { isListening }
     public private(set) var listeningPort: Int? = nil
 
     public var carInfo: WppCarInfo

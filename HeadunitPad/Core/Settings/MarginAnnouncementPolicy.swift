@@ -21,4 +21,18 @@ public enum MarginAnnouncementPolicy {
         }
         return announcedWidthMargin != liveWidthMargin || announcedHeightMargin != liveHeightMargin
     }
+
+    public static func hasDiverged(
+        announcedW: Int,
+        announcedH: Int,
+        currentW: Int,
+        currentH: Int
+    ) -> Bool {
+        return shouldReannounce(
+            announcedWidthMargin: announcedW,
+            announcedHeightMargin: announcedH,
+            liveWidthMargin: currentW,
+            liveHeightMargin: currentH
+        )
+    }
 }
