@@ -1,63 +1,209 @@
-# Xcode
+# ==============================================================================
+# HeadunitPad-Auto - .gitignore
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. AI 助手 / 提示词 / 本地分析与草稿 (AI Prompts & Local Scratchpads)
+# ------------------------------------------------------------------------------
+# 提示词目录与文件 (Prompts)
+prompts/
+prompt/
+ai-prompts/
+system_prompts/
+*.prompt
+*.prompts
+*prompt*.md
+*prompt*.txt
+*prompt*.json
+*prompt*.yaml
+*prompt*.yml
+prompt_*
+*_prompt.*
+*_prompts.*
+prompt.*
+prompts.*
+
+# AI 助手指令、规则与入口文件 (AI Instructions & Rules)
+GEMINI.md
+gemini.md
+CLAUDE.md
+claude.md
+AGENTS.md
+agents.md
+CURSOR.md
+cursor.md
+WINDSURF.md
+windsurf.md
+COPILOT.md
+copilot.md
+CHATGPT.md
+chatgpt.md
+*.agent.md
+*.agents.md
+.cursorrules
+
+# AI 编程助手与工具本地配置 / 对话记录 / 任务追踪
+.gemini/
+.claude/
+.cursor/
+.windsurf/
+.copilot/
+.antigravity/
+.aider*
+.agents/
+.harness/
+chats/
+chat_history/
+conversations/
+
+# 个人本地草稿、笔记与临时任务文件
+scratch/
+scratchpad/
+drafts/
+notes/
+temp/
+tmp/
+*.tmp
+*.temp
+*.bak
+*.backup
+*.draft
+*.scratch
+*.notes
+TODO.local*
+todo_local*
+*.local.md
+
+# ------------------------------------------------------------------------------
+# 2. 操作系统临时文件 (OS Metadata)
+# ------------------------------------------------------------------------------
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+
+# ------------------------------------------------------------------------------
+# 3. 编辑器与 IDE (Editors & IDEs)
+# ------------------------------------------------------------------------------
+# VSCode
+.vscode/
+
+# JetBrains / Android Studio
+.idea/
+*.iml
+
+# Sublime & Vim
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+
+# ------------------------------------------------------------------------------
+# 4. Xcode & iOS 编译输出与用户状态 (Xcode & iOS Builds)
+# ------------------------------------------------------------------------------
+# Xcode DerivedData & Builds
 build/
 DerivedData/
+DerivedData.noindex/
+**/DerivedData/**
+**/build/**
+
+# 用户个人偏好与窗口状态 (保持团队间干净)
 *.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
 *.xcuserdatad
+*.xcuserstate
 xcuserdata/
 *.xcworkspace/xcuserdata/
 *.xcworkspace/xcshareddata/xcschemes/
 *.xcodeproj/xcuserdata/
 *.xcodeproj/project.xcworkspace/xcuserdata/
 
+# Xcode 补丁与辅助文件
+*.xccheckout
+*.moved-aside
+*.hmap
+*.playgroundlog
+
+# 产物包与归档
+*.app
+*.dSYM
+*.dSYM.zip
+*.ipa
+*.xcarchive
+*.xctest
+
+# ------------------------------------------------------------------------------
+# 5. 依赖管理 (Dependency Managers)
+# ------------------------------------------------------------------------------
 # CocoaPods
 Pods/
 Podfile.lock
 
 # Swift Package Manager
 .swiftpm/
-*.xcconfig
 Package.resolved
-
-# macOS
-.DS_Store
-.AppleDouble
-.LSOverride
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# Temporary files
-*.tmp
-.env
-.env.local
-
-# Build artifacts
-*.app
-*.dSYM
-*.ipa
-*.xcarchive
-
-# Test files
-*.xctest
-coverage/
-
-# Dependencies
 .build/
-dist/
 
-# OS
-Thumbs.db
-.DS_Store
+# Carthage
+Carthage/Build/
+Carthage/Checkouts/
 
-# Xcode legacy build artifacts
-**/DerivedData/**
-**/build/**
+# ------------------------------------------------------------------------------
+# 6. 敏感信息、证书与本地环境变量 (Credentials & Local Env)
+# ------------------------------------------------------------------------------
+# 本地环境变量配置
+.env
+.env.*
+!.env.example
+*.local
 
-# Certificates and private keys
+# 私钥、证书与签名描述文件
 *.p12
 *.cer
 *.key
+*.keystore
+*.p8
+*.pem
+*.mobileprovision
+
+# 豁免：项目自带的协议模拟测试证书
+!HeadunitPad/Resources/Raw/cert
+!HeadunitPad/Resources/Raw/privkey
+
+# ------------------------------------------------------------------------------
+# 7. 日志与崩溃转储 (Logs & Crash Reports)
+# ------------------------------------------------------------------------------
+*.log
+logs/
+*.crash
+*.dump
+*.trace
+coverage/
+dist/
+
+# 保证 Swift 源代码文件绝不被意外规则忽略
+!*.swift
