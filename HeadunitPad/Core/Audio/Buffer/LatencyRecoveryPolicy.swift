@@ -27,8 +27,26 @@ public final class LatencyRecoveryPolicy {
     private var renderSlack: Int = 0
     private var previousRenderSlack: Int = 0
 
-    public init(sampleRate: Int) {
+    public var highWatermarkMs: Int = 250
+    public var targetMs: Int = 100
+
+    public init(sampleRate: Int = 48000) {
         self.sampleRate = sampleRate
+    }
+
+    public convenience init(highWatermarkMs: Int, targetMs: Int, sampleRate: Int = 48000) {
+        self.init(sampleRate: sampleRate)
+        self.highWatermarkMs = highWatermarkMs
+        self.targetMs = targetMs
+    }
+
+    public func shouldShedOrCatchUp(currentBacklogMs: Int) -> Bool {
+        return currentBacklogMs > highWatermarkMs
+    }
+
+    public func framesToSkip(currentBacklogMs: Int, sampleRate: Int) -> Int {
+        let excessMs = max(0, currentBacklogMs - targetMs)
+        return Int(Int64(excessMs) * Int64(sampleRate) / 1000)
     }
 
     public func observe(

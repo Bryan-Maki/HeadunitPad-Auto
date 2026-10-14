@@ -21,12 +21,32 @@ public final class MicChunkAccumulator {
         return pending
     }
 
+    public var pendingSampleCount: Int {
+        return pending / 2
+    }
+
     public init(chunkBytes: Int = 4096) {
         guard chunkBytes > 0 && chunkBytes % 2 == 0 else {
             fatalError("chunk must be a whole number of frames, was \(chunkBytes) bytes")
         }
         self.chunkBytes = chunkBytes
         self.chunk = Data(count: chunkBytes)
+    }
+
+    public convenience init(targetChunkSamples: Int) {
+        self.init(chunkBytes: targetChunkSamples * 2)
+    }
+
+    public func append(samples: [Int16]) -> [[Int16]] {
+        var result: [[Int16]] = []
+        let byteData = samples.withUnsafeBufferPointer { Data(buffer: $0) }
+        offer(src: byteData, srcLen: byteData.count, capturedAtUs: 0, peak: 0) { chunkData, chunkLen, _, _ in
+            let chunkSamples = chunkData.prefix(chunkLen).withUnsafeBytes { raw in
+                Array(raw.bindMemory(to: Int16.self))
+            }
+            result.append(chunkSamples)
+        }
+        return result
     }
 
     /// Feed one read and emit every whole chunk it completes.

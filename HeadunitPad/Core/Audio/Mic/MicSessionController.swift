@@ -52,13 +52,13 @@ public final class MicSessionController {
         var open = true
         let chunks = MicChunkAccumulator()
         let monitor = MicUplinkMonitor()
-        var flow: MicFlowControl<Packet>!
+        var flow: MicPacketFlowControl<Packet>!
         var token: Int64 = 0
 
         init(id: Int, window: Int, clockMs: Int64, flowHandler: @escaping (Int64, Packet) -> Void) {
             self.id = id
             self.monitor.onSessionStart(nowMs: clockMs)
-            self.flow = MicFlowControl<Packet>(dispatch: flowHandler)
+            self.flow = MicPacketFlowControl<Packet>(dispatch: flowHandler)
             self.token = self.flow.begin(sessionId: id, maxUnacked: window)
         }
     }

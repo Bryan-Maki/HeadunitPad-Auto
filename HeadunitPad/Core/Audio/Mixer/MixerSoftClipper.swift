@@ -16,6 +16,21 @@ public final class MixerSoftClipper {
 
     public init() {}
 
+    public static func clip(sample: Int) -> Int16 {
+        let s = max(-98304, min(98304, sample))
+        let clipped: Int
+        if s > 20480 {
+            let d = s - 20480
+            clipped = 20480 + d * 12287 / (d + 24574)
+        } else if s < -20480 {
+            let d = -s - 20480
+            clipped = -(20480 + d * 12287 / (d + 24574))
+        } else {
+            clipped = s
+        }
+        return Int16(clamping: clipped)
+    }
+
     public func setEnabled(_ enabled: Bool) {
         let next: Float = enabled ? 1.0 : 0.0
         if next == target { return }

@@ -70,18 +70,19 @@ public final class AudioMixer {
         self.duckMediaForSpeech = duckMediaForSpeech
     }
 
+    @discardableResult
     public func registerChannel(
         channelId: UInt8,
         sampleRate: Int,
         channelCount: Int,
         latencyMultiplier: Int = AudioJitterBufferPolicy.defaultMultiplier,
         isMediaSink: Bool
-    ) -> ChannelState {
+    ) -> Bool {
         lock.lock()
         defer { lock.unlock() }
 
         if let existing = channels[channelId], existing.rate == sampleRate, existing.channels == channelCount {
-            return existing
+            return true
         }
 
         let state = ChannelState(
@@ -92,7 +93,19 @@ public final class AudioMixer {
             isMediaSink: isMediaSink
         )
         channels[channelId] = state
-        return state
+        return true
+    }
+
+    public func pushPcm(data: Data, on channelId: UInt8) {
+        feed(channelId: channelId, pcmData: data)
+    }
+
+    public func readMixedPcm(frames: Int) -> Data {
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let samples = renderCycle(nowMs: nowMs, outputBurstFrames: frames)
+        let count = min(samples.count, frames * 2)
+        let slice = Array(samples.prefix(count))
+        return Pcm16Stereo.toData(samples: slice)
     }
 
     public func unregisterChannel(channelId: UInt8) {

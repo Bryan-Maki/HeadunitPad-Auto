@@ -27,6 +27,21 @@ public final class MicPcmDecimator {
         return (inputBytes / 2 + pendingCount) / factor * 2 + 2
     }
 
+    public func decimate(samples: [Int16]) -> [Int16] {
+        var output: [Int16] = []
+        for s in samples {
+            pendingSum += Int(s)
+            pendingCount += 1
+            if pendingCount == factor {
+                let averaged = Int16(clamping: pendingSum / factor)
+                output.append(averaged)
+                pendingSum = 0
+                pendingCount = 0
+            }
+        }
+        return output
+    }
+
     /// Reads srcLen bytes from src and writes converted samples to dst, returning bytes written.
     public func decimate(src: Data, srcLen: Int, dst: inout Data) -> Int {
         let capacity = outputCapacity(inputBytes: srcLen)

@@ -7,8 +7,34 @@
 
 import Foundation
 
+/// Credit-based flow control for microphone uplink frames.
+public final class MicFlowControl {
+    private var credits: Int = 0
+    private let lock = NSLock()
+
+    public init(initialCredits: Int = 0) {
+        self.credits = initialCredits
+    }
+
+    public func consumeCredit() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        if credits > 0 {
+            credits -= 1
+            return true
+        }
+        return false
+    }
+
+    public func grantCredit(_ count: Int) {
+        lock.lock()
+        defer { lock.unlock() }
+        credits += count
+    }
+}
+
 /// Head-unit-to-phone DATA window negotiated by MicrophoneRequest.maxUnacked.
-public final class MicFlowControl<T: AnyObject> {
+public final class MicPacketFlowControl<T: AnyObject> {
     public enum Offer: Equatable, Sendable {
         case accepted
         case closed

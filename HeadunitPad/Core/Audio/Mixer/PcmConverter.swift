@@ -18,10 +18,26 @@ public final class PcmConverter {
     private var phase = 0
     private var previousLeft = 0
     private var previousRight = 0
-    private var hasPrevious = false
+    public var inputRate: Int = 48000
+    public var inputChannels: Int = 2
+    public var outputChannels: Int = 2
 
     public init(outputRate: Int = 48000) {
         self.outputRate = outputRate
+    }
+
+    public convenience init(inputRate: Int, inputChannels: Int, outputRate: Int, outputChannels: Int = 2) {
+        self.init(outputRate: outputRate)
+        self.inputRate = inputRate
+        self.inputChannels = inputChannels
+        self.outputChannels = outputChannels
+    }
+
+    public func convert(samples inputSamples: [Int16]) -> [Int16] {
+        let data = inputSamples.withUnsafeBufferPointer { Data(buffer: $0) }
+        let format = PcmInputFormat(sampleRate: inputRate, channels: inputChannels, encoding: PcmInputFormat.pcm16)
+        let written = convert(data: data, offset: 0, length: data.count, input: format)
+        return Array(self.samples.prefix(written))
     }
 
     /// A codec discontinuity must not interpolate from the retired codec's last sample.

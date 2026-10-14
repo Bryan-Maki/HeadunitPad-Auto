@@ -95,6 +95,58 @@ public final class AdaptivePcmBuffer {
         self.prerollDeadlineMs = max(100, targetMs + 50)
     }
 
+    public convenience init(sampleRate: Int = 48000, channels: Int = 2, targetLatencyMs: Int) {
+        let mult = max(1, targetLatencyMs * AudioJitterBufferPolicy.anchorMultiplier / Int(AudioJitterBufferPolicy.targetMs))
+        self.init(sampleRate: sampleRate, channels: channels, latencyMultiplier: mult, isMediaSink: false)
+    }
+
+    public var availableFrames: Int {
+        return depthFrames()
+    }
+
+    public func write(samples: [Int16]) {
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        write(data: samples, length: samples.count, nowMs: now)
+    }
+
+    public func read(frames: Int) -> [Int16] {
+        lock.lock()
+        defer { lock.unlock() }
+
+        let requestedSamples = frames * channels
+        var output = [Int16](repeating: 0, count: requestedSamples)
+        let available = min(frames, count / channels)
+        let samplesToCopy = available * channels
+
+        for i in 0..<samplesToCopy {
+            let idx = (head + i) % ring.count
+            output[i] = ring[idx]
+        }
+        if samplesToCopy > 0 {
+            head = (head + samplesToCopy) % ring.count
+            count -= samplesToCopy
+            for c in 0..<channels {
+                endingSample[c] = output[samplesToCopy - channels + c]
+            }
+        }
+
+        // If buffer was empty or underrun, perform PLC decay on remaining frames
+        if available < frames {
+            let startFrame = available
+            var prev = endingSample
+            for f in startFrame..<frames {
+                for c in 0..<channels {
+                    let decayed = Int16(Float(prev[c]) * 0.8)
+                    output[f * channels + c] = decayed
+                    prev[c] = decayed
+                }
+            }
+            endingSample = prev
+        }
+
+        return output
+    }
+
     public func noteArrival(nowMs: Int64, frames: Int) {
         lock.lock()
         defer { lock.unlock() }
