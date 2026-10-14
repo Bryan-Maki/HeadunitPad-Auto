@@ -58,7 +58,6 @@ class MainViewController: UIViewController {
         return label
     }()
 
-    private static let wiredConnectTitle = "Wired: Connect via USB"
 
     private let statusLabel: UILabel = {
         let label = UILabel()
@@ -119,18 +118,6 @@ class MainViewController: UIViewController {
         return button
     }()
 
-    private lazy var usbProbeButton: UIButton = {
-        var config = UIButton.Configuration.tinted()
-        config.title = Self.wiredConnectTitle
-        config.image = UIImage(systemName: "cable.connector")
-        config.imagePadding = 8
-        config.cornerStyle = .medium
-
-        let button = UIButton(configuration: config)
-        button.translatesAutoresizingMaskIntoConstraints = false
-        button.addTarget(self, action: #selector(usbProbeButtonTapped), for: .touchUpInside)
-        return button
-    }()
 
     private lazy var disconnectButton: UIButton = {
         var config = UIButton.Configuration.filled()
@@ -241,7 +228,6 @@ class MainViewController: UIViewController {
         view.addSubview(activityIndicator)
         view.addSubview(settingsButton)
         view.addSubview(manualIPButton)
-        view.addSubview(usbProbeButton)
         view.addSubview(disconnectButton)
 
         NSLayoutConstraint.activate([
@@ -274,7 +260,6 @@ class MainViewController: UIViewController {
         videoContainerView.isHidden = true
     }
 
-    /// Wide enough that the Wired and Wireless labels stay on one line.
     private let connectControlWidth: CGFloat = 300
 
     private func setupConstraints() {
@@ -306,11 +291,6 @@ class MainViewController: UIViewController {
             manualIPButton.topAnchor.constraint(equalTo: connectButton.bottomAnchor, constant: 16),
             manualIPButton.widthAnchor.constraint(equalToConstant: connectControlWidth),
 
-            // Wired USB Probe Button
-            usbProbeButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            usbProbeButton.topAnchor.constraint(equalTo: manualIPButton.bottomAnchor, constant: 12),
-            usbProbeButton.widthAnchor.constraint(equalToConstant: connectControlWidth),
-
             // Disconnect Button
             disconnectButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             disconnectButton.topAnchor.constraint(equalTo: statusLabel.bottomAnchor, constant: 48),
@@ -318,7 +298,7 @@ class MainViewController: UIViewController {
 
             // Activity Indicator
             activityIndicator.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            activityIndicator.topAnchor.constraint(equalTo: usbProbeButton.bottomAnchor, constant: 24),
+            activityIndicator.topAnchor.constraint(equalTo: manualIPButton.bottomAnchor, constant: 24),
 
             // Settings Button
             settingsButton.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16),
@@ -345,7 +325,6 @@ class MainViewController: UIViewController {
             connectButton.isEnabled = true
             updateConnectButtonTitle()
             manualIPButton.isHidden = false
-            usbProbeButton.isHidden = false
             disconnectButton.isHidden = true
             activityIndicator.stopAnimating()
 
@@ -360,7 +339,6 @@ class MainViewController: UIViewController {
             statusLabel.textColor = .secondaryLabel
             connectButton.isHidden = true
             manualIPButton.isHidden = true
-            usbProbeButton.isHidden = true
             disconnectButton.isHidden = true
             activityIndicator.startAnimating()
 
@@ -375,7 +353,6 @@ class MainViewController: UIViewController {
             statusLabel.textColor = .secondaryLabel
             connectButton.isHidden = true
             manualIPButton.isHidden = true
-            usbProbeButton.isHidden = true
             disconnectButton.isHidden = false
             activityIndicator.startAnimating()
 
@@ -390,7 +367,6 @@ class MainViewController: UIViewController {
             statusLabel.textColor = .secondaryLabel
             connectButton.isHidden = true
             manualIPButton.isHidden = true
-            usbProbeButton.isHidden = !connectionManager.usbProbeState.isRunning
             disconnectButton.isHidden = true
             activityIndicator.startAnimating()
 
@@ -405,7 +381,6 @@ class MainViewController: UIViewController {
             statusLabel.textColor = .systemBlue
             connectButton.isHidden = true
             manualIPButton.isHidden = true
-            usbProbeButton.isHidden = true
             disconnectButton.isHidden = false
             activityIndicator.startAnimating()
 
@@ -420,7 +395,6 @@ class MainViewController: UIViewController {
             statusLabel.textColor = .systemGreen
             connectButton.isHidden = true
             manualIPButton.isHidden = true
-            usbProbeButton.isHidden = true
             disconnectButton.isHidden = true
             activityIndicator.stopAnimating()
 
@@ -436,7 +410,6 @@ class MainViewController: UIViewController {
             statusLabel.textColor = .secondaryLabel
             connectButton.isHidden = true
             manualIPButton.isHidden = true
-            usbProbeButton.isHidden = true
             disconnectButton.isHidden = true
             activityIndicator.startAnimating()
 
@@ -454,15 +427,11 @@ class MainViewController: UIViewController {
             connectButton.isEnabled = true
             updateConnectButtonTitle()
             manualIPButton.isHidden = false
-            usbProbeButton.isHidden = false
             disconnectButton.isHidden = true
             activityIndicator.stopAnimating()
         }
     }
 
-    /// The connection mode setting only selects between wireless strategies, so
-    /// every title here stays under the Wireless label. The wired path has its own
-    /// button and does not participate in the mode.
     private func updateConnectButtonTitle() {
         let title: String
         switch ProjectionSettings.connectionMode {
@@ -547,33 +516,6 @@ class MainViewController: UIViewController {
         present(alert, animated: true)
     }
 
-    @objc private func usbProbeButtonTapped() {
-        if connectionManager.usbProbeState.isRunning {
-            connectionManager.stopUSBProbe()
-            return
-        }
-        guard case .missing = USBHostEntitlements.current() else {
-            connectionManager.startUSBProbe()
-            return
-        }
-        presentMissingUSBEntitlementsAlert()
-    }
-
-    /// Without the entitlements libusb simply enumerates nothing, which reads as
-    /// "no phone attached" and sends people looking for a cable fault they do not
-    /// have. Say what is actually wrong instead of starting a doomed attempt.
-    private func presentMissingUSBEntitlementsAlert() {
-        let alert = UIAlertController(
-            title: "Wired USB Needs TrollStore",
-            message: "This copy of HeadunitPad was installed without the USB Host "
-                + "entitlements, so it cannot talk to the phone over the cable. "
-                + "Install the TrollStore IPA to use the wired connection. "
-                + "Wireless Android Auto works either way.",
-            preferredStyle: .alert
-        )
-        alert.addAction(UIAlertAction(title: "OK", style: .cancel))
-        present(alert, animated: true)
-    }
 
     @objc private func disconnectButtonTapped() {
         connectionManager.disconnect()
@@ -835,47 +777,6 @@ class MainViewController: UIViewController {
         present(alert, animated: true)
     }
 
-    private func updateUSBProbeUI(_ state: USBProbeState) {
-        switch state {
-        case .idle:
-            usbProbeButton.configuration?.title = Self.wiredConnectTitle
-        case .running(let status):
-            usbProbeButton.configuration?.title = "Cancel Wired Connection"
-            connectButton.isEnabled = false
-            manualIPButton.isEnabled = false
-            statusLabel.text = status
-            statusLabel.textColor = .systemBlue
-            activityIndicator.startAnimating()
-        case .succeeded:
-            // No alert on success: the video has just appeared and an alert would
-            // cover it. Settings > Diagnostics still has the full report.
-            finishUSBProbeUI(status: "Android Auto is running over USB", color: .systemGreen)
-        case .failed(let message):
-            finishUSBProbeUI(status: message, color: .systemRed)
-            presentUSBProbeResult(title: "Wired Connection Failed")
-        case .cancelled:
-            finishUSBProbeUI(status: "Wired connection cancelled", color: .secondaryLabel)
-        }
-    }
-
-    private func finishUSBProbeUI(status: String, color: UIColor) {
-        usbProbeButton.configuration?.title = Self.wiredConnectTitle
-        connectButton.isEnabled = true
-        manualIPButton.isEnabled = true
-        statusLabel.text = status
-        statusLabel.textColor = color
-        activityIndicator.stopAnimating()
-    }
-
-    private func presentUSBProbeResult(title: String) {
-        let details = combinedDiagnosticLines().joined(separator: "\n")
-        let alert = UIAlertController(title: title, message: details, preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "Copy Diagnostics", style: .default) { [weak self] _ in
-            UIPasteboard.general.string = self?.combinedDiagnosticLines().joined(separator: "\n")
-        })
-        alert.addAction(UIAlertAction(title: "Close", style: .cancel))
-        present(alert, animated: true)
-    }
 
     private func combinedDiagnosticLines() -> [String] {
         connectionManager.diagnosticLines()
@@ -988,9 +889,5 @@ extension MainViewController: ConnectionManagerDelegate {
 
     func connectionManager(_ manager: ConnectionManager, didReceiveAudioData data: Data, on channel: UInt8) {
         audioPlayer.playPCM(data, on: channel)
-    }
-
-    func connectionManager(_ manager: ConnectionManager, didChangeUSBProbeState state: USBProbeState) {
-        updateUSBProbeUI(state)
     }
 }

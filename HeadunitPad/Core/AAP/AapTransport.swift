@@ -129,25 +129,18 @@ class AapTransport {
     private var encryptedReceiveBuffer = Data()
     private let bufferLock = NSLock()
 
-    /// A phone whose accessory function has just been restarted needs time to
-    /// hand the new accessory back to Android Auto, so the wired path keeps asking
-    /// for a version response far longer than a headunit server on the network
-    /// ever needs. Giving up early is what leaves the phone half-attached.
     enum HandshakeProfile {
         case network
-        case wired
 
         var versionTimeout: TimeInterval {
             switch self {
             case .network: return 10.0
-            case .wired: return 40.0
             }
         }
 
         var versionAttempts: Int {
             switch self {
             case .network: return 3
-            case .wired: return 15
             }
         }
     }

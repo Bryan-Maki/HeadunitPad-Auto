@@ -1,0 +1,51 @@
+name: Build HeadunitPad IPA
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build, Test and Package IPA
+    runs-on: macos-14
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Install CocoaPods dependencies
+        run: pod install
+
+      - name: Run Unit Tests
+        run: |
+          IPAD_NAME=$(xcrun simctl list devices available | grep -m 1 "iPad" | sed -E 's/^[[:space:]]+(.*) \([0-9A-F-]+\).*$/\1/' || echo "iPad (10th generation)")
+          echo "Selected simulator: $IPAD_NAME"
+          xcodebuild test \
+            -workspace HeadunitPad.xcworkspace \
+            -scheme HeadunitPad \
+            -destination "platform=iOS Simulator,name=$IPAD_NAME" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+
+      - name: Build and Package Unsigned IPA
+        run: |
+          chmod +x scripts/build_unsigned_ipa.sh
+          ./scripts/build_unsigned_ipa.sh "$RUNNER_TEMP/headunitpad-ipa"
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: HeadunitPad-Unsigned-IPA
+          path: ${{ runner.temp }}/headunitpad-ipa/HeadunitPad.ipa
+          if-no-files-found: error

@@ -2,7 +2,7 @@
 //  ConnectionManager.swift
 //  HeadunitPad
 //
-//  Manages device discovery and connection lifecycle
+//  Manages device discovery and connection lifecycle for wireless Android Auto
 //
 
 import Foundation
@@ -42,26 +42,12 @@ enum ConnectionState: Equatable {
     }
 }
 
-enum USBProbeState: Equatable {
-    case idle
-    case running(String)
-    case succeeded
-    case failed(String)
-    case cancelled
-
-    var isRunning: Bool {
-        if case .running = self { return true }
-        return false
-    }
-}
-
 protocol ConnectionManagerDelegate: AnyObject {
     func connectionManager(_ manager: ConnectionManager, didChangeState state: ConnectionState)
     func connectionManager(_ manager: ConnectionManager, didUpdateStatus status: String)
     func connectionManager(_ manager: ConnectionManager, didDiscoverDevice device: DiscoveredDevice)
     func connectionManager(_ manager: ConnectionManager, didReceiveVideoData data: Data)
     func connectionManager(_ manager: ConnectionManager, didReceiveAudioData data: Data, on channel: UInt8)
-    func connectionManager(_ manager: ConnectionManager, didChangeUSBProbeState state: USBProbeState)
 }
 
 class ConnectionManager {
@@ -74,27 +60,11 @@ class ConnectionManager {
     private let locationCapture = LocationCapture()
     private var aapTransport: AapTransport?
     private var activeConnection: ByteStreamConnection?
-    private var usbAccessoryConnection: USBAccessoryConnection?
-    private var usbHost: (any AOAUSBHosting)?
     private var reconnectWorkItem: DispatchWorkItem?
     private var isUserInitiatedDisconnect = false
     private var hasTriggeredWirelessHelper = false
     private var hasReceivedAaMediaMetadata = false
     private let reconnectDelay: TimeInterval = 2.0
-    private var usbProbeTask: Task<Void, Never>?
-    private var usbCleanupTask: Task<Void, Never>?
-    private(set) var usbProbeState: USBProbeState = .idle {
-        didSet {
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                self.delegate?.connectionManager(self, didChangeUSBProbeState: self.usbProbeState)
-            }
-        }
-    }
-    private(set) var usbProbeDiagnostics = AOAProbeDiagnostics()
-    /// Survives the probe reset in startUSBProbe: a failed reconnect is usually
-    /// explained by how the session before it ended.
-    private var lastSessionTeardownLines: [String] = []
 
     private(set) var state: ConnectionState = .disconnected {
         didSet {
@@ -131,85 +101,8 @@ class ConnectionManager {
         locationCapture.requestPermissionIfNeeded()
     }
 
-    func startUSBProbe() {
-        guard usbProbeTask == nil, usbCleanupTask == nil else { return }
-        switch state {
-        case .disconnected, .error:
-            break
-        default:
-            usbProbeState = .failed("Disconnect the current session before connecting over USB.")
-            return
-        }
-
-        reconnectWorkItem?.cancel()
-        reconnectWorkItem = nil
-        isUserInitiatedDisconnect = false
-        usbProbeDiagnostics = AOAProbeDiagnostics()
-        usbProbeState = .running("Searching for USB devices")
-        let identity = AOAIdentity.androidAuto
-        let switcher = AOAModeSwitcher(
-            identity: identity,
-            onStage: { [weak self] stage in
-                guard let self else { return }
-                await self.handleUSBProbeStage(stage)
-            }
-        )
-
-        usbProbeTask = Task { [weak self] in
-            guard let self else { return }
-            do {
-                state = .connecting
-                updateStatus("Searching for a wired Android device...")
-                let prepared = try await switcher.prepareFirstAvailableAccessory()
-                guard !Task.isCancelled else {
-                    await prepared.close()
-                    throw CancellationError()
-                }
-
-                let connection = try USBAccessoryConnection(
-                    session: prepared.session,
-                    interfaceNumber: prepared.result.interfaceNumber,
-                    inputEndpoint: prepared.result.bulkInputEndpoint,
-                    outputEndpoint: prepared.result.bulkOutputEndpoint
-                )
-                usbHost = prepared.host
-                usbAccessoryConnection = connection
-                installAapTransport(connection: connection)
-                usbProbeDiagnostics.recordAAPHandshaking()
-                usbProbeState = .running(usbProbeDiagnostics.status)
-                state = .handshaking
-                updateStatus("Performing Android Auto handshake over USB...")
-                try await connection.connect()
-                usbProbeTask = nil
-            } catch is CancellationError {
-                usbProbeTask = nil
-                usbProbeState = .cancelled
-                state = .disconnected
-                updateStatus("USB connection cancelled")
-            } catch {
-                usbProbeDiagnostics.record(error: error)
-                usbProbeTask = nil
-                usbProbeState = .failed(error.localizedDescription)
-                await cleanupUSBResources()
-                installAapTransport(connection: tcpHandler)
-                state = .error(error.localizedDescription)
-                updateStatus(error.localizedDescription)
-            }
-        }
-    }
-
-    func stopUSBProbe() {
-        guard let usbProbeTask else { return }
-        usbProbeState = .running("Cancelling wired connection...")
-        usbProbeTask.cancel()
-    }
-
     func startDiscovery() {
         print("ConnectionManager: startDiscovery called")
-        guard usbProbeTask == nil else {
-            print("ConnectionManager: Cannot start wireless discovery while a wired connection is in progress")
-            return
-        }
         reconnectWorkItem?.cancel()
         reconnectWorkItem = nil
         isUserInitiatedDisconnect = false
@@ -289,25 +182,13 @@ class ConnectionManager {
 
     func disconnect() {
         print("ConnectionManager: disconnect called")
-        guard usbCleanupTask == nil else { return }
         isUserInitiatedDisconnect = true
         reconnectWorkItem?.cancel()
         reconnectWorkItem = nil
-        stopUSBProbe()
         NowPlayingCoordinator.shared.deactivate()
         microphoneCapture.stop()
         locationCapture.stop()
         wirelessHelperServer.stop()
-        if usbAccessoryConnection != nil, let transport = aapTransport {
-            usbProbeState = .running("Releasing wired USB resources...")
-            state = .disconnecting
-            updateStatus("Requesting Android Auto shutdown...")
-            transport.requestGracefulDisconnect { [weak self, weak transport] in
-                guard let self, let transport, self.aapTransport === transport else { return }
-                self.activeConnection?.disconnect()
-            }
-            return
-        }
         activeConnection?.disconnect()
         connectedDevice = nil
         state = .disconnected
@@ -361,18 +242,7 @@ class ConnectionManager {
 
     func diagnosticLines() -> [String] {
         let device = connectedDevice
-        let liveVideoLines = usbProbeDiagnostics.aapVideoDiagnostics.isEmpty
-            ? (aapTransport?.videoDiagnosticLines() ?? [])
-            : []
-        let entitlements: String
-        switch USBHostEntitlements.current() {
-        case .present:
-            entitlements = "Present"
-        case .missing(let keys):
-            entitlements = "Missing (\(keys.joined(separator: ", ")))"
-        case .unknown(let reason):
-            entitlements = "Unknown (\(reason))"
-        }
+        let liveVideoLines = aapTransport?.videoDiagnosticLines() ?? []
         let connectionLines = [
             "State: \(state.description)",
             "Status: \(statusDetail)",
@@ -388,47 +258,19 @@ class ConnectionManager {
             "Helper triggered: \(hasTriggeredWirelessHelper ? "Yes" : "No")",
             "Connected device: \(device?.displayName ?? "None")",
             "Connected endpoint: \(device.map { "\($0.ip):\($0.port)" } ?? "None")",
-            "USB host entitlements: \(entitlements)",
             "",
         ]
-        var usbLines = usbProbeDiagnostics
-        if let usbAccessoryConnection {
-            usbLines.recordStaleDrain(
-                bytes: usbAccessoryConnection.drainedStaleBytes,
-                ranOutOfBudget: usbAccessoryConnection.staleDrainRanOutOfBudget
-            )
-        }
-        return connectionLines
-            + liveVideoLines
-            + [""]
-            + usbLines.lines
-            + (lastSessionTeardownLines.isEmpty ? [] : [""] + lastSessionTeardownLines)
-    }
-
-    private func handleUSBProbeStage(_ stage: AOAModeSwitchStage) {
-        usbProbeDiagnostics.record(stage)
-        if case .libusbLog = stage {
-            return
-        }
-        usbProbeState = .running(usbProbeDiagnostics.status)
+        return connectionLines + liveVideoLines
     }
 
     private func installAapTransport(connection: ByteStreamConnection) {
         activeConnection = connection
         let transport = AapTransport(
             connection: connection,
-            handshakeProfile: connection is USBAccessoryConnection ? .wired : .network
+            handshakeProfile: .network
         )
         transport.delegate = self
         aapTransport = transport
-    }
-
-    private func cleanupUSBResources() async {
-        let host = usbHost
-        usbHost = nil
-        usbAccessoryConnection = nil
-        activeConnection = nil
-        await host?.stop()
     }
 
     private func updateStatus(_ status: String) {
@@ -621,38 +463,14 @@ extension ConnectionManager: AapTransportDelegate {
         case .running:
             NowPlayingCoordinator.shared.activate()
             self.state = .running
-            if usbAccessoryConnection != nil {
-                usbProbeDiagnostics.recordAAPRunning()
-                usbProbeState = .succeeded
-                updateStatus("Android Auto is running over USB")
-            } else {
-                updateStatus("Android Auto is running over wireless")
-            }
+            updateStatus("Android Auto is running over wireless")
         case .error(let msg):
             NowPlayingCoordinator.shared.deactivate()
             microphoneCapture.stop()
             locationCapture.stop()
             self.state = .error(msg)
             updateStatus(msg)
-            if let usbAccessoryConnection {
-                usbProbeDiagnostics.record(error: NSError(
-                    domain: "HeadunitPad.USB",
-                    code: 1,
-                    userInfo: [NSLocalizedDescriptionKey: msg]
-                ))
-                usbProbeState = .failed(msg)
-                usbAccessoryConnection.disconnect()
-            } else {
-                scheduleReconnectIfNeeded(reason: "Android Auto error")
-            }
-        case .waitingForVersion, .versionSent:
-            updateUSBHandshakeStatus("Negotiating Android Auto version over USB")
-        case .tlsHandshaking:
-            updateUSBHandshakeStatus("Establishing Android Auto TLS over USB")
-        case .authenticating, .authenticatingComplete:
-            updateUSBHandshakeStatus("Authenticating Android Auto over USB")
-        case .binding:
-            updateUSBHandshakeStatus("Binding Android Auto services over USB")
+            scheduleReconnectIfNeeded(reason: "Android Auto error")
         default:
             break
         }
@@ -660,86 +478,14 @@ extension ConnectionManager: AapTransportDelegate {
 
     func aapTransportDidDisconnect(_ transport: AapTransport) {
         guard transport === aapTransport else { return }
-        let wasUSB = usbAccessoryConnection != nil
-        if transport.didReachRunning {
-            lastSessionTeardownLines = transport.teardownDiagnosticLines()
-        }
-        if let usbAccessoryConnection {
-            usbProbeDiagnostics.recordAAPVideoDiagnostics(transport.videoDiagnosticLines())
-            usbProbeDiagnostics.recordStaleDrain(
-                bytes: usbAccessoryConnection.drainedStaleBytes,
-                ranOutOfBudget: usbAccessoryConnection.staleDrainRanOutOfBudget
-            )
-        }
         aapTransport = nil
         NowPlayingCoordinator.shared.deactivate()
         microphoneCapture.stop()
         locationCapture.stop()
-        if wasUSB {
-            usbAccessoryConnection?.disconnect()
-            let finalProbeState: USBProbeState
-            if isUserInitiatedDisconnect {
-                finalProbeState = .cancelled
-            } else if case .failed = usbProbeState {
-                finalProbeState = usbProbeState
-            } else {
-                let message: String
-                if case .succeeded = usbProbeState {
-                    message = "The USB device disconnected."
-                } else if usbProbeDiagnostics.didRestartExistingAccessory,
-                          !usbProbeDiagnostics.didObserveAccessoryDetach {
-                    // The phone never let go of the accessory, so it never armed a
-                    // new session. Nothing here can force it; say what will.
-                    message = "The phone is still holding its previous Android Auto session. Unplug the USB cable and plug it back in."
-                } else {
-                    message = "The wired Android Auto session disconnected before reaching running."
-                }
-                usbProbeDiagnostics.record(error: NSError(
-                    domain: "HeadunitPad.USB",
-                    code: 2,
-                    userInfo: [NSLocalizedDescriptionKey: message]
-                ))
-                finalProbeState = .failed(message)
-            }
-            state = .disconnecting
-            updateStatus("Releasing wired USB resources...")
-            let cleanupTask = Task { [weak self] in
-                guard let self else { return }
-                await self.cleanupUSBResources()
-                DispatchQueue.main.async { [weak self] in
-                    guard let self else { return }
-                    self.usbCleanupTask = nil
-                    self.installAapTransport(connection: self.tcpHandler)
-                    self.connectedDevice = nil
-                    switch finalProbeState {
-                    case .cancelled:
-                        self.state = .disconnected
-                        self.updateStatus("Ready to connect")
-                    case .failed(let message):
-                        self.state = .error(message)
-                        self.updateStatus(message)
-                    default:
-                        self.state = .disconnected
-                        self.updateStatus("Wired Android Auto disconnected")
-                    }
-                    self.usbProbeState = finalProbeState
-                }
-            }
-            usbCleanupTask = cleanupTask
-            return
-        }
         connectedDevice = nil
         state = .disconnected
         updateStatus("Android Auto disconnected")
         scheduleReconnectIfNeeded(reason: "Android Auto disconnected")
-    }
-
-    private func updateUSBHandshakeStatus(_ status: String) {
-        guard usbAccessoryConnection != nil else { return }
-        usbProbeDiagnostics.recordAAPHandshaking(status)
-        usbProbeState = .running(status)
-        state = .handshaking
-        updateStatus(status)
     }
 }
 
