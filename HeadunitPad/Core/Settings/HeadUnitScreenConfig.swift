@@ -203,11 +203,11 @@ public final class HeadUnitScreenConfig {
     public func checkAndNotifyMarginDivergence() {
         let currentWidthMargin = getWidthMargin()
         let currentHeightMargin = getHeightMargin()
-        if MarginAnnouncementPolicy.hasDiverged(
-            announcedW: announcedWidthMargin,
-            announcedH: announcedHeightMargin,
-            currentW: currentWidthMargin,
-            currentH: currentHeightMargin
+        if MarginAnnouncementPolicy.shouldReannounce(
+            announcedWidthMargin: announcedWidthMargin,
+            announcedHeightMargin: announcedHeightMargin,
+            liveWidthMargin: currentWidthMargin,
+            liveHeightMargin: currentHeightMargin
         ) {
             let left = getLeftMargin()
             let right = getRightMargin()
