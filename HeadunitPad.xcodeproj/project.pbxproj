@@ -46,6 +46,58 @@
 		E1B00000000000000000001F /* TouchCoordinateMapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2F00000000000000000001F /* TouchCoordinateMapper.swift */; };
 		E1B000000000000000000020 /* DpiPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2F000000000000000000020 /* DpiPreviewView.swift */; };
 		E1B000000000000000000021 /* Phase1ScreenAndFramingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2F000000000000000000021 /* Phase1ScreenAndFramingTests.swift */; };
+		F1B000000000000000000001 /* DiscoverySubnetPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F000000000000000000001 /* DiscoverySubnetPolicy.swift */; };
+		F1B000000000000000000002 /* DhcpGatewayFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F000000000000000000002 /* DhcpGatewayFormat.swift */; };
+		F1B000000000000000000003 /* DiscoveryModePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F000000000000000000003 /* DiscoveryModePolicy.swift */; };
+		F1B000000000000000000004 /* NetworkAddresses.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F000000000000000000004 /* NetworkAddresses.swift */; };
+		F1B000000000000000000005 /* SameEndpointConnectPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F000000000000000000005 /* SameEndpointConnectPolicy.swift */; };
+		F1B000000000000000000006 /* WirelessServerHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F000000000000000000006 /* WirelessServerHistory.swift */; };
+		F1B000000000000000000007 /* WirelessServerRestartPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F000000000000000000007 /* WirelessServerRestartPolicy.swift */; };
+		F1B000000000000000000008 /* WifiLauncherMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F000000000000000000008 /* WifiLauncherMode.swift */; };
+		F1B000000000000000000009 /* WifiLauncherRestartPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F000000000000000000009 /* WifiLauncherRestartPolicy.swift */; };
+		F1B00000000000000000000A /* WirelessCancelPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F00000000000000000000A /* WirelessCancelPolicy.swift */; };
+		F1B00000000000000000000B /* WirelessRearmPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F00000000000000000000B /* WirelessRearmPolicy.swift */; };
+		F1B00000000000000000000C /* WirelessSelectionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F00000000000000000000C /* WirelessSelectionPolicy.swift */; };
+		F1B00000000000000000000D /* WppFraming.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F00000000000000000000D /* WppFraming.swift */; };
+		F1B00000000000000000000E /* WppStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F00000000000000000000E /* WppStatus.swift */; };
+		F1B00000000000000000000F /* WppEndpointPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F00000000000000000000F /* WppEndpointPolicy.swift */; };
+		F1B000000000000000000010 /* WppChannelTypePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F000000000000000000010 /* WppChannelTypePolicy.swift */; };
+		F1B000000000000000000011 /* WppMessages.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F000000000000000000011 /* WppMessages.swift */; };
+		F1B000000000000000000012 /* WppHandshakeSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F000000000000000000012 /* WppHandshakeSession.swift */; };
+		F1B000000000000000000013 /* WppTcpServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F000000000000000000013 /* WppTcpServer.swift */; };
+		F1B000000000000000000014 /* QrCodeGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F000000000000000000014 /* QrCodeGenerator.swift */; };
+		F1B000000000000000000015 /* ProjectionDeepLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F000000000000000000015 /* ProjectionDeepLink.swift */; };
+		F1B000000000000000000016 /* ProjectionQrPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F000000000000000000016 /* ProjectionQrPolicy.swift */; };
+		F1B000000000000000000017 /* ProjectionSetupQrViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F000000000000000000017 /* ProjectionSetupQrViewController.swift */; };
+		F1B000000000000000000018 /* ConnectionPriorityPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F000000000000000000018 /* ConnectionPriorityPolicy.swift */; };
+		F1B000000000000000000019 /* ConnectionAdmission.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F000000000000000000019 /* ConnectionAdmission.swift */; };
+		F1B00000000000000000001A /* ConnectionArbiter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F00000000000000000001A /* ConnectionArbiter.swift */; };
+		F1B00000000000000000001B /* ConnectionStage.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F00000000000000000001B /* ConnectionStage.swift */; };
+		F1B00000000000000000001C /* ConnectionStagePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F00000000000000000001C /* ConnectionStagePolicy.swift */; };
+		F1B00000000000000000001D /* ConnectionStageTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F00000000000000000001D /* ConnectionStageTracker.swift */; };
+		F1B00000000000000000001E /* TeardownGuard.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F00000000000000000001E /* TeardownGuard.swift */; };
+		F1B00000000000000000001F /* PhoneExitQuietPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F00000000000000000001F /* PhoneExitQuietPolicy.swift */; };
+		F1B000000000000000000020 /* SettingsRestartRecovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F000000000000000000020 /* SettingsRestartRecovery.swift */; };
+		F1B000000000000000000021 /* AutoConnectHoldPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F000000000000000000021 /* AutoConnectHoldPolicy.swift */; };
+		F1B000000000000000000022 /* LinkGapMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F000000000000000000022 /* LinkGapMonitor.swift */; };
+		F1B000000000000000000023 /* InboundRateMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F000000000000000000023 /* InboundRateMonitor.swift */; };
+		F1B000000000000000000024 /* UplinkStallMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F000000000000000000024 /* UplinkStallMonitor.swift */; };
+		F1B000000000000000000025 /* TransportDispatchMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F000000000000000000025 /* TransportDispatchMonitor.swift */; };
+		F1B000000000000000000026 /* TransportReadTiming.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F000000000000000000026 /* TransportReadTiming.swift */; };
+		F1B000000000000000000027 /* ProjectionWatchdogPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F000000000000000000027 /* ProjectionWatchdogPolicy.swift */; };
+		F1B000000000000000000028 /* ProjectionRaiseDeadlinePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F000000000000000000028 /* ProjectionRaiseDeadlinePolicy.swift */; };
+		F1B000000000000000000029 /* AapReadRecoveryPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F000000000000000000029 /* AapReadRecoveryPolicy.swift */; };
+		F1B00000000000000000002A /* AuditRecoveryPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F00000000000000000002A /* AuditRecoveryPolicy.swift */; };
+		F1B00000000000000000002B /* UnresponsivePeerPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F00000000000000000002B /* UnresponsivePeerPolicy.swift */; };
+		F1B00000000000000000002C /* VideoStarvationPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F00000000000000000002C /* VideoStarvationPolicy.swift */; };
+		F1B00000000000000000002D /* LinkLossTeardownPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F00000000000000000002D /* LinkLossTeardownPolicy.swift */; };
+		F1B00000000000000000002E /* AutomaticReconnect.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F00000000000000000002E /* AutomaticReconnect.swift */; };
+		F1B00000000000000000002F /* ReconnectGracePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F00000000000000000002F /* ReconnectGracePolicy.swift */; };
+		F1B000000000000000000030 /* ReconnectPlaybackSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F000000000000000000030 /* ReconnectPlaybackSnapshot.swift */; };
+		F1B000000000000000000031 /* AutoResumePlaybackPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F000000000000000000031 /* AutoResumePlaybackPolicy.swift */; };
+		F1B000000000000000000032 /* ReturnRearmPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F000000000000000000032 /* ReturnRearmPolicy.swift */; };
+		F1B000000000000000000033 /* AutoConnectAttemptPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F000000000000000000033 /* AutoConnectAttemptPolicy.swift */; };
+		F1B000000000000000000034 /* Phase2WirelessAndWatchdogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F000000000000000000034 /* Phase2WirelessAndWatchdogTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -89,6 +141,58 @@
 		E2F00000000000000000001F /* TouchCoordinateMapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/UI/TouchCoordinateMapper.swift; sourceTree = SOURCE_ROOT; };
 		E2F000000000000000000020 /* DpiPreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/UI/DpiPreviewView.swift; sourceTree = SOURCE_ROOT; };
 		E2F000000000000000000021 /* Phase1ScreenAndFramingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPadTests/Phase1ScreenAndFramingTests.swift; sourceTree = SOURCE_ROOT; };
+		F2F000000000000000000001 /* DiscoverySubnetPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Network/Discovery/DiscoverySubnetPolicy.swift; sourceTree = SOURCE_ROOT; };
+		F2F000000000000000000002 /* DhcpGatewayFormat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Network/Discovery/DhcpGatewayFormat.swift; sourceTree = SOURCE_ROOT; };
+		F2F000000000000000000003 /* DiscoveryModePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Network/Discovery/DiscoveryModePolicy.swift; sourceTree = SOURCE_ROOT; };
+		F2F000000000000000000004 /* NetworkAddresses.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Network/Discovery/NetworkAddresses.swift; sourceTree = SOURCE_ROOT; };
+		F2F000000000000000000005 /* SameEndpointConnectPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Network/Discovery/SameEndpointConnectPolicy.swift; sourceTree = SOURCE_ROOT; };
+		F2F000000000000000000006 /* WirelessServerHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Network/Discovery/WirelessServerHistory.swift; sourceTree = SOURCE_ROOT; };
+		F2F000000000000000000007 /* WirelessServerRestartPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Network/Discovery/WirelessServerRestartPolicy.swift; sourceTree = SOURCE_ROOT; };
+		F2F000000000000000000008 /* WifiLauncherMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Network/Discovery/WifiLauncherMode.swift; sourceTree = SOURCE_ROOT; };
+		F2F000000000000000000009 /* WifiLauncherRestartPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Network/Discovery/WifiLauncherRestartPolicy.swift; sourceTree = SOURCE_ROOT; };
+		F2F00000000000000000000A /* WirelessCancelPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Network/Discovery/WirelessCancelPolicy.swift; sourceTree = SOURCE_ROOT; };
+		F2F00000000000000000000B /* WirelessRearmPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Network/Discovery/WirelessRearmPolicy.swift; sourceTree = SOURCE_ROOT; };
+		F2F00000000000000000000C /* WirelessSelectionPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Network/Discovery/WirelessSelectionPolicy.swift; sourceTree = SOURCE_ROOT; };
+		F2F00000000000000000000D /* WppFraming.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Network/WPP/WppFraming.swift; sourceTree = SOURCE_ROOT; };
+		F2F00000000000000000000E /* WppStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Network/WPP/WppStatus.swift; sourceTree = SOURCE_ROOT; };
+		F2F00000000000000000000F /* WppEndpointPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Network/WPP/WppEndpointPolicy.swift; sourceTree = SOURCE_ROOT; };
+		F2F000000000000000000010 /* WppChannelTypePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Network/WPP/WppChannelTypePolicy.swift; sourceTree = SOURCE_ROOT; };
+		F2F000000000000000000011 /* WppMessages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Network/WPP/WppMessages.swift; sourceTree = SOURCE_ROOT; };
+		F2F000000000000000000012 /* WppHandshakeSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Network/WPP/WppHandshakeSession.swift; sourceTree = SOURCE_ROOT; };
+		F2F000000000000000000013 /* WppTcpServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Network/WPP/WppTcpServer.swift; sourceTree = SOURCE_ROOT; };
+		F2F000000000000000000014 /* QrCodeGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/UI/QR/QrCodeGenerator.swift; sourceTree = SOURCE_ROOT; };
+		F2F000000000000000000015 /* ProjectionDeepLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/UI/QR/ProjectionDeepLink.swift; sourceTree = SOURCE_ROOT; };
+		F2F000000000000000000016 /* ProjectionQrPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/UI/QR/ProjectionQrPolicy.swift; sourceTree = SOURCE_ROOT; };
+		F2F000000000000000000017 /* ProjectionSetupQrViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/UI/QR/ProjectionSetupQrViewController.swift; sourceTree = SOURCE_ROOT; };
+		F2F000000000000000000018 /* ConnectionPriorityPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Network/Arbiter/ConnectionPriorityPolicy.swift; sourceTree = SOURCE_ROOT; };
+		F2F000000000000000000019 /* ConnectionAdmission.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Network/Arbiter/ConnectionAdmission.swift; sourceTree = SOURCE_ROOT; };
+		F2F00000000000000000001A /* ConnectionArbiter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Network/Arbiter/ConnectionArbiter.swift; sourceTree = SOURCE_ROOT; };
+		F2F00000000000000000001B /* ConnectionStage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Network/Arbiter/ConnectionStage.swift; sourceTree = SOURCE_ROOT; };
+		F2F00000000000000000001C /* ConnectionStagePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Network/Arbiter/ConnectionStagePolicy.swift; sourceTree = SOURCE_ROOT; };
+		F2F00000000000000000001D /* ConnectionStageTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Network/Arbiter/ConnectionStageTracker.swift; sourceTree = SOURCE_ROOT; };
+		F2F00000000000000000001E /* TeardownGuard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Network/Arbiter/TeardownGuard.swift; sourceTree = SOURCE_ROOT; };
+		F2F00000000000000000001F /* PhoneExitQuietPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Network/Arbiter/PhoneExitQuietPolicy.swift; sourceTree = SOURCE_ROOT; };
+		F2F000000000000000000020 /* SettingsRestartRecovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Network/Arbiter/SettingsRestartRecovery.swift; sourceTree = SOURCE_ROOT; };
+		F2F000000000000000000021 /* AutoConnectHoldPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Network/Arbiter/AutoConnectHoldPolicy.swift; sourceTree = SOURCE_ROOT; };
+		F2F000000000000000000022 /* LinkGapMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/AAP/Watchdog/LinkGapMonitor.swift; sourceTree = SOURCE_ROOT; };
+		F2F000000000000000000023 /* InboundRateMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/AAP/Watchdog/InboundRateMonitor.swift; sourceTree = SOURCE_ROOT; };
+		F2F000000000000000000024 /* UplinkStallMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/AAP/Watchdog/UplinkStallMonitor.swift; sourceTree = SOURCE_ROOT; };
+		F2F000000000000000000025 /* TransportDispatchMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/AAP/Watchdog/TransportDispatchMonitor.swift; sourceTree = SOURCE_ROOT; };
+		F2F000000000000000000026 /* TransportReadTiming.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/AAP/Watchdog/TransportReadTiming.swift; sourceTree = SOURCE_ROOT; };
+		F2F000000000000000000027 /* ProjectionWatchdogPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/AAP/Watchdog/ProjectionWatchdogPolicy.swift; sourceTree = SOURCE_ROOT; };
+		F2F000000000000000000028 /* ProjectionRaiseDeadlinePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/AAP/Watchdog/ProjectionRaiseDeadlinePolicy.swift; sourceTree = SOURCE_ROOT; };
+		F2F000000000000000000029 /* AapReadRecoveryPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/AAP/Watchdog/AapReadRecoveryPolicy.swift; sourceTree = SOURCE_ROOT; };
+		F2F00000000000000000002A /* AuditRecoveryPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/AAP/Watchdog/AuditRecoveryPolicy.swift; sourceTree = SOURCE_ROOT; };
+		F2F00000000000000000002B /* UnresponsivePeerPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/AAP/Watchdog/UnresponsivePeerPolicy.swift; sourceTree = SOURCE_ROOT; };
+		F2F00000000000000000002C /* VideoStarvationPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/AAP/Watchdog/VideoStarvationPolicy.swift; sourceTree = SOURCE_ROOT; };
+		F2F00000000000000000002D /* LinkLossTeardownPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/AAP/Watchdog/LinkLossTeardownPolicy.swift; sourceTree = SOURCE_ROOT; };
+		F2F00000000000000000002E /* AutomaticReconnect.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/AAP/Watchdog/AutomaticReconnect.swift; sourceTree = SOURCE_ROOT; };
+		F2F00000000000000000002F /* ReconnectGracePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/AAP/Watchdog/ReconnectGracePolicy.swift; sourceTree = SOURCE_ROOT; };
+		F2F000000000000000000030 /* ReconnectPlaybackSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/AAP/Watchdog/ReconnectPlaybackSnapshot.swift; sourceTree = SOURCE_ROOT; };
+		F2F000000000000000000031 /* AutoResumePlaybackPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/AAP/Watchdog/AutoResumePlaybackPolicy.swift; sourceTree = SOURCE_ROOT; };
+		F2F000000000000000000032 /* ReturnRearmPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/AAP/Watchdog/ReturnRearmPolicy.swift; sourceTree = SOURCE_ROOT; };
+		F2F000000000000000000033 /* AutoConnectAttemptPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/AAP/Watchdog/AutoConnectAttemptPolicy.swift; sourceTree = SOURCE_ROOT; };
+		F2F000000000000000000034 /* Phase2WirelessAndWatchdogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPadTests/Phase2WirelessAndWatchdogTests.swift; sourceTree = SOURCE_ROOT; };
 		A4C8F5B6582F6D160A3B1E70 /* Pods-HeadunitPad.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-HeadunitPad.release.xcconfig"; path = "Target Support Files/Pods-HeadunitPad/Pods-HeadunitPad.release.xcconfig"; sourceTree = "<group>"; };
 		BFD3A5C41BAB9748091B8410 /* Pods_HeadunitPad.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_HeadunitPad.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		F905FD5D0DB5B38B0AFB8A40 /* Pods-HeadunitPad.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-HeadunitPad.debug.xcconfig"; path = "Target Support Files/Pods-HeadunitPad/Pods-HeadunitPad.debug.xcconfig"; sourceTree = "<group>"; };
@@ -366,6 +470,57 @@
 				E1B00000000000000000001E /* HeadUnitScreenConfig.swift in Sources */,
 				E1B00000000000000000001F /* TouchCoordinateMapper.swift in Sources */,
 				E1B000000000000000000020 /* DpiPreviewView.swift in Sources */,
+				F1B000000000000000000001 /* DiscoverySubnetPolicy.swift in Sources */,
+				F1B000000000000000000002 /* DhcpGatewayFormat.swift in Sources */,
+				F1B000000000000000000003 /* DiscoveryModePolicy.swift in Sources */,
+				F1B000000000000000000004 /* NetworkAddresses.swift in Sources */,
+				F1B000000000000000000005 /* SameEndpointConnectPolicy.swift in Sources */,
+				F1B000000000000000000006 /* WirelessServerHistory.swift in Sources */,
+				F1B000000000000000000007 /* WirelessServerRestartPolicy.swift in Sources */,
+				F1B000000000000000000008 /* WifiLauncherMode.swift in Sources */,
+				F1B000000000000000000009 /* WifiLauncherRestartPolicy.swift in Sources */,
+				F1B00000000000000000000A /* WirelessCancelPolicy.swift in Sources */,
+				F1B00000000000000000000B /* WirelessRearmPolicy.swift in Sources */,
+				F1B00000000000000000000C /* WirelessSelectionPolicy.swift in Sources */,
+				F1B00000000000000000000D /* WppFraming.swift in Sources */,
+				F1B00000000000000000000E /* WppStatus.swift in Sources */,
+				F1B00000000000000000000F /* WppEndpointPolicy.swift in Sources */,
+				F1B000000000000000000010 /* WppChannelTypePolicy.swift in Sources */,
+				F1B000000000000000000011 /* WppMessages.swift in Sources */,
+				F1B000000000000000000012 /* WppHandshakeSession.swift in Sources */,
+				F1B000000000000000000013 /* WppTcpServer.swift in Sources */,
+				F1B000000000000000000014 /* QrCodeGenerator.swift in Sources */,
+				F1B000000000000000000015 /* ProjectionDeepLink.swift in Sources */,
+				F1B000000000000000000016 /* ProjectionQrPolicy.swift in Sources */,
+				F1B000000000000000000017 /* ProjectionSetupQrViewController.swift in Sources */,
+				F1B000000000000000000018 /* ConnectionPriorityPolicy.swift in Sources */,
+				F1B000000000000000000019 /* ConnectionAdmission.swift in Sources */,
+				F1B00000000000000000001A /* ConnectionArbiter.swift in Sources */,
+				F1B00000000000000000001B /* ConnectionStage.swift in Sources */,
+				F1B00000000000000000001C /* ConnectionStagePolicy.swift in Sources */,
+				F1B00000000000000000001D /* ConnectionStageTracker.swift in Sources */,
+				F1B00000000000000000001E /* TeardownGuard.swift in Sources */,
+				F1B00000000000000000001F /* PhoneExitQuietPolicy.swift in Sources */,
+				F1B000000000000000000020 /* SettingsRestartRecovery.swift in Sources */,
+				F1B000000000000000000021 /* AutoConnectHoldPolicy.swift in Sources */,
+				F1B000000000000000000022 /* LinkGapMonitor.swift in Sources */,
+				F1B000000000000000000023 /* InboundRateMonitor.swift in Sources */,
+				F1B000000000000000000024 /* UplinkStallMonitor.swift in Sources */,
+				F1B000000000000000000025 /* TransportDispatchMonitor.swift in Sources */,
+				F1B000000000000000000026 /* TransportReadTiming.swift in Sources */,
+				F1B000000000000000000027 /* ProjectionWatchdogPolicy.swift in Sources */,
+				F1B000000000000000000028 /* ProjectionRaiseDeadlinePolicy.swift in Sources */,
+				F1B000000000000000000029 /* AapReadRecoveryPolicy.swift in Sources */,
+				F1B00000000000000000002A /* AuditRecoveryPolicy.swift in Sources */,
+				F1B00000000000000000002B /* UnresponsivePeerPolicy.swift in Sources */,
+				F1B00000000000000000002C /* VideoStarvationPolicy.swift in Sources */,
+				F1B00000000000000000002D /* LinkLossTeardownPolicy.swift in Sources */,
+				F1B00000000000000000002E /* AutomaticReconnect.swift in Sources */,
+				F1B00000000000000000002F /* ReconnectGracePolicy.swift in Sources */,
+				F1B000000000000000000030 /* ReconnectPlaybackSnapshot.swift in Sources */,
+				F1B000000000000000000031 /* AutoResumePlaybackPolicy.swift in Sources */,
+				F1B000000000000000000032 /* ReturnRearmPolicy.swift in Sources */,
+				F1B000000000000000000033 /* AutoConnectAttemptPolicy.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -379,6 +534,7 @@
 				C6B000000000000000000002 /* Channel.swift in Sources */,
 				D7B000000000000000000001 /* H264NALParser.swift in Sources */,
 				E1B000000000000000000021 /* Phase1ScreenAndFramingTests.swift in Sources */,
+				F1B000000000000000000034 /* Phase2WirelessAndWatchdogTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

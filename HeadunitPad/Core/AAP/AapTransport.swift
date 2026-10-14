@@ -82,6 +82,20 @@ class AapTransport {
     private var tlsIdentityReady = false
     private let reassembler = AapMessageReassembler()
     private let fragmentAudit = FragmentedMessageAudit()
+    private let linkGapMonitor = LinkGapMonitor()
+    private let videoGapMonitor = LinkGapMonitor(
+        subject: LinkGapMonitor.subjectVideo,
+        minGaps: LinkGapMonitor.minGapsMedia,
+        maxDeadPercent: LinkGapMonitor.maxDeadPercentMedia
+    )
+    private let audioGapMonitor = LinkGapMonitor(
+        subject: LinkGapMonitor.subjectAudio,
+        minGaps: LinkGapMonitor.minGapsMedia,
+        maxDeadPercent: LinkGapMonitor.maxDeadPercentMedia
+    )
+    private let uplinkStallMonitor = UplinkStallMonitor()
+    private let inboundRateMonitor = InboundRateMonitor()
+    private var lastInboundMessageMs: Int64 = 0
     private var mediaSessionIds: [UInt8: UInt64] = [:]
     private var videoAssemblyBuffer = Data()
     private var videoAssemblyMessageType: UInt16 = 0
@@ -219,6 +233,12 @@ class AapTransport {
         bufferLock.unlock()
         reassembler.reset()
         fragmentAudit.reset()
+        linkGapMonitor.reset()
+        videoGapMonitor.reset()
+        audioGapMonitor.reset()
+        uplinkStallMonitor.reset()
+        inboundRateMonitor.reset()
+        lastInboundMessageMs = Int64(Date().timeIntervalSince1970 * 1000)
         tlsHandler.releaseSessionOnly()
         versionRetryWorkItem?.cancel()
         versionRetryWorkItem = nil
@@ -447,7 +467,14 @@ class AapTransport {
         packet.append(UInt8(encLen & 0xFF))
         packet.append(encryptedPayload)
 
-        connection.send(packet, completion: completion)
+        uplinkStallMonitor.onWriteStarted()
+        connection.send(packet) { [weak self] error in
+            let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+            if let stallReport = self?.uplinkStallMonitor.onWriteCompleted(nowMs: nowMs) {
+                print("AapTransport: UplinkStall: \(stallReport)")
+            }
+            completion?(error)
+        }
     }
 
     private func encryptedFlags(for message: AapMessage) -> UInt8 {
@@ -799,6 +826,9 @@ class AapTransport {
                 declaredTotal: declaredTotal
             ) {
                 print("AapTransport: Fragmented message audit: \(audit)")
+                if AuditRecoveryPolicy.shouldRequestKeyframe(outcome: audit.outcome, channel: audit.channel) {
+                    requestVideoRecoveryIfNeeded(reason: "audit-\(audit.outcome)", ignoreRecentVideoGuard: true)
+                }
             }
 
             let carriesType = AapMessageFraming.carriesMessageType(flags: Int(flags))
@@ -1001,6 +1031,7 @@ class AapTransport {
     private func handleMessage(_ message: AapMessage) {
         let channelId = message.channelUInt8
         recordAapTrace(direction: "RX", channel: channelId, flags: message.flags, type: message.typeUInt16, payloadSize: message.payload.count)
+        noteInboundMessage(channel: Int(channelId), bytes: message.payload.count)
 
         if channelId != Channel.ID_VID && !Channel.isAudio(channelId) && channelId != Channel.ID_MIC {
             print("AapTransport: Received message on channel \(Channel.name(for: channelId)), type=\(message.type), size=\(message.payload.count)")
@@ -1039,6 +1070,28 @@ class AapTransport {
 
         default:
             print("AapTransport: Unhandled channel \(channelId)")
+        }
+    }
+
+    private func noteInboundMessage(channel: Int, bytes: Int) {
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        lastInboundMessageMs = nowMs
+        if let report = linkGapMonitor.onMessage(nowMs: nowMs) {
+            print("AapTransport: LinkGap: \(report)")
+        }
+        if let rateReport = inboundRateMonitor.onMessage(channel: channel, bytes: bytes, nowMs: nowMs) {
+            print("AapTransport: InboundRate: \(rateReport)")
+        }
+        let quiet: LinkGapMonitor.Report?
+        if UInt8(channel) == Channel.ID_VID {
+            quiet = videoGapMonitor.onMessage(nowMs: nowMs)
+        } else if Channel.isAudio(UInt8(channel)) {
+            quiet = audioGapMonitor.onMessage(nowMs: nowMs)
+        } else {
+            quiet = nil
+        }
+        if let q = quiet {
+            print("AapTransport: MediaGap: \(q)")
         }
     }
 

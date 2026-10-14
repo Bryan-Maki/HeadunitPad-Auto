@@ -118,6 +118,19 @@ class MainViewController: UIViewController {
         return button
     }()
 
+    private lazy var qrPairingButton: UIButton = {
+        var config = UIButton.Configuration.tinted()
+        config.title = "Wireless: QR Code Pairing"
+        config.image = UIImage(systemName: "qrcode")
+        config.imagePadding = 8
+        config.cornerStyle = .medium
+
+        let button = UIButton(configuration: config)
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.addTarget(self, action: #selector(qrPairingButtonTapped), for: .touchUpInside)
+        return button
+    }()
+
 
     private lazy var disconnectButton: UIButton = {
         var config = UIButton.Configuration.filled()
@@ -252,6 +265,7 @@ class MainViewController: UIViewController {
         view.addSubview(activityIndicator)
         view.addSubview(settingsButton)
         view.addSubview(manualIPButton)
+        view.addSubview(qrPairingButton)
         view.addSubview(disconnectButton)
 
         NSLayoutConstraint.activate([
@@ -315,6 +329,11 @@ class MainViewController: UIViewController {
             manualIPButton.topAnchor.constraint(equalTo: connectButton.bottomAnchor, constant: 16),
             manualIPButton.widthAnchor.constraint(equalToConstant: connectControlWidth),
 
+            // QR Pairing Button
+            qrPairingButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            qrPairingButton.topAnchor.constraint(equalTo: manualIPButton.bottomAnchor, constant: 16),
+            qrPairingButton.widthAnchor.constraint(equalToConstant: connectControlWidth),
+
             // Disconnect Button
             disconnectButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             disconnectButton.topAnchor.constraint(equalTo: statusLabel.bottomAnchor, constant: 48),
@@ -322,7 +341,7 @@ class MainViewController: UIViewController {
 
             // Activity Indicator
             activityIndicator.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            activityIndicator.topAnchor.constraint(equalTo: manualIPButton.bottomAnchor, constant: 24),
+            activityIndicator.topAnchor.constraint(equalTo: qrPairingButton.bottomAnchor, constant: 24),
 
             // Settings Button
             settingsButton.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16),
@@ -349,6 +368,7 @@ class MainViewController: UIViewController {
             connectButton.isEnabled = true
             updateConnectButtonTitle()
             manualIPButton.isHidden = false
+            qrPairingButton.isHidden = false
             disconnectButton.isHidden = true
             activityIndicator.stopAnimating()
 
@@ -363,6 +383,7 @@ class MainViewController: UIViewController {
             statusLabel.textColor = .secondaryLabel
             connectButton.isHidden = true
             manualIPButton.isHidden = true
+            qrPairingButton.isHidden = true
             disconnectButton.isHidden = true
             activityIndicator.startAnimating()
 
@@ -377,6 +398,7 @@ class MainViewController: UIViewController {
             statusLabel.textColor = .secondaryLabel
             connectButton.isHidden = true
             manualIPButton.isHidden = true
+            qrPairingButton.isHidden = true
             disconnectButton.isHidden = false
             activityIndicator.startAnimating()
 
@@ -391,6 +413,7 @@ class MainViewController: UIViewController {
             statusLabel.textColor = .secondaryLabel
             connectButton.isHidden = true
             manualIPButton.isHidden = true
+            qrPairingButton.isHidden = true
             disconnectButton.isHidden = true
             activityIndicator.startAnimating()
 
@@ -405,6 +428,7 @@ class MainViewController: UIViewController {
             statusLabel.textColor = .systemBlue
             connectButton.isHidden = true
             manualIPButton.isHidden = true
+            qrPairingButton.isHidden = true
             disconnectButton.isHidden = false
             activityIndicator.startAnimating()
 
@@ -419,6 +443,7 @@ class MainViewController: UIViewController {
             statusLabel.textColor = .systemGreen
             connectButton.isHidden = true
             manualIPButton.isHidden = true
+            qrPairingButton.isHidden = true
             disconnectButton.isHidden = true
             activityIndicator.stopAnimating()
 
@@ -434,6 +459,7 @@ class MainViewController: UIViewController {
             statusLabel.textColor = .secondaryLabel
             connectButton.isHidden = true
             manualIPButton.isHidden = true
+            qrPairingButton.isHidden = true
             disconnectButton.isHidden = true
             activityIndicator.startAnimating()
 
@@ -451,6 +477,7 @@ class MainViewController: UIViewController {
             connectButton.isEnabled = true
             updateConnectButtonTitle()
             manualIPButton.isHidden = false
+            qrPairingButton.isHidden = false
             disconnectButton.isHidden = true
             activityIndicator.stopAnimating()
         }
@@ -540,6 +567,17 @@ class MainViewController: UIViewController {
         present(alert, animated: true)
     }
 
+    @objc private func qrPairingButtonTapped() {
+        let localIp = NetworkAddresses.currentWifiIPv4Address() ?? "192.168.43.1"
+        let vc = ProjectionSetupQrViewController(
+            ssid: "HeadunitPad-Hotspot",
+            passphrase: nil,
+            ipAddress: localIp,
+            port: 5277
+        )
+        let nav = UINavigationController(rootViewController: vc)
+        present(nav, animated: true)
+    }
 
     @objc private func disconnectButtonTapped() {
         connectionManager.disconnect()
@@ -565,6 +603,10 @@ class MainViewController: UIViewController {
             message: "Changes apply on next connection.\nMode: \(connectionMode)\nAuto reconnect: \(autoReconnect)\nOrientation: \(orientation)\nResolution: \(resolution)\nFPS: \(fps)\(fps != effectiveFps ? " (effective: \(effectiveFps))" : "")\nDPI: \(dpi)\(dpi != effectiveDpi ? " (effective: \(effectiveDpi))" : "")\nFit: \(ProjectionSettings.videoFitMode.title)\nPosition: \(ProjectionSettings.driverPosition == .left ? "LHD" : "RHD")\nGPS: \(gpsSource)",
             preferredStyle: .actionSheet
         )
+
+        alert.addAction(UIAlertAction(title: "Wireless QR Code Pairing", style: .default) { [weak self] _ in
+            self?.qrPairingButtonTapped()
+        })
 
         alert.addAction(UIAlertAction(title: "Connection Mode", style: .default) { [weak self] _ in
             self?.presentConnectionModeMenu()

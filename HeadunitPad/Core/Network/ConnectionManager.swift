@@ -3,6 +3,7 @@
 //  HeadunitPad
 //
 //  Manages device discovery and connection lifecycle for wireless Android Auto
+//  Integrated with WPP Handshake, ConnectionArbiter, TeardownGuard, Watchdogs & AutoReconnect
 //
 
 import Foundation
@@ -27,7 +28,7 @@ enum ConnectionState: Equatable {
         case .discovering:
             return "Scanning..."
         case .waitingForWirelessHelper:
-            return "Waiting for Wireless Helper..."
+            return "Waiting for Wireless Helper / WPP..."
         case .connecting:
             return "Connecting..."
         case .handshaking:
@@ -56,15 +57,27 @@ class ConnectionManager {
     private let discovery = Discovery()
     private let tcpHandler = TcpHandler()
     private let wirelessHelperServer = WirelessHelperServer()
+    private let wppServer = WppTcpServer()
+    private let arbiter = ConnectionArbiter()
+    private let teardownGuard = TeardownGuard()
+    private let playbackSnapshot = ReconnectPlaybackSnapshot()
     private let microphoneCapture = MicrophoneCapture()
     private let locationCapture = LocationCapture()
+
     private var aapTransport: AapTransport?
     private var activeConnection: ByteStreamConnection?
-    private var reconnectWorkItem: DispatchWorkItem?
     private var isUserInitiatedDisconnect = false
     private var hasTriggeredWirelessHelper = false
     private var hasReceivedAaMediaMetadata = false
-    private let reconnectDelay: TimeInterval = 2.0
+    private var lastPlayingState: Bool = false
+    private var consecutiveStarvedSessions: Int = 0
+    private var consecutiveSilentFailures: Int = 0
+    private var lastTriedEndpoint: String?
+
+    private lazy var autoReconnect = AutomaticReconnect(
+        currentState: { [weak self] in self?.activeConnection },
+        isStopping: { [weak self] in self?.isUserInitiatedDisconnect ?? false }
+    )
 
     private(set) var state: ConnectionState = .disconnected {
         didSet {
@@ -83,6 +96,7 @@ class ConnectionManager {
     init() {
         discovery.delegate = self
         wirelessHelperServer.delegate = self
+        wppServer.delegate = self
         installAapTransport(connection: tcpHandler)
         microphoneCapture.onPCMData = { [weak self] data in
             self?.aapTransport?.sendMicrophoneAudioData(data)
@@ -103,14 +117,11 @@ class ConnectionManager {
 
     func startDiscovery() {
         print("ConnectionManager: startDiscovery called")
-        reconnectWorkItem?.cancel()
-        reconnectWorkItem = nil
+        autoReconnect.cancel()
         isUserInitiatedDisconnect = false
         let canStart: Bool
         switch state {
-        case .disconnected, .error:
-            canStart = true
-        case .waitingForWirelessHelper:
+        case .disconnected, .error, .waitingForWirelessHelper:
             canStart = true
         default:
             canStart = false
@@ -127,25 +138,28 @@ class ConnectionManager {
 
         switch ProjectionSettings.connectionMode {
         case .auto:
-            updateStatus("Listening on 5288, scanning for Wireless Helper and Headunit Server...")
+            updateStatus("Listening on 5288/5299, scanning for Headunit Server...")
             wirelessHelperServer.start()
+            wppServer.start()
             discovery.startScan(ports: [Discovery.launcherPort, Discovery.headunitPort])
         case .wirelessHelper:
-            updateStatus("Listening on 5288 and looking for Wireless Helper...")
+            updateStatus("Listening on 5288/5299 and looking for Wireless Helper...")
             wirelessHelperServer.start()
+            wppServer.start()
             discovery.startScan(ports: [Discovery.launcherPort])
         case .directHeadunit:
             updateStatus("Scanning for Headunit Server on 5277...")
             wirelessHelperServer.stop()
+            wppServer.stop()
             discovery.startScan(ports: [Discovery.headunitPort])
         }
     }
 
     func stopDiscovery() {
         print("ConnectionManager: stopDiscovery called")
-        reconnectWorkItem?.cancel()
-        reconnectWorkItem = nil
+        autoReconnect.cancel()
         discovery.stopScan()
+        wppServer.stop()
         if state == .discovering || state == .waitingForWirelessHelper {
             state = .disconnected
             updateStatus("Ready to connect")
@@ -154,9 +168,21 @@ class ConnectionManager {
 
     func connect(to device: DiscoveredDevice) {
         print("ConnectionManager: connect(to:) called with device: \(device.displayName)")
-        reconnectWorkItem?.cancel()
-        reconnectWorkItem = nil
+        autoReconnect.cancel()
         isUserInitiatedDisconnect = false
+
+        let offer = ConnectionAdmission.Offer(
+            source: .wirelessAuto,
+            isUserChoice: true,
+            canQuiesce: true
+        )
+        let admission = arbiter.request(offer: offer)
+        guard admission.granted else {
+            print("ConnectionManager: Arbiter refused connection offer: \(admission.reason)")
+            return
+        }
+
+        lastTriedEndpoint = "\(device.ip):\(device.port)"
         let preparedConnection = discovery.takePreparedConnection(ip: device.ip, port: device.port)
         stopDiscovery()
         state = .connecting
@@ -183,16 +209,20 @@ class ConnectionManager {
     func disconnect() {
         print("ConnectionManager: disconnect called")
         isUserInitiatedDisconnect = true
-        reconnectWorkItem?.cancel()
-        reconnectWorkItem = nil
-        NowPlayingCoordinator.shared.deactivate()
-        microphoneCapture.stop()
-        locationCapture.stop()
-        wirelessHelperServer.stop()
-        activeConnection?.disconnect()
-        connectedDevice = nil
-        state = .disconnected
-        updateStatus("Ready to connect")
+        autoReconnect.cancel()
+
+        teardownGuard.executeTeardown(reason: "user-disconnect") { [weak self] in
+            guard let self = self else { return }
+            NowPlayingCoordinator.shared.deactivate()
+            self.microphoneCapture.stop()
+            self.locationCapture.stop()
+            self.wirelessHelperServer.stop()
+            self.wppServer.stop()
+            self.activeConnection?.disconnect()
+            self.connectedDevice = nil
+            self.state = .disconnected
+            self.updateStatus("Ready to connect")
+        }
     }
 
     func send(_ data: Data) {
@@ -252,10 +282,12 @@ class ConnectionManager {
             "Status: \(statusDetail)",
             "Mode: \(ProjectionSettings.connectionMode.title)",
             "Auto reconnect: \(ProjectionSettings.autoReconnect ? "On" : "Off")",
-            "Local IP: \(localIPv4Address() ?? "Unknown")",
-            "Wireless listener: \(wirelessHelperServer.isRunning ? "Listening" : "Stopped")",
-            "Wireless listener port: \(WirelessHelperServer.port)",
-            "Bonjour service: \(WirelessHelperServer.serviceType)",
+            "Auto resume playback: \(ProjectionSettings.autoResumePlayback ? "On" : "Off")",
+            "Local IP: \(NetworkAddresses.currentWifiIPv4Address() ?? "Unknown")",
+            "Wireless helper: \(wirelessHelperServer.isRunning ? "Listening" : "Stopped") (5288)",
+            "WPP server: \(wppServer.isRunning ? "Listening" : "Stopped") (5299)",
+            "Consecutive silent failures: \(consecutiveSilentFailures)",
+            "Consecutive starved sessions: \(consecutiveStarvedSessions)",
             "Audio output: \(currentAudioOutputDescription())",
             "Now Playing owner: \(state == .running ? "HeadunitPad" : "Inactive")",
             "Discovered headunits: \(discoveredDevices.count)",
@@ -289,53 +321,24 @@ class ConnectionManager {
     private func scheduleReconnectIfNeeded(reason: String) {
         guard ProjectionSettings.autoReconnect else { return }
         guard !isUserInitiatedDisconnect else { return }
-        guard reconnectWorkItem == nil else { return }
 
-        updateStatus("\(reason). Reconnecting soon...")
-        let workItem = DispatchWorkItem { [weak self] in
-            guard let self = self else { return }
-            self.reconnectWorkItem = nil
-            switch self.state {
-            case .disconnected, .error:
-                self.startDiscovery()
-            default:
-                break
-            }
-        }
-        reconnectWorkItem = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + reconnectDelay, execute: workItem)
-    }
-
-    private func localIPv4Address() -> String? {
-        var ifaddr: UnsafeMutablePointer<ifaddrs>?
-        guard getifaddrs(&ifaddr) == 0 else { return nil }
-        defer { freeifaddrs(ifaddr) }
-
-        var current = ifaddr
-        while let addr = current {
-            defer { current = addr.pointee.ifa_next }
-
-            let name = String(cString: addr.pointee.ifa_name)
-            guard name == "en0" || name == "en1" else { continue }
-            guard addr.pointee.ifa_addr.pointee.sa_family == UInt8(AF_INET) else { continue }
-
-            var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
-            let result = getnameinfo(
-                addr.pointee.ifa_addr,
-                socklen_t(addr.pointee.ifa_addr.pointee.sa_len),
-                &hostname,
-                socklen_t(hostname.count),
-                nil,
-                0,
-                NI_NUMERICHOST
-            )
-
-            if result == 0 {
-                return String(cString: hostname)
-            }
+        let delayMs = UnresponsivePeerPolicy.rescanDelayMs(consecutiveSilentFailures: consecutiveSilentFailures)
+        if UnresponsivePeerPolicy.shouldExplain(consecutiveSilentFailures: consecutiveSilentFailures) {
+            print("ConnectionManager: UnresponsivePeerPolicy backing off to \(delayMs)ms after \(consecutiveSilentFailures) silent attempts")
         }
 
-        return nil
+        updateStatus("\(reason). Reconnecting in \(delayMs / 1000)s...")
+        if let session = activeConnection as AnyObject? {
+            autoReconnect.schedule(endedSession: session, delayMs: delayMs) { [weak self] in
+                guard let self = self else { return }
+                switch self.state {
+                case .disconnected, .error:
+                    self.startDiscovery()
+                default:
+                    break
+                }
+            }
+        }
     }
 
     private func currentAudioOutputDescription() -> String {
@@ -375,10 +378,10 @@ extension ConnectionManager: DiscoveryDelegate {
             switch ProjectionSettings.connectionMode {
             case .wirelessHelper:
                 state = .waitingForWirelessHelper
-                updateStatus(hasTriggeredWirelessHelper ? "Waiting for Wireless Helper to connect..." : "Listening on 5288. Open Wireless Helper on the phone.")
-            case .auto where wirelessHelperServer.isRunning:
+                updateStatus(hasTriggeredWirelessHelper ? "Waiting for Wireless Helper to connect..." : "Listening on 5288/5299. Open Wireless Helper on the phone.")
+            case .auto where wirelessHelperServer.isRunning || wppServer.isRunning:
                 state = .waitingForWirelessHelper
-                updateStatus(hasTriggeredWirelessHelper ? "Waiting for Wireless Helper to connect..." : "No direct server found. Waiting for Wireless Helper on 5288.")
+                updateStatus(hasTriggeredWirelessHelper ? "Waiting for phone to connect..." : "Waiting for Wireless Helper (5288) or WPP (5299)...")
             case .auto, .directHeadunit:
                 state = .disconnected
                 updateStatus("No devices found")
@@ -439,7 +442,9 @@ extension ConnectionManager: AapTransportDelegate {
     }
 
     func aapTransport(_ transport: AapTransport, didReceivePlaybackStatus status: AapPlaybackStatus) {
-        let isPlaying = status.state != .paused && status.state != .stopped
+        let isPlaying = status.state == .playing
+        lastPlayingState = isPlaying
+
         if !hasReceivedAaMediaMetadata,
            let source = status.mediaSource?.trimmingCharacters(in: .whitespacesAndNewlines),
            !source.isEmpty {
@@ -468,13 +473,42 @@ extension ConnectionManager: AapTransportDelegate {
             NowPlayingCoordinator.shared.activate()
             self.state = .running
             updateStatus("Android Auto is running over wireless")
+            consecutiveSilentFailures = 0
+            consecutiveStarvedSessions = VideoStarvationPolicy.nextStreak(
+                current: consecutiveStarvedSessions,
+                reachedHandshake: true,
+                renderedAnyFrame: true
+            )
+
+            // Auto resume playback evaluation
+            let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+            let resume = playbackSnapshot.consume(now: nowMs)
+            if AutoResumePlaybackPolicy.shouldResume(
+                enabled: ProjectionSettings.autoResumePlayback,
+                wasPlayingBeforeDisconnect: resume.wasPlaying,
+                elapsedSinceDisconnectMs: resume.elapsedMs
+            ) {
+                print("ConnectionManager: AutoResumePlaybackPolicy satisfied, resuming playback")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
+                    self?.sendRemoteMediaCommand(.play)
+                }
+            }
+
         case .error(let msg):
             NowPlayingCoordinator.shared.deactivate()
             microphoneCapture.stop()
             locationCapture.stop()
             self.state = .error(msg)
             updateStatus(msg)
+
+            consecutiveSilentFailures = UnresponsivePeerPolicy.countAfterSilentFailure(
+                previousCount: consecutiveSilentFailures,
+                previousEndpoint: lastTriedEndpoint,
+                endpoint: lastTriedEndpoint
+            )
+
             scheduleReconnectIfNeeded(reason: "Android Auto error")
+
         default:
             break
         }
@@ -482,6 +516,13 @@ extension ConnectionManager: AapTransportDelegate {
 
     func aapTransportDidDisconnect(_ transport: AapTransport) {
         guard transport === aapTransport else { return }
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        playbackSnapshot.onDisconnected(
+            lastPlaying: lastPlayingState,
+            now: nowMs,
+            deliberate: isUserInitiatedDisconnect
+        )
+
         aapTransport = nil
         NowPlayingCoordinator.shared.deactivate()
         microphoneCapture.stop()
@@ -489,6 +530,16 @@ extension ConnectionManager: AapTransportDelegate {
         connectedDevice = nil
         state = .disconnected
         updateStatus("Android Auto disconnected")
+
+        consecutiveStarvedSessions = VideoStarvationPolicy.nextStreak(
+            current: consecutiveStarvedSessions,
+            reachedHandshake: transport.didReachRunning,
+            renderedAnyFrame: false
+        )
+        if VideoStarvationPolicy.shouldAdvise(consecutiveStarvedSessions: consecutiveStarvedSessions) {
+            print("ConnectionManager: VideoStarvationPolicy advises lowering resolution/fps")
+        }
+
         scheduleReconnectIfNeeded(reason: "Android Auto disconnected")
     }
 }
@@ -527,5 +578,17 @@ extension ConnectionManager: WirelessHelperServerDelegate {
             updateStatus(error.localizedDescription)
             scheduleReconnectIfNeeded(reason: "Wireless Helper listener failed")
         }
+    }
+}
+
+extension ConnectionManager: WppTcpServerDelegate {
+    func wppTcpServer(_ server: WppTcpServer, didCompleteHandshakeWith clientIp: String, port: UInt16) {
+        print("ConnectionManager: WPP Handshake completed successfully with \(clientIp):\(port)")
+        updateStatus("WPP Handshake completed with \(clientIp). Starting Android Auto...")
+        connect(to: clientIp, port: port)
+    }
+
+    func wppTcpServer(_ server: WppTcpServer, didFailWith error: Error) {
+        print("ConnectionManager: WPP server session error: \(error.localizedDescription)")
     }
 }

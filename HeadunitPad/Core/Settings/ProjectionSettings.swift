@@ -74,6 +74,7 @@ public enum ProjectionSettings {
     private static let orientationKey = "projection-orientation"
     private static let connectionModeKey = "projection-connection-mode"
     private static let autoReconnectKey = "projection-auto-reconnect"
+    private static let autoResumePlaybackKey = "projection-auto-resume-playback"
 
     public static let defaultDpi = 160
     public static let minDpi = 100
@@ -202,6 +203,18 @@ public enum ProjectionSettings {
         }
         set {
             defaults.set(newValue, forKey: autoReconnectKey)
+        }
+    }
+
+    public static var autoResumePlayback: Bool {
+        get {
+            if defaults.object(forKey: autoResumePlaybackKey) == nil {
+                return true
+            }
+            return defaults.bool(forKey: autoResumePlaybackKey)
+        }
+        set {
+            defaults.set(newValue, forKey: autoResumePlaybackKey)
         }
     }
 
