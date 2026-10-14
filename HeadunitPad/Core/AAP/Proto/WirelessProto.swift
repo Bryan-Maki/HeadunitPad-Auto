@@ -339,8 +339,8 @@ public struct WifiVersionRequest: ProtoCodable, Equatable {
                 } else {
                     self.supportedWifiChannels.append(try reader.readInt32())
                 }
-            case 5: self.carInfo = try reader.readMessage(WppWifiCarInfo.self)
-            case 6: self.wppInfo = try reader.readMessage(WppWifiDeviceInfo.self)
+            case 5: self.carInfo = try reader.readMessage(WppCarInfo.self)
+            case 6: self.wppInfo = try reader.readMessage(WifiProjectionProtocolInfo.self)
             default: try reader.skipField(wireType: w)
             }
         }
