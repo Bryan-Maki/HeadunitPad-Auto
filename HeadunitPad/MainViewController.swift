@@ -598,10 +598,11 @@ class MainViewController: UIViewController {
         let connectionMode = ProjectionSettings.connectionMode.title
         let autoReconnect = ProjectionSettings.autoReconnect ? "On" : "Off"
         let codec = ProjectionSettings.videoCodecPreference.title
+        let audioCodec = ProjectionSettings.audioCodecPreference.title
 
         let alert = UIAlertController(
             title: "Settings",
-            message: "Changes apply on next connection.\nMode: \(connectionMode)\nAuto reconnect: \(autoReconnect)\nCodec: \(codec)\nOrientation: \(orientation)\nResolution: \(resolution)\nFPS: \(fps)\(fps != effectiveFps ? " (effective: \(effectiveFps))" : "")\nDPI: \(dpi)\(dpi != effectiveDpi ? " (effective: \(effectiveDpi))" : "")\nFit: \(ProjectionSettings.videoFitMode.title)\nPosition: \(ProjectionSettings.driverPosition == .left ? "LHD" : "RHD")\nGPS: \(gpsSource)",
+            message: "Changes apply on next connection.\nMode: \(connectionMode)\nAuto reconnect: \(autoReconnect)\nVideo: \(codec)\nAudio: \(audioCodec)\nOrientation: \(orientation)\nResolution: \(resolution)\nFPS: \(fps)\(fps != effectiveFps ? " (effective: \(effectiveFps))" : "")\nDPI: \(dpi)\(dpi != effectiveDpi ? " (effective: \(effectiveDpi))" : "")\nFit: \(ProjectionSettings.videoFitMode.title)\nPosition: \(ProjectionSettings.driverPosition == .left ? "LHD" : "RHD")\nGPS: \(gpsSource)",
             preferredStyle: .actionSheet
         )
 
@@ -622,6 +623,10 @@ class MainViewController: UIViewController {
 
         alert.addAction(UIAlertAction(title: "Video Codec: \(codec)", style: .default) { [weak self] _ in
             self?.presentCodecMenu()
+        })
+
+        alert.addAction(UIAlertAction(title: "Audio Codec: \(audioCodec)", style: .default) { [weak self] _ in
+            self?.presentAudioCodecMenu()
         })
 
         alert.addAction(UIAlertAction(title: "Display Fit Mode: \(ProjectionSettings.videoFitMode.title)", style: .default) { [weak self] _ in
@@ -776,6 +781,25 @@ class MainViewController: UIViewController {
             let title = option == ProjectionSettings.videoCodecPreference ? "\(option.title) (Current)" : option.title
             alert.addAction(UIAlertAction(title: title, style: .default) { [weak self] _ in
                 ProjectionSettings.videoCodecPreference = option
+                self?.presentSettingsMenu()
+            })
+        }
+
+        alert.addAction(UIAlertAction(title: "Back", style: .cancel) { [weak self] _ in
+            self?.presentSettingsMenu()
+        })
+
+        configurePopoverSource(for: alert)
+        present(alert, animated: true)
+    }
+
+    private func presentAudioCodecMenu() {
+        let alert = UIAlertController(title: "Audio Codec", message: "Audio decoding preference", preferredStyle: .actionSheet)
+
+        for option in AudioCodecPreference.allCases {
+            let title = option == ProjectionSettings.audioCodecPreference ? "\(option.title) (Current)" : option.title
+            alert.addAction(UIAlertAction(title: title, style: .default) { [weak self] _ in
+                ProjectionSettings.audioCodecPreference = option
                 self?.presentSettingsMenu()
             })
         }
@@ -1094,5 +1118,13 @@ extension MainViewController: ConnectionManagerDelegate {
 
     func connectionManager(_ manager: ConnectionManager, didReceiveAudioData data: Data, on channel: UInt8) {
         audioPlayer.playPCM(data, on: channel)
+    }
+
+    func connectionManager(_ manager: ConnectionManager, didReceiveAudioData data: Data, on channel: UInt8, isAac: Bool) {
+        audioPlayer.playAudio(data, on: channel, isAac: isAac)
+    }
+
+    func connectionManager(_ manager: ConnectionManager, didReceiveAudioCodecConfig data: Data, on channel: UInt8) {
+        audioPlayer.configureCodec(channel: channel, csd: data)
     }
 }

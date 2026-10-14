@@ -88,29 +88,36 @@ public final class AapServiceDiscoveryResponseMessage {
         services.append(ControlService(id: UInt32(Channel.ID_INP), inputSourceService: inputService))
 
         // 4. Audio Services (Channels 4, 5, 6)
-        // Audio2 (System)
+        let userAudioPref = ProjectionSettings.audioCodecPreference
+        let announcedAudioCodec: MediaCodecType = (userAudioPref == .pcm)
+            ? .mediaCodecAudioPcm
+            : .mediaCodecAudioAacLc
+
+        // Audio2 (System) - Always announced to maintain AA link
         let audio2Sink = ControlService.MediaSinkService(
-            availableType: .mediaCodecAudioPcm,
+            availableType: announcedAudioCodec,
             audioType: .system,
             audioConfigs: [AudioConfigs.get(channel: Channel.ID_AU2)]
         )
         services.append(ControlService(id: UInt32(Channel.ID_AU2), mediaSinkService: audio2Sink))
 
-        // Audio1 (Guidance)
-        let audio1Sink = ControlService.MediaSinkService(
-            availableType: .mediaCodecAudioPcm,
-            audioType: .speech,
-            audioConfigs: [AudioConfigs.get(channel: Channel.ID_AU1)]
-        )
-        services.append(ControlService(id: UInt32(Channel.ID_AU1), mediaSinkService: audio1Sink))
+        if AudioSinkAnnouncementPolicy.announcesMediaAndSpeech(sinkEnabled: true) {
+            // Audio1 (Guidance / Speech)
+            let audio1Sink = ControlService.MediaSinkService(
+                availableType: announcedAudioCodec,
+                audioType: .speech,
+                audioConfigs: [AudioConfigs.get(channel: Channel.ID_AU1)]
+            )
+            services.append(ControlService(id: UInt32(Channel.ID_AU1), mediaSinkService: audio1Sink))
 
-        // Audio0 (Media)
-        let audio0Sink = ControlService.MediaSinkService(
-            availableType: .mediaCodecAudioPcm,
-            audioType: .media,
-            audioConfigs: [AudioConfigs.get(channel: Channel.ID_AUD)]
-        )
-        services.append(ControlService(id: UInt32(Channel.ID_AUD), mediaSinkService: audio0Sink))
+            // Audio0 (Media)
+            let audio0Sink = ControlService.MediaSinkService(
+                availableType: announcedAudioCodec,
+                audioType: .media,
+                audioConfigs: [AudioConfigs.get(channel: Channel.ID_AUD)]
+            )
+            services.append(ControlService(id: UInt32(Channel.ID_AUD), mediaSinkService: audio0Sink))
+        }
 
         // 5. Microphone Service (Channel 7)
         if useMic {

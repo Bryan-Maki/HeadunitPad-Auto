@@ -1,3 +1,10 @@
+//
+//  MicrophoneCapture.swift
+//  HeadunitPad
+//
+//  1:1 port of open-headunit microphone capture with MicPcmDecimator and MicChunkAccumulator.
+//
+
 import Foundation
 import AVFoundation
 
@@ -14,9 +21,14 @@ final class MicrophoneCapture {
     private var outputFormat: AVAudioFormat?
     private var isCapturing = false
 
+    public let decimator = MicPcmDecimator(factor: 3) // 48kHz -> 16kHz
+    public let accumulator = MicChunkAccumulator(chunkBytes: MicCaptureFormat.CHUNK_BYTES)
+
     func start(sampleRate: Double = 16_000, channels: AVAudioChannelCount = 1) {
         guard !isCapturing else { return }
 
+        decimator.reset()
+        accumulator.reset()
         configureAudioSession(sampleRate: sampleRate, channels: channels)
 
         let inputNode = engine.inputNode
@@ -63,6 +75,8 @@ final class MicrophoneCapture {
         engine.reset()
         converter = nil
         outputFormat = nil
+        decimator.reset()
+        accumulator.reset()
         isCapturing = false
         NotificationCenter.default.post(name: .headunitMicrophoneCaptureStateChanged, object: nil, userInfo: ["active": false])
         restorePlaybackAudioSession()
@@ -72,7 +86,6 @@ final class MicrophoneCapture {
     private func configureAudioSession(sampleRate: Double, channels: AVAudioChannelCount) {
         let session = AVAudioSession.sharedInstance()
         do {
-            // Keep current output route (BT/A2DP when available) and avoid forcing built-in speaker.
             try session.setCategory(.playAndRecord, mode: .default, options: [.mixWithOthers, .allowBluetooth, .allowBluetoothA2DP])
             try session.setPreferredSampleRate(sampleRate)
             try session.setPreferredInputNumberOfChannels(Int(channels))
@@ -145,16 +158,23 @@ final class MicrophoneCapture {
             let frameCount = Int(converted.frameLength)
             let source = channelData[0]
             var pcm = Data(count: frameCount * MemoryLayout<Int16>.size)
+            var peak = 0
+
             pcm.withUnsafeMutableBytes { raw in
                 let out = raw.bindMemory(to: Int16.self)
                 for i in 0..<frameCount {
                     let sample = max(-1.0, min(1.0, source[i]))
-                    out[i] = Int16(sample * 32767.0)
+                    let int16Sample = Int16(clamping: Int(sample * 32767.0))
+                    out[i] = int16Sample
+                    let absVal = abs(Int(int16Sample))
+                    if absVal > peak { peak = absVal }
                 }
             }
 
-            if pcm.count > 64 {
-                self.onPCMData?(pcm)
+            let capturedAtUs = Int64(Date().timeIntervalSince1970 * 1_000_000)
+            self.accumulator.offer(src: pcm, srcLen: pcm.count, capturedAtUs: capturedAtUs, peak: peak) { chunk, length, _, _ in
+                let chunkData = chunk.subdata(in: 0..<length)
+                self.onPCMData?(chunkData)
             }
         }
     }

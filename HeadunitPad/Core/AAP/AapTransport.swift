@@ -12,12 +12,21 @@ import CoreLocation
 protocol AapTransportDelegate: AnyObject {
     func aapTransport(_ transport: AapTransport, didReceiveVideoData data: Data)
     func aapTransport(_ transport: AapTransport, didReceiveAudioData data: Data, on channel: UInt8)
+    func aapTransport(_ transport: AapTransport, didReceiveAudioData data: Data, on channel: UInt8, isAac: Bool)
+    func aapTransport(_ transport: AapTransport, didReceiveAudioCodecConfig data: Data, on channel: UInt8)
     func aapTransport(_ transport: AapTransport, didReceiveMediaMetadata metadata: AapMediaMetadata)
     func aapTransport(_ transport: AapTransport, didReceivePlaybackStatus status: AapPlaybackStatus)
     func aapTransport(_ transport: AapTransport, didRequestMicrophoneCapture isOpen: Bool)
     func aapTransport(_ transport: AapTransport, didRequestLocationUpdates isEnabled: Bool)
     func aapTransport(_ transport: AapTransport, didChangeState state: AapTransportState)
     func aapTransportDidDisconnect(_ transport: AapTransport)
+}
+
+extension AapTransportDelegate {
+    func aapTransport(_ transport: AapTransport, didReceiveAudioData data: Data, on channel: UInt8, isAac: Bool) {
+        aapTransport(transport, didReceiveAudioData: data, on: channel)
+    }
+    func aapTransport(_ transport: AapTransport, didReceiveAudioCodecConfig data: Data, on channel: UInt8) {}
 }
 
 struct AapMediaMetadata {
@@ -97,6 +106,7 @@ class AapTransport {
     private let inboundRateMonitor = InboundRateMonitor()
     private var lastInboundMessageMs: Int64 = 0
     private var mediaSessionIds: [UInt8: UInt64] = [:]
+    private var sinkCodecs: [UInt8: AudioSinkCodec] = [:]
     private var videoAssemblyBuffer = Data()
     private var videoAssemblyMessageType: UInt16 = 0
     private var videoFirstFragmentAtMs: UInt64 = 0
@@ -680,11 +690,28 @@ class AapTransport {
         guard !pcmData.isEmpty else { return }
         guard state == .running || state == .binding || state == .authenticatingComplete else { return }
 
-        var streamPayload = Data()
-        appendBigEndianTimestampMs(to: &streamPayload)
-        streamPayload.append(pcmData)
+        let timestampUs = Int64(Date().timeIntervalSince1970 * 1_000_000)
+        var streamPayload = Data(count: 10 + pcmData.count)
+        streamPayload.withUnsafeMutableBytes { raw in
+            let ptr = raw.baseAddress!
+            // 2-byte Type = 0 (MEDIA_MESSAGE_DATA)
+            ptr.advanced(by: 0).assumingMemoryBound(to: UInt8.self).pointee = 0
+            ptr.advanced(by: 1).assumingMemoryBound(to: UInt8.self).pointee = 0
 
-        sendEncryptedRawStream(channel: Channel.ID_MIC, flags: 0x0b, payload: streamPayload)
+            // 8-byte Timestamp in microseconds (big-endian)
+            var remaining = timestampUs
+            for i in stride(from: 7, through: 0, by: -1) {
+                ptr.advanced(by: 2 + i).assumingMemoryBound(to: UInt8.self).pointee = UInt8(remaining & 0xFF)
+                remaining = remaining >> 8
+            }
+
+            // PCM payload
+            pcmData.withUnsafeBytes { pcmRaw in
+                memcpy(ptr.advanced(by: 10), pcmRaw.baseAddress!, pcmData.count)
+            }
+        }
+
+        sendEncryptedRawStream(channel: Channel.ID_MIC, flags: MicUplinkFrame.flags, payload: streamPayload)
     }
 
     func sendLocationUpdate(_ location: CLLocation) {
@@ -1992,6 +2019,10 @@ private enum ProtoWire {
     private func handleAudioMessage(_ message: AapMessage) {
         switch message.type {
         case 0x8000: // Media.MsgType.MEDIA_MESSAGE_SETUP
+            if let codecVal = ProtoWire.extractFirstVarint(from: message.payload, fieldNumber: 1) {
+                let codec = AudioSinkCodecPolicy.codec(for: Int(codecVal))
+                sinkCodecs[message.channel] = codec
+            }
             sendMediaConfig(on: message.channel)
             sendAudioFocusGainUnsolicited()
 
@@ -2004,22 +2035,24 @@ private enum ProtoWire {
         case 0: // MEDIA_MESSAGE_DATA
             let payloadOffset = resolveAudioPayloadOffset(message.payload)
             if message.payload.count > payloadOffset {
-                let pcm = message.payload.subdata(in: payloadOffset..<message.payload.count)
-                delegate?.aapTransport(self, didReceiveAudioData: pcm, on: message.channel)
+                let audioData = message.payload.subdata(in: payloadOffset..<message.payload.count)
+                let isAac = sinkCodecs[message.channel]?.isAac ?? (ProjectionSettings.audioCodecPreference != .pcm)
+                delegate?.aapTransport(self, didReceiveAudioData: audioData, on: message.channel, isAac: isAac)
             }
             sendMediaAck(on: message.channel)
 
         case 1: // MEDIA_MESSAGE_CODEC_CONFIG
-            // For declared PCM streams, config packets are not raw PCM payload.
-            // Acknowledge but do not feed into playback.
-            sendMediaAck(on: message.channel)
+            // AudioSpecificConfig CSD from phone (starts directly at message.payload)
+            delegate?.aapTransport(self, didReceiveAudioCodecConfig: message.payload, on: message.channel)
+            // Per open-headunit AudioMediaPayload, CODEC_CONFIG consumes no ACK credit.
 
         case AapMessageType.AUDIO_FRAME.rawValue:
             // Legacy fallback path.
             let payloadOffset = resolveAudioPayloadOffset(message.payload)
             if message.payload.count > payloadOffset {
-                let pcm = message.payload.subdata(in: payloadOffset..<message.payload.count)
-                delegate?.aapTransport(self, didReceiveAudioData: pcm, on: message.channel)
+                let audioData = message.payload.subdata(in: payloadOffset..<message.payload.count)
+                let isAac = sinkCodecs[message.channel]?.isAac ?? false
+                delegate?.aapTransport(self, didReceiveAudioData: audioData, on: message.channel, isAac: isAac)
             }
 
         default:

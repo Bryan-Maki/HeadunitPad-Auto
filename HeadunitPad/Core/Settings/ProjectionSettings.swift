@@ -86,6 +86,20 @@ public enum VideoCodecPreference: Int, CaseIterable {
     }
 }
 
+public enum AudioCodecPreference: Int, CaseIterable {
+    case auto = 0
+    case aac = 1
+    case pcm = 2
+
+    public var title: String {
+        switch self {
+        case .auto: return "Auto (AAC-LC / PCM)"
+        case .aac: return "AAC-LC"
+        case .pcm: return "PCM (Uncompressed)"
+        }
+    }
+}
+
 public typealias ProjectionVideoResolution = ResolutionPreset
 
 public enum ProjectionSettings {
@@ -104,6 +118,7 @@ public enum ProjectionSettings {
     private static let autoReconnectKey = "projection-auto-reconnect"
     private static let autoResumePlaybackKey = "projection-auto-resume-playback"
     private static let videoCodecPreferenceKey = "projection-video-codec-preference"
+    private static let audioCodecPreferenceKey = "projection-audio-codec-preference"
 
     public static let defaultDpi = 160
     public static let minDpi = 100
@@ -254,6 +269,16 @@ public enum ProjectionSettings {
         }
         set {
             defaults.set(newValue.rawValue, forKey: videoCodecPreferenceKey)
+        }
+    }
+
+    public static var audioCodecPreference: AudioCodecPreference {
+        get {
+            let val = defaults.integer(forKey: audioCodecPreferenceKey)
+            return AudioCodecPreference(rawValue: val) ?? .auto
+        }
+        set {
+            defaults.set(newValue.rawValue, forKey: audioCodecPreferenceKey)
         }
     }
 

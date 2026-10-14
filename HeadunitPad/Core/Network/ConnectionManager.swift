@@ -49,6 +49,15 @@ protocol ConnectionManagerDelegate: AnyObject {
     func connectionManager(_ manager: ConnectionManager, didDiscoverDevice device: DiscoveredDevice)
     func connectionManager(_ manager: ConnectionManager, didReceiveVideoData data: Data)
     func connectionManager(_ manager: ConnectionManager, didReceiveAudioData data: Data, on channel: UInt8)
+    func connectionManager(_ manager: ConnectionManager, didReceiveAudioData data: Data, on channel: UInt8, isAac: Bool)
+    func connectionManager(_ manager: ConnectionManager, didReceiveAudioCodecConfig data: Data, on channel: UInt8)
+}
+
+extension ConnectionManagerDelegate {
+    func connectionManager(_ manager: ConnectionManager, didReceiveAudioData data: Data, on channel: UInt8, isAac: Bool) {
+        connectionManager(manager, didReceiveAudioData: data, on: channel)
+    }
+    func connectionManager(_ manager: ConnectionManager, didReceiveAudioCodecConfig data: Data, on channel: UInt8) {}
 }
 
 class ConnectionManager {
@@ -421,6 +430,14 @@ extension ConnectionManager: AapTransportDelegate {
 
     func aapTransport(_ transport: AapTransport, didReceiveAudioData data: Data, on channel: UInt8) {
         delegate?.connectionManager(self, didReceiveAudioData: data, on: channel)
+    }
+
+    func aapTransport(_ transport: AapTransport, didReceiveAudioData data: Data, on channel: UInt8, isAac: Bool) {
+        delegate?.connectionManager(self, didReceiveAudioData: data, on: channel, isAac: isAac)
+    }
+
+    func aapTransport(_ transport: AapTransport, didReceiveAudioCodecConfig data: Data, on channel: UInt8) {
+        delegate?.connectionManager(self, didReceiveAudioCodecConfig: data, on: channel)
     }
 
     func aapTransport(_ transport: AapTransport, didReceiveMediaMetadata metadata: AapMediaMetadata) {
