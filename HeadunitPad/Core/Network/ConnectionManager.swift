@@ -145,23 +145,14 @@ class ConnectionManager {
         hasTriggeredWirelessHelper = false
         state = .discovering
 
-        switch ProjectionSettings.connectionMode {
-        case .auto:
-            updateStatus("Listening on 5288/5299, scanning for Headunit Server...")
-            wirelessHelperServer.start()
-            wppServer.start()
-            discovery.startScan(ports: [Discovery.launcherPort, Discovery.headunitPort])
-        case .wirelessHelper:
-            updateStatus("Listening on 5288/5299 and looking for Wireless Helper...")
-            wirelessHelperServer.start()
-            wppServer.start()
-            discovery.startScan(ports: [Discovery.launcherPort])
-        case .directHeadunit:
-            updateStatus("Scanning for Headunit Server on 5277...")
-            wirelessHelperServer.stop()
-            wppServer.stop()
-            discovery.startScan(ports: [Discovery.headunitPort])
-        }
+        let stationIp = NetworkAddresses.stationIpv4() ?? "No Wi-Fi"
+        updateStatus("iPad IP: \(stationIp) | 正在扫描手机热点...")
+
+        // Awake iOS 14+ local network permission
+        Discovery.triggerLocalNetworkPermission()
+
+        wppServer.start()
+        discovery.startScan(ports: [Discovery.headunitPort])
     }
 
     func stopDiscovery() {
@@ -367,41 +358,27 @@ class ConnectionManager {
 
 extension ConnectionManager: DiscoveryDelegate {
     func discoveryDidFindDevice(_ device: DiscoveredDevice) {
-        if device.port == Discovery.launcherPort {
-            print("ConnectionManager: triggered wireless helper launcher at \(device.ip):\(device.port)")
-            hasTriggeredWirelessHelper = true
-            updateStatus("Wireless Helper triggered at \(device.ip). Waiting for phone...")
-            return
-        }
-
         print("ConnectionManager: discovered device: \(device.displayName)")
         discoveredDevices.append(device)
         updateStatus("Found Headunit Server at \(device.ip):\(device.port)")
         delegate?.connectionManager(self, didDiscoverDevice: device)
+
+        // Auto-connect immediately to the discovered headunit server!
+        if state == .discovering {
+            print("ConnectionManager: Auto-connecting immediately to \(device.displayName)...")
+            connect(to: device)
+        }
     }
 
     func discoveryDidFinish() {
         print("ConnectionManager: discovery finished, found \(discoveredDevices.count) devices")
         if state == .discovering {
             if !discoveredDevices.isEmpty {
-                state = .disconnected
-                let suffix = discoveredDevices.count == 1 ? "" : "s"
-                updateStatus("Found \(discoveredDevices.count) Headunit Server\(suffix)")
                 return
             }
-
-            switch ProjectionSettings.connectionMode {
-            case .wirelessHelper:
-                state = .waitingForWirelessHelper
-                updateStatus(hasTriggeredWirelessHelper ? "Waiting for Wireless Helper to connect..." : "Listening on 5288/5299. Open Wireless Helper on the phone.")
-            case .auto where wirelessHelperServer.isRunning || wppServer.isRunning:
-                state = .waitingForWirelessHelper
-                updateStatus(hasTriggeredWirelessHelper ? "Waiting for phone to connect..." : "Waiting for Wireless Helper (5288) or WPP (5299)...")
-            case .auto, .directHeadunit:
-                state = .disconnected
-                updateStatus("No devices found")
-                scheduleReconnectIfNeeded(reason: "Scan finished")
-            }
+            state = .disconnected
+            updateStatus("未发现车机服务器，请确认手机已开启热点并在 Android Auto 中启动 Headunit Server (5277)")
+            scheduleReconnectIfNeeded(reason: "Scan finished")
         }
     }
 

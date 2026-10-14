@@ -48,14 +48,12 @@ public enum ProjectionOrientation: Int, CaseIterable {
 
 public enum ProjectionConnectionMode: Int, CaseIterable {
     case auto = 0
-    case wirelessHelper = 1
-    case directHeadunit = 2
+    case directHeadunit = 1
 
     public var title: String {
         switch self {
-        case .auto: return "Auto"
-        case .wirelessHelper: return "Wireless Helper"
-        case .directHeadunit: return "Direct Headunit Server"
+        case .auto: return "Auto (Hotspot Scan)"
+        case .directHeadunit: return "Direct IP"
         }
     }
 }

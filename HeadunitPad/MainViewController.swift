@@ -104,32 +104,65 @@ class MainViewController: UIViewController {
         return button
     }()
 
-    private lazy var manualIPButton: UIButton = {
-        var config = UIButton.Configuration.tinted()
-        config.title = "Wireless: Enter IP Manually"
-        config.image = UIImage(systemName: "keyboard")
-        config.imagePadding = 8
+    private let directConnectContainer: UIView = {
+        let view = UIView()
+        view.backgroundColor = UIColor.secondarySystemBackground.withAlphaComponent(0.85)
+        view.layer.cornerRadius = 14
+        view.layer.borderWidth = 1.0
+        view.layer.borderColor = UIColor.separator.cgColor
+        view.translatesAutoresizingMaskIntoConstraints = false
+        return view
+    }()
+
+    private let directIpLabel: UILabel = {
+        let label = UILabel()
+        label.text = "手机热点 IP 直连 (Direct Connect)"
+        label.font = .systemFont(ofSize: 13, weight: .semibold)
+        label.textColor = .secondaryLabel
+        label.textAlignment = .center
+        label.translatesAutoresizingMaskIntoConstraints = false
+        return label
+    }()
+
+    private let directIpTextField: UITextField = {
+        let textField = UITextField()
+        textField.placeholder = "192.168.43.1"
+        textField.text = NetworkAddresses.currentHotspotGatewayIpv4()
+        textField.textAlignment = .center
+        textField.font = .monospacedDigitSystemFont(ofSize: 17, weight: .bold)
+        textField.backgroundColor = .tertiarySystemBackground
+        textField.layer.cornerRadius = 8
+        textField.keyboardType = .numbersAndPunctuation
+        textField.autocorrectionType = .no
+        textField.autocapitalizationType = .none
+        textField.clearButtonMode = .whileEditing
+        textField.translatesAutoresizingMaskIntoConstraints = false
+        return textField
+    }()
+
+    private lazy var directConnectButton: UIButton = {
+        var config = UIButton.Configuration.filled()
+        config.title = "直接连接此 IP (Direct Connect)"
+        config.image = UIImage(systemName: "arrow.right.circle.fill")
+        config.imagePadding = 6
         config.cornerStyle = .medium
+        config.baseBackgroundColor = .systemBlue
 
         let button = UIButton(configuration: config)
         button.translatesAutoresizingMaskIntoConstraints = false
-        button.addTarget(self, action: #selector(manualIPButtonTapped), for: .touchUpInside)
+        button.addTarget(self, action: #selector(directConnectButtonTapped), for: .touchUpInside)
         return button
     }()
 
-    private lazy var qrPairingButton: UIButton = {
-        var config = UIButton.Configuration.tinted()
-        config.title = "Wireless: QR Code Pairing"
-        config.image = UIImage(systemName: "qrcode")
-        config.imagePadding = 8
-        config.cornerStyle = .medium
-
-        let button = UIButton(configuration: config)
-        button.translatesAutoresizingMaskIntoConstraints = false
-        button.addTarget(self, action: #selector(qrPairingButtonTapped), for: .touchUpInside)
-        return button
+    private let orDividerLabel: UILabel = {
+        let label = UILabel()
+        label.text = "— 或者 (or) —"
+        label.font = .systemFont(ofSize: 13, weight: .medium)
+        label.textColor = .tertiaryLabel
+        label.textAlignment = .center
+        label.translatesAutoresizingMaskIntoConstraints = false
+        return label
     }()
-
 
     private lazy var disconnectButton: UIButton = {
         var config = UIButton.Configuration.filled()
@@ -152,6 +185,14 @@ class MainViewController: UIViewController {
         setupUI()
         setupConstraints()
         connectionManager.delegate = self
+
+        // Awake iOS 14+ Local Network permission dialog on launch
+        Discovery.triggerLocalNetworkPermission()
+
+        let tap = UITapGestureRecognizer(target: self, action: #selector(dismissKeyboard))
+        tap.cancelsTouchesInView = false
+        view.addGestureRecognizer(tap)
+
         videoRenderer.onFrameDisplayed = { [weak self] in
             guard let self else { return }
             self.hasReceivedFirstVideoFrame = true
@@ -164,6 +205,10 @@ class MainViewController: UIViewController {
             self?.connectionManager.sendUpdateUiConfigRequest(left: left, top: top, right: right, bottom: bottom)
         }
         updateUIForConnectionState(.disconnected)
+    }
+
+    @objc private func dismissKeyboard() {
+        view.endEditing(true)
     }
 
     override func viewDidLayoutSubviews() {
@@ -254,15 +299,19 @@ class MainViewController: UIViewController {
         videoRenderer.translatesAutoresizingMaskIntoConstraints = false
         touchOverlayView.translatesAutoresizingMaskIntoConstraints = false
 
+        directConnectContainer.addSubview(directIpLabel)
+        directConnectContainer.addSubview(directIpTextField)
+        directConnectContainer.addSubview(directConnectButton)
+
         view.addSubview(videoContainerView)
         view.addSubview(titleLabel)
         view.addSubview(subtitleLabel)
         view.addSubview(statusLabel)
+        view.addSubview(directConnectContainer)
+        view.addSubview(orDividerLabel)
         view.addSubview(connectButton)
         view.addSubview(activityIndicator)
         view.addSubview(settingsButton)
-        view.addSubview(manualIPButton)
-        view.addSubview(qrPairingButton)
         view.addSubview(disconnectButton)
 
         NSLayoutConstraint.activate([
@@ -295,7 +344,7 @@ class MainViewController: UIViewController {
         videoContainerView.isHidden = true
     }
 
-    private let connectControlWidth: CGFloat = 300
+    private let connectControlWidth: CGFloat = 340
 
     private func setupConstraints() {
         NSLayoutConstraint.activate([
@@ -306,39 +355,55 @@ class MainViewController: UIViewController {
 
             // Title
             titleLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            titleLabel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 100),
+            titleLabel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 48),
 
             // Subtitle
             subtitleLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            subtitleLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 16),
+            subtitleLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 10),
 
             // Status
             statusLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            statusLabel.topAnchor.constraint(equalTo: subtitleLabel.bottomAnchor, constant: 32),
+            statusLabel.topAnchor.constraint(equalTo: subtitleLabel.bottomAnchor, constant: 18),
 
-            // Connect Button
+            // Direct Connect Container
+            directConnectContainer.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            directConnectContainer.topAnchor.constraint(equalTo: statusLabel.bottomAnchor, constant: 28),
+            directConnectContainer.widthAnchor.constraint(equalToConstant: connectControlWidth),
+
+            directIpLabel.topAnchor.constraint(equalTo: directConnectContainer.topAnchor, constant: 14),
+            directIpLabel.leadingAnchor.constraint(equalTo: directConnectContainer.leadingAnchor, constant: 16),
+            directIpLabel.trailingAnchor.constraint(equalTo: directConnectContainer.trailingAnchor, constant: -16),
+
+            directIpTextField.topAnchor.constraint(equalTo: directIpLabel.bottomAnchor, constant: 8),
+            directIpTextField.leadingAnchor.constraint(equalTo: directConnectContainer.leadingAnchor, constant: 16),
+            directIpTextField.trailingAnchor.constraint(equalTo: directConnectContainer.trailingAnchor, constant: -16),
+            directIpTextField.heightAnchor.constraint(equalToConstant: 42),
+
+            directConnectButton.topAnchor.constraint(equalTo: directIpTextField.bottomAnchor, constant: 12),
+            directConnectButton.leadingAnchor.constraint(equalTo: directConnectContainer.leadingAnchor, constant: 16),
+            directConnectButton.trailingAnchor.constraint(equalTo: directConnectContainer.trailingAnchor, constant: -16),
+            directConnectButton.bottomAnchor.constraint(equalTo: directConnectContainer.bottomAnchor, constant: -14),
+            directConnectButton.heightAnchor.constraint(equalToConstant: 44),
+
+            // Or Divider
+            orDividerLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            orDividerLabel.topAnchor.constraint(equalTo: directConnectContainer.bottomAnchor, constant: 16),
+
+            // Auto-Scan Button
             connectButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            connectButton.topAnchor.constraint(equalTo: statusLabel.bottomAnchor, constant: 48),
+            connectButton.topAnchor.constraint(equalTo: orDividerLabel.bottomAnchor, constant: 16),
             connectButton.widthAnchor.constraint(equalToConstant: connectControlWidth),
-
-            // Manual IP Button
-            manualIPButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            manualIPButton.topAnchor.constraint(equalTo: connectButton.bottomAnchor, constant: 16),
-            manualIPButton.widthAnchor.constraint(equalToConstant: connectControlWidth),
-
-            // QR Pairing Button
-            qrPairingButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            qrPairingButton.topAnchor.constraint(equalTo: manualIPButton.bottomAnchor, constant: 16),
-            qrPairingButton.widthAnchor.constraint(equalToConstant: connectControlWidth),
+            connectButton.heightAnchor.constraint(equalToConstant: 48),
 
             // Disconnect Button
             disconnectButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            disconnectButton.topAnchor.constraint(equalTo: statusLabel.bottomAnchor, constant: 48),
+            disconnectButton.topAnchor.constraint(equalTo: statusLabel.bottomAnchor, constant: 36),
             disconnectButton.widthAnchor.constraint(equalToConstant: 200),
+            disconnectButton.heightAnchor.constraint(equalToConstant: 48),
 
             // Activity Indicator
             activityIndicator.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            activityIndicator.topAnchor.constraint(equalTo: qrPairingButton.bottomAnchor, constant: 24),
+            activityIndicator.topAnchor.constraint(equalTo: connectButton.bottomAnchor, constant: 20),
 
             // Settings Button
             settingsButton.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16),
@@ -349,6 +414,7 @@ class MainViewController: UIViewController {
     // MARK: - UI Updates
 
     private func updateUIForConnectionState(_ state: ConnectionState) {
+        let currentIp = NetworkAddresses.stationIpv4() ?? "No Wi-Fi"
         switch state {
         case .disconnected:
             stopVideoWatchdog()
@@ -359,13 +425,16 @@ class MainViewController: UIViewController {
             titleLabel.isHidden = false
             subtitleLabel.isHidden = false
             statusLabel.isHidden = false
-            statusLabel.text = connectionManager.statusDetail
+            statusLabel.text = "iPad IP: \(currentIp) | 就绪，等待连接"
             statusLabel.textColor = .tertiaryLabel
+            directConnectContainer.isHidden = false
+            orDividerLabel.isHidden = false
             connectButton.isHidden = false
             connectButton.isEnabled = true
             updateConnectButtonTitle()
-            manualIPButton.isHidden = false
-            qrPairingButton.isHidden = false
+            if directIpTextField.text?.isEmpty ?? true {
+                directIpTextField.text = NetworkAddresses.currentHotspotGatewayIpv4()
+            }
             disconnectButton.isHidden = true
             activityIndicator.stopAnimating()
 
@@ -376,11 +445,11 @@ class MainViewController: UIViewController {
             titleLabel.isHidden = false
             subtitleLabel.isHidden = false
             statusLabel.isHidden = false
-            statusLabel.text = connectionManager.statusDetail
+            statusLabel.text = "iPad IP: \(currentIp) | 正在扫描手机热点..."
             statusLabel.textColor = .secondaryLabel
+            directConnectContainer.isHidden = true
+            orDividerLabel.isHidden = true
             connectButton.isHidden = true
-            manualIPButton.isHidden = true
-            qrPairingButton.isHidden = true
             disconnectButton.isHidden = true
             activityIndicator.startAnimating()
 
@@ -393,9 +462,9 @@ class MainViewController: UIViewController {
             statusLabel.isHidden = false
             statusLabel.text = connectionManager.statusDetail
             statusLabel.textColor = .secondaryLabel
+            directConnectContainer.isHidden = true
+            orDividerLabel.isHidden = true
             connectButton.isHidden = true
-            manualIPButton.isHidden = true
-            qrPairingButton.isHidden = true
             disconnectButton.isHidden = false
             activityIndicator.startAnimating()
 
@@ -406,11 +475,11 @@ class MainViewController: UIViewController {
             titleLabel.isHidden = false
             subtitleLabel.isHidden = false
             statusLabel.isHidden = false
-            statusLabel.text = connectionManager.statusDetail
+            statusLabel.text = "正在连接 \(connectionManager.connectedDevice?.displayName ?? "手机")..."
             statusLabel.textColor = .secondaryLabel
+            directConnectContainer.isHidden = true
+            orDividerLabel.isHidden = true
             connectButton.isHidden = true
-            manualIPButton.isHidden = true
-            qrPairingButton.isHidden = true
             disconnectButton.isHidden = true
             activityIndicator.startAnimating()
 
@@ -421,11 +490,11 @@ class MainViewController: UIViewController {
             titleLabel.isHidden = false
             subtitleLabel.isHidden = false
             statusLabel.isHidden = false
-            statusLabel.text = connectionManager.statusDetail
+            statusLabel.text = "正在与 Android Auto 握手..."
             statusLabel.textColor = .systemBlue
+            directConnectContainer.isHidden = true
+            orDividerLabel.isHidden = true
             connectButton.isHidden = true
-            manualIPButton.isHidden = true
-            qrPairingButton.isHidden = true
             disconnectButton.isHidden = false
             activityIndicator.startAnimating()
 
@@ -436,11 +505,9 @@ class MainViewController: UIViewController {
             titleLabel.isHidden = true
             subtitleLabel.isHidden = true
             statusLabel.isHidden = true
-            statusLabel.text = "Connected to \(connectionManager.connectedDevice?.displayName ?? "device")"
-            statusLabel.textColor = .systemGreen
+            directConnectContainer.isHidden = true
+            orDividerLabel.isHidden = true
             connectButton.isHidden = true
-            manualIPButton.isHidden = true
-            qrPairingButton.isHidden = true
             disconnectButton.isHidden = true
             activityIndicator.stopAnimating()
 
@@ -452,11 +519,11 @@ class MainViewController: UIViewController {
             titleLabel.isHidden = false
             subtitleLabel.isHidden = false
             statusLabel.isHidden = false
-            statusLabel.text = connectionManager.statusDetail
+            statusLabel.text = "正在断开连接..."
             statusLabel.textColor = .secondaryLabel
+            directConnectContainer.isHidden = true
+            orDividerLabel.isHidden = true
             connectButton.isHidden = true
-            manualIPButton.isHidden = true
-            qrPairingButton.isHidden = true
             disconnectButton.isHidden = true
             activityIndicator.startAnimating()
 
@@ -470,11 +537,11 @@ class MainViewController: UIViewController {
             statusLabel.isHidden = false
             statusLabel.text = connectionManager.statusDetail.isEmpty ? message : connectionManager.statusDetail
             statusLabel.textColor = .systemRed
+            directConnectContainer.isHidden = false
+            orDividerLabel.isHidden = false
             connectButton.isHidden = false
             connectButton.isEnabled = true
             updateConnectButtonTitle()
-            manualIPButton.isHidden = false
-            qrPairingButton.isHidden = false
             disconnectButton.isHidden = true
             activityIndicator.stopAnimating()
         }
@@ -484,11 +551,9 @@ class MainViewController: UIViewController {
         let title: String
         switch ProjectionSettings.connectionMode {
         case .auto:
-            title = "Wireless: Auto Connect"
-        case .wirelessHelper:
-            title = "Wireless: Start Helper"
+            title = "自动扫描手机热点 (Scan Hotspot)"
         case .directHeadunit:
-            title = "Wireless: Scan Headunit"
+            title = "扫描车机服务器 (Scan 5277)"
         }
         connectButton.configuration?.title = title
     }
@@ -541,39 +606,17 @@ class MainViewController: UIViewController {
 
     // MARK: - Actions
 
+    @objc private func directConnectButtonTapped() {
+        view.endEditing(true)
+        let rawIp = directIpTextField.text?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let targetIp = (rawIp?.isEmpty == false) ? rawIp! : NetworkAddresses.currentHotspotGatewayIpv4()
+        print("MainViewController: Direct connecting to \(targetIp):\(Discovery.headunitPort)")
+        connectionManager.connect(to: targetIp, port: Discovery.headunitPort)
+    }
+
     @objc private func connectButtonTapped() {
+        view.endEditing(true)
         connectionManager.startDiscovery()
-    }
-
-    @objc private func manualIPButtonTapped() {
-        let alert = UIAlertController(title: "Enter IP Address",
-                                      message: "Enter the IP address of your Android phone or headunit server",
-                                      preferredStyle: .alert)
-
-        alert.addTextField { textField in
-            textField.placeholder = "192.168.0.189"
-            textField.keyboardType = .decimalPad
-        }
-
-        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
-        alert.addAction(UIAlertAction(title: "Connect", style: .default) { [weak self] _ in
-            guard let ip = alert.textFields?.first?.text, !ip.isEmpty else { return }
-            self?.connectionManager.connect(to: ip, port: Discovery.headunitPort)
-        })
-
-        present(alert, animated: true)
-    }
-
-    @objc private func qrPairingButtonTapped() {
-        let localIp = NetworkAddresses.currentWifiIPv4Address() ?? "192.168.43.1"
-        let vc = ProjectionSetupQrViewController(
-            ssid: "HeadunitPad-Hotspot",
-            passphrase: nil,
-            ipAddress: localIp,
-            port: 5277
-        )
-        let nav = UINavigationController(rootViewController: vc)
-        present(nav, animated: true)
     }
 
     @objc private func disconnectButtonTapped() {
@@ -602,10 +645,6 @@ class MainViewController: UIViewController {
             message: "Changes apply on next connection.\nMode: \(connectionMode)\nAuto reconnect: \(autoReconnect)\nVideo: \(codec)\nAudio: \(audioCodec)\nOrientation: \(orientation)\nResolution: \(resolution)\nFPS: \(fps)\(fps != effectiveFps ? " (effective: \(effectiveFps))" : "")\nDPI: \(dpi)\(dpi != effectiveDpi ? " (effective: \(effectiveDpi))" : "")\nFit: \(ProjectionSettings.videoFitMode.title)\nPosition: \(ProjectionSettings.driverPosition == .left ? "LHD" : "RHD")\nGPS: \(gpsSource)",
             preferredStyle: .actionSheet
         )
-
-        alert.addAction(UIAlertAction(title: "Wireless QR Code Pairing", style: .default) { [weak self] _ in
-            self?.qrPairingButtonTapped()
-        })
 
         alert.addAction(UIAlertAction(title: "Connection Mode", style: .default) { [weak self] _ in
             self?.presentConnectionModeMenu()
@@ -654,19 +693,28 @@ class MainViewController: UIViewController {
             self?.presentDpiMenu()
         })
 
-        let gpsAction = UIAlertAction(title: "GPS Source", style: .default) { [weak self] _ in
-            self?.presentGpsMenu()
+        let isCellular = ProjectionSettings.supportsCellularIpad()
+        let currentGpsTitle = isCellular
+            ? "GPS Source: \(ProjectionSettings.gpsSource.title)"
+            : "GPS Source: Phone only (Wi-Fi iPad)"
+        let gpsAction = UIAlertAction(title: currentGpsTitle, style: .default) { [weak self] _ in
+            if isCellular {
+                self?.presentGpsMenu()
+            } else {
+                let infoAlert = UIAlertController(
+                    title: "GPS Source",
+                    message: "This iPad does not have a cellular GPS hardware module. Android Auto will use your phone's GPS for precise navigation.",
+                    preferredStyle: .alert
+                )
+                infoAlert.addAction(UIAlertAction(title: "OK", style: .default))
+                self?.present(infoAlert, animated: true)
+            }
         }
-        gpsAction.isEnabled = ProjectionSettings.supportsCellularIpad()
         alert.addAction(gpsAction)
 
         alert.addAction(UIAlertAction(title: "Diagnostics", style: .default) { [weak self] _ in
             self?.presentDiagnostics()
         })
-
-        if !ProjectionSettings.supportsCellularIpad() {
-            alert.addAction(UIAlertAction(title: "GPS Source: Phone only (non-cellular iPad)", style: .default))
-        }
 
         if connectionManager.state == .running {
             alert.addAction(UIAlertAction(title: "Connection Details", style: .default) { [weak self] _ in
@@ -691,7 +739,7 @@ class MainViewController: UIViewController {
     private func presentConnectionModeMenu() {
         let alert = UIAlertController(title: "Connection Mode", message: nil, preferredStyle: .actionSheet)
 
-        for option in [ProjectionConnectionMode.auto, .wirelessHelper, .directHeadunit] {
+        for option in [ProjectionConnectionMode.auto, .directHeadunit] {
             let title = option == ProjectionSettings.connectionMode ? "\(option.title) (Current)" : option.title
             alert.addAction(UIAlertAction(title: title, style: .default) { [weak self] _ in
                 ProjectionSettings.connectionMode = option
@@ -923,9 +971,9 @@ class MainViewController: UIViewController {
         let previewView = DpiPreviewView()
         previewView.translatesAutoresizingMaskIntoConstraints = false
         previewView.dpi = ProjectionSettings.effectiveDpi
-        let scale = UIScreen.main.scale
-        previewView.panelWidthPx = Int(view.bounds.width * scale)
-        previewView.panelHeightPx = Int(view.bounds.height * scale)
+        let effectiveRes = ProjectionSettings.effectiveResolution
+        previewView.panelWidthPx = effectiveRes.width
+        previewView.panelHeightPx = effectiveRes.height
         previewView.isRightHandDrive = ProjectionSettings.driverPosition == .right
         previewView.fitMode = ProjectionSettings.videoFitMode
 
@@ -937,8 +985,8 @@ class MainViewController: UIViewController {
 
         let dpiLabel = UILabel()
         dpiLabel.translatesAutoresizingMaskIntoConstraints = false
-        dpiLabel.text = "DPI: \(ProjectionSettings.effectiveDpi)"
-        dpiLabel.font = .monospacedDigitSystemFont(ofSize: 18, weight: .bold)
+        dpiLabel.text = "DPI: \(ProjectionSettings.effectiveDpi)  (\(previewView.virtualWidthDp)×\(previewView.virtualHeightDp) dp)"
+        dpiLabel.font = .monospacedDigitSystemFont(ofSize: 17, weight: .bold)
         dpiLabel.textAlignment = .center
 
         let closeButton = UIButton(type: .system)
@@ -946,9 +994,39 @@ class MainViewController: UIViewController {
         closeButton.setTitle("Done", for: .normal)
         closeButton.titleLabel?.font = .systemFont(ofSize: 17, weight: .bold)
 
+        let presetStack = UIStackView()
+        presetStack.axis = .horizontal
+        presetStack.spacing = 8
+        presetStack.distribution = .fillEqually
+        presetStack.translatesAutoresizingMaskIntoConstraints = false
+
+        let updateDpiBlock: (Int) -> Void = { [weak slider, weak previewView, weak dpiLabel] val in
+            guard let slider, let previewView, let dpiLabel else { return }
+            let clamped = min(max(val, ProjectionSettings.minDpi), ProjectionSettings.maxDpi)
+            slider.value = Float(clamped)
+            previewView.dpi = clamped
+            dpiLabel.text = "DPI: \(clamped)  (\(previewView.virtualWidthDp)×\(previewView.virtualHeightDp) dp)"
+            ProjectionSettings.dpi = clamped
+            previewView.setNeedsDisplay()
+        }
+
+        let presets = [120, 160, 200, 240, 280]
+        for p in presets {
+            var btnConfig = UIButton.Configuration.tinted()
+            btnConfig.title = "\(p)"
+            btnConfig.cornerStyle = .capsule
+            btnConfig.buttonSize = .mini
+            let btn = UIButton(configuration: btnConfig)
+            btn.addAction(UIAction { _ in
+                updateDpiBlock(p)
+            }, for: .touchUpInside)
+            presetStack.addArrangedSubview(btn)
+        }
+
         previewVC.view.addSubview(previewView)
-        previewVC.view.addSubview(slider)
         previewVC.view.addSubview(dpiLabel)
+        previewVC.view.addSubview(slider)
+        previewVC.view.addSubview(presetStack)
         previewVC.view.addSubview(closeButton)
 
         NSLayoutConstraint.activate([
@@ -960,20 +1038,22 @@ class MainViewController: UIViewController {
             previewView.trailingAnchor.constraint(equalTo: previewVC.view.trailingAnchor, constant: -20),
             previewView.heightAnchor.constraint(equalToConstant: 240),
 
-            dpiLabel.topAnchor.constraint(equalTo: previewView.bottomAnchor, constant: 20),
+            dpiLabel.topAnchor.constraint(equalTo: previewView.bottomAnchor, constant: 16),
             dpiLabel.centerXAnchor.constraint(equalTo: previewVC.view.centerXAnchor),
 
-            slider.topAnchor.constraint(equalTo: dpiLabel.bottomAnchor, constant: 12),
+            slider.topAnchor.constraint(equalTo: dpiLabel.bottomAnchor, constant: 10),
             slider.leadingAnchor.constraint(equalTo: previewVC.view.leadingAnchor, constant: 36),
-            slider.trailingAnchor.constraint(equalTo: previewVC.view.trailingAnchor, constant: -36)
+            slider.trailingAnchor.constraint(equalTo: previewVC.view.trailingAnchor, constant: -36),
+
+            presetStack.topAnchor.constraint(equalTo: slider.bottomAnchor, constant: 12),
+            presetStack.leadingAnchor.constraint(equalTo: previewVC.view.leadingAnchor, constant: 36),
+            presetStack.trailingAnchor.constraint(equalTo: previewVC.view.trailingAnchor, constant: -36),
+            presetStack.heightAnchor.constraint(equalToConstant: 32)
         ])
 
-        slider.addAction(UIAction { [weak slider, weak previewView, weak dpiLabel] _ in
-            guard let slider, let previewView, let dpiLabel else { return }
-            let val = Int(slider.value)
-            previewView.dpi = val
-            dpiLabel.text = "DPI: \(val)"
-            ProjectionSettings.dpi = val
+        slider.addAction(UIAction { [weak slider] _ in
+            guard let slider else { return }
+            updateDpiBlock(Int(slider.value))
         }, for: .valueChanged)
 
         closeButton.addAction(UIAction { [weak previewVC] _ in

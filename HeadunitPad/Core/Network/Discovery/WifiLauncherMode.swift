@@ -11,7 +11,6 @@ import Foundation
 public enum WifiLauncherMode: Int, CaseIterable, Codable {
     case manual = 0
     case auto = 1
-    case helper = 2
     case native = 3
 
     public static let `default`: WifiLauncherMode = .native

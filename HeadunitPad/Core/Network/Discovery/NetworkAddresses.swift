@@ -107,4 +107,12 @@ public enum NetworkAddresses {
         }
         return suspects
     }
+
+    /// Returns the most probable Android hotspot gateway IP (i.e. <station_subnet>.1 or "192.168.43.1").
+    public static func currentHotspotGatewayIpv4() -> String {
+        if let ip = stationIpv4(), let subnet = DiscoverySubnetPolicy.subnetOf(ipv4: ip) {
+            return "\(subnet).1"
+        }
+        return "192.168.43.1"
+    }
 }

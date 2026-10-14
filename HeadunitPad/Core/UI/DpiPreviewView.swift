@@ -4,6 +4,8 @@
 //
 //  Schematic CoreGraphics Coolwalk split-screen layout visualizer.
 //  1:1 port and aesthetic enhancement of open-headunit DpiPreviewView.kt & DpiPickerView.kt.
+//  Dynamically scales all UI components (dock, cards, icons, fonts, padding) proportionally
+//  with density scale = CGFloat(dpi) / 160.0 and virtual resolution dp.
 //
 
 import UIKit
@@ -17,7 +19,7 @@ public final class DpiPreviewView: UIView {
         }
     }
 
-    public var panelWidthPx: Int = 2048 {
+    public var panelWidthPx: Int = 1920 {
         didSet {
             if oldValue != panelWidthPx {
                 setNeedsDisplay()
@@ -25,7 +27,7 @@ public final class DpiPreviewView: UIView {
         }
     }
 
-    public var panelHeightPx: Int = 1536 {
+    public var panelHeightPx: Int = 1080 {
         didSet {
             if oldValue != panelHeightPx {
                 setNeedsDisplay()
@@ -63,6 +65,15 @@ public final class DpiPreviewView: UIView {
         return virtualWidthDp >= 800
     }
 
+    public var densityScale: CGFloat {
+        guard dpi > 0 else { return 1.0 }
+        return CGFloat(dpi) / 160.0
+    }
+
+    // Inspectable metrics for unit testing scaling behavior
+    public private(set) var lastCalculatedRailWidth: CGFloat = 0
+    public private(set) var lastCalculatedSecondaryCardWidth: CGFloat = 0
+
     public override init(frame: CGRect) {
         super.init(frame: frame)
         commonInit()
@@ -93,7 +104,7 @@ public final class DpiPreviewView: UIView {
             return
         }
 
-        // Draw outer chassis background (dark carbon / brushed titanium tint)
+        // Outer chassis background (dark carbon tint)
         let outerBezel = UIBezierPath(roundedRect: rect, cornerRadius: 14)
         ctx.setFillColor(UIColor(white: 0.08, alpha: 0.95).cgColor)
         outerBezel.fill()
@@ -104,7 +115,7 @@ public final class DpiPreviewView: UIView {
         // Maintain panel aspect ratio
         let panelAspect: CGFloat = (panelWidthPx > 0 && panelHeightPx > 0)
             ? CGFloat(panelWidthPx) / CGFloat(panelHeightPx)
-            : 4.0 / 3.0
+            : 16.0 / 9.0
 
         var screenW = availW
         var screenH = screenW / panelAspect
@@ -125,13 +136,21 @@ public final class DpiPreviewView: UIView {
         ctx.setLineWidth(1.5)
         screenBezel.stroke()
 
-        // Draw Coolwalk layout inside screenRect
+        // Coolwalk layout inside screenRect
         let innerPadding: CGFloat = 4.0
         let contentRect = screenRect.insetBy(dx: innerPadding, dy: innerPadding)
 
+        // Mathematical scaling ratio: canvas points per Android dp
+        let dpToCanvas = screenW / CGFloat(max(1, virtualWidthDp))
+        let scale = densityScale
+
         let isSplit = isCoolwalkSplitScreen
-        let railWidth: CGFloat = isSplit ? min(contentRect.width * 0.12, 44.0) : 0
-        let bottomBarHeight: CGFloat = isSplit ? 0 : min(contentRect.height * 0.16, 36.0)
+
+        // In Android Auto: vertical rail is typically 64 dp; horizontal bottom bar is 56 dp
+        let railWidth: CGFloat = isSplit ? min(contentRect.width * 0.32, max(16.0, 64.0 * dpToCanvas)) : 0
+        let bottomBarHeight: CGFloat = isSplit ? 0 : min(contentRect.height * 0.28, max(16.0, 56.0 * dpToCanvas))
+
+        lastCalculatedRailWidth = isSplit ? railWidth : bottomBarHeight
 
         // Rail rect
         let railRect: CGRect
@@ -181,13 +200,19 @@ public final class DpiPreviewView: UIView {
         }
 
         // Draw Rail
-        drawNavigationRail(ctx: ctx, rect: railRect, isVertical: isSplit)
+        drawNavigationRail(ctx: ctx, rect: railRect, isVertical: isSplit, scale: scale, dpToCanvas: dpToCanvas)
 
         // Draw Cards
         if isSplit {
             let gap: CGFloat = 4.0
-            let primaryCardWidth = (cardsContainerRect.width - gap) * 0.64
-            let secondaryCardWidth = cardsContainerRect.width - gap - primaryCardWidth
+            // In Android Auto: secondary cards are typically ~340 dp wide
+            let targetSecondaryW = 340.0 * dpToCanvas
+            let maxSecondaryW = (cardsContainerRect.width - gap) * 0.45
+            let minSecondaryW = (cardsContainerRect.width - gap) * 0.20
+            let secondaryCardWidth = min(maxSecondaryW, max(minSecondaryW, targetSecondaryW))
+            let primaryCardWidth = cardsContainerRect.width - gap - secondaryCardWidth
+
+            lastCalculatedSecondaryCardWidth = secondaryCardWidth
 
             let mapRect: CGRect
             let secondaryContainerRect: CGRect
@@ -220,7 +245,7 @@ public final class DpiPreviewView: UIView {
                 )
             }
 
-            drawMapCard(ctx: ctx, rect: mapRect)
+            drawMapCard(ctx: ctx, rect: mapRect, scale: scale)
 
             let halfHeight = (secondaryContainerRect.height - gap) / 2.0
             let mediaRect = CGRect(
@@ -236,20 +261,23 @@ public final class DpiPreviewView: UIView {
                 height: halfHeight
             )
 
-            drawMediaCard(ctx: ctx, rect: mediaRect)
-            drawWidgetCard(ctx: ctx, rect: widgetRect)
+            drawMediaCard(ctx: ctx, rect: mediaRect, scale: scale)
+            drawWidgetCard(ctx: ctx, rect: widgetRect, scale: scale)
         } else {
-            drawMapCard(ctx: ctx, rect: cardsContainerRect)
+            lastCalculatedSecondaryCardWidth = 0
+            drawMapCard(ctx: ctx, rect: cardsContainerRect, scale: scale)
         }
 
-        // Status Header string
+        // Status Header string: "\(panelWidthPx)x\(panelHeightPx) @ \(dpi) DPI (\(virtualWidthDp)x\(virtualHeightDp) dp)"
         let statusText = String(
-            format: "%d×%d px  |  %d DPI  |  %d×%d dp  |  %@",
+            format: "%d×%d @ %d DPI (%d×%d dp)  |  %@",
             panelWidthPx, panelHeightPx, dpi, virtualWidthDp, virtualHeightDp,
-            isSplit ? "Coolwalk Split Screen" : "Single Screen (Phone Mode)"
+            isSplit ? "Coolwalk Split Screen" : "Single Screen (Compact)"
         )
         let font = UIFont.monospacedSystemFont(ofSize: 10, weight: .semibold)
-        let textColor = isSplit ? UIColor(red: 0.2, green: 0.85, blue: 0.5, alpha: 0.95) : UIColor(red: 0.9, green: 0.7, blue: 0.2, alpha: 0.95)
+        let textColor = isSplit
+            ? UIColor(red: 0.2, green: 0.85, blue: 0.5, alpha: 0.95)
+            : UIColor(red: 0.9, green: 0.7, blue: 0.2, alpha: 0.95)
         let attrs: [NSAttributedString.Key: Any] = [
             .font: font,
             .foregroundColor: textColor
@@ -266,8 +294,9 @@ public final class DpiPreviewView: UIView {
         ctx.restoreGState()
     }
 
-    private func drawNavigationRail(ctx: CGContext, rect: CGRect, isVertical: Bool) {
-        let railPath = UIBezierPath(roundedRect: rect, cornerRadius: 6)
+    private func drawNavigationRail(ctx: CGContext, rect: CGRect, isVertical: Bool, scale: CGFloat, dpToCanvas: CGFloat) {
+        let railCorner = max(3.0, 6.0 * scale)
+        let railPath = UIBezierPath(roundedRect: rect, cornerRadius: railCorner)
         ctx.setFillColor(UIColor(white: 0.12, alpha: 0.95).cgColor)
         railPath.fill()
 
@@ -276,9 +305,9 @@ public final class DpiPreviewView: UIView {
         if isVertical {
             // Draw 3x3 App Launcher icon at top
             let iconX = rect.midX
-            let iconY = rect.minY + min(rect.width * 0.45, 18.0)
-            let dotRadius: CGFloat = 1.6
-            let dotSpacing: CGFloat = 4.2
+            let iconY = rect.minY + max(12.0, 18.0 * scale)
+            let dotRadius: CGFloat = max(1.0, 1.6 * scale)
+            let dotSpacing: CGFloat = max(2.5, 4.2 * scale)
             for r in -1...1 {
                 for c in -1...1 {
                     let cx = iconX + CGFloat(c) * dotSpacing
@@ -288,22 +317,24 @@ public final class DpiPreviewView: UIView {
             }
 
             // Draw small home/map pill
-            let pillY = iconY + 28
-            let pillW = min(rect.width * 0.65, 20.0)
-            let pillRect = CGRect(x: rect.midX - pillW / 2.0, y: pillY, width: pillW, height: 12)
-            let pill = UIBezierPath(roundedRect: pillRect, cornerRadius: 6)
+            let pillY = iconY + max(18.0, 26.0 * scale)
+            let pillW = min(rect.width * 0.7, max(12.0, 20.0 * scale))
+            let pillH = max(8.0, 12.0 * scale)
+            let pillRect = CGRect(x: rect.midX - pillW / 2.0, y: pillY, width: pillW, height: pillH)
+            let pill = UIBezierPath(roundedRect: pillRect, cornerRadius: pillH / 2.0)
             ctx.setFillColor(UIColor(red: 0.2, green: 0.5, blue: 1.0, alpha: 0.8).cgColor)
             pill.fill()
 
-            // Draw music note circle
-            let musicY = pillY + 20
-            let musicR: CGFloat = min(rect.width * 0.3, 8.0)
+            // Draw music circle
+            let musicY = pillY + max(16.0, 22.0 * scale)
+            let musicR: CGFloat = min(rect.width * 0.35, max(5.0, 8.0 * scale))
             ctx.setFillColor(UIColor(red: 0.9, green: 0.3, blue: 0.4, alpha: 0.8).cgColor)
             ctx.fillEllipse(in: CGRect(x: rect.midX - musicR, y: musicY, width: musicR * 2, height: musicR * 2))
 
             // Time text at bottom
+            let fontSize = max(6.0, 8.0 * scale)
             let timeAttrs: [NSAttributedString.Key: Any] = [
-                .font: UIFont.monospacedDigitSystemFont(ofSize: 8, weight: .bold),
+                .font: UIFont.monospacedDigitSystemFont(ofSize: fontSize, weight: .bold),
                 .foregroundColor: UIColor.white.withAlphaComponent(0.7)
             ]
             let timeStr = "12:45"
@@ -315,9 +346,9 @@ public final class DpiPreviewView: UIView {
         } else {
             // Horizontal bottom bar
             let iconY = rect.midY
-            let dotRadius: CGFloat = 1.8
-            let dotSpacing: CGFloat = 4.5
-            let iconX = rect.minX + 24
+            let dotRadius: CGFloat = max(1.0, 1.8 * scale)
+            let dotSpacing: CGFloat = max(2.5, 4.5 * scale)
+            let iconX = rect.minX + max(16.0, 24.0 * scale)
             for r in -1...1 {
                 for c in -1...1 {
                     let cx = iconX + CGFloat(c) * dotSpacing
@@ -328,16 +359,19 @@ public final class DpiPreviewView: UIView {
 
             // Central pills
             let midX = rect.midX
-            let p1 = CGRect(x: midX - 22, y: rect.midY - 7, width: 20, height: 14)
-            let p2 = CGRect(x: midX + 2, y: rect.midY - 7, width: 20, height: 14)
+            let pillW = max(14.0, 20.0 * scale)
+            let pillH = max(10.0, 14.0 * scale)
+            let p1 = CGRect(x: midX - pillW - 2, y: rect.midY - pillH / 2.0, width: pillW, height: pillH)
+            let p2 = CGRect(x: midX + 2, y: rect.midY - pillH / 2.0, width: pillW, height: pillH)
             ctx.setFillColor(UIColor(red: 0.2, green: 0.5, blue: 1.0, alpha: 0.8).cgColor)
-            UIBezierPath(roundedRect: p1, cornerRadius: 4).fill()
+            UIBezierPath(roundedRect: p1, cornerRadius: pillH / 3.0).fill()
             ctx.setFillColor(UIColor(red: 0.9, green: 0.3, blue: 0.4, alpha: 0.8).cgColor)
-            UIBezierPath(roundedRect: p2, cornerRadius: 4).fill()
+            UIBezierPath(roundedRect: p2, cornerRadius: pillH / 3.0).fill()
 
             // Time right
+            let fontSize = max(6.0, 8.0 * scale)
             let timeAttrs: [NSAttributedString.Key: Any] = [
-                .font: UIFont.monospacedDigitSystemFont(ofSize: 8, weight: .bold),
+                .font: UIFont.monospacedDigitSystemFont(ofSize: fontSize, weight: .bold),
                 .foregroundColor: UIColor.white.withAlphaComponent(0.7)
             ]
             let timeStr = "12:45"
@@ -349,14 +383,15 @@ public final class DpiPreviewView: UIView {
         }
     }
 
-    private func drawMapCard(ctx: CGContext, rect: CGRect) {
-        let card = UIBezierPath(roundedRect: rect, cornerRadius: 6)
+    private func drawMapCard(ctx: CGContext, rect: CGRect, scale: CGFloat) {
+        let cardRadius = max(3.0, 6.0 * scale)
+        let card = UIBezierPath(roundedRect: rect, cornerRadius: cardRadius)
         ctx.setFillColor(UIColor(red: 0.1, green: 0.14, blue: 0.18, alpha: 0.95).cgColor)
         card.fill()
 
-        // Subtle roads
+        // Roads
         ctx.setStrokeColor(UIColor(white: 0.25, alpha: 0.4).cgColor)
-        ctx.setLineWidth(1.5)
+        ctx.setLineWidth(max(1.0, 1.5 * scale))
         ctx.beginPath()
         ctx.move(to: CGPoint(x: rect.minX, y: rect.minY + rect.height * 0.4))
         ctx.addLine(to: CGPoint(x: rect.maxX, y: rect.minY + rect.height * 0.55))
@@ -364,9 +399,9 @@ public final class DpiPreviewView: UIView {
         ctx.addLine(to: CGPoint(x: rect.minX + rect.width * 0.45, y: rect.maxY))
         ctx.strokePath()
 
-        // Route polyline (glowing blue)
+        // Route polyline (glowing cyan-blue)
         ctx.setStrokeColor(UIColor(red: 0.2, green: 0.6, blue: 1.0, alpha: 0.9).cgColor)
-        ctx.setLineWidth(2.5)
+        ctx.setLineWidth(max(1.5, 2.5 * scale))
         ctx.beginPath()
         ctx.move(to: CGPoint(x: rect.minX + rect.width * 0.35, y: rect.minY + rect.height * 0.8))
         ctx.addLine(to: CGPoint(x: rect.minX + rect.width * 0.4, y: rect.minY + rect.height * 0.45))
@@ -374,64 +409,73 @@ public final class DpiPreviewView: UIView {
         ctx.strokePath()
 
         // Turn banner pill
-        let bannerRect = CGRect(x: rect.minX + 6, y: rect.minY + 6, width: min(rect.width * 0.75, 110.0), height: 18)
-        let banner = UIBezierPath(roundedRect: bannerRect, cornerRadius: 4)
+        let bannerW = min(rect.width * 0.85, max(60.0, 110.0 * scale))
+        let bannerH = max(12.0, 18.0 * scale)
+        let bannerRect = CGRect(x: rect.minX + 6, y: rect.minY + 6, width: bannerW, height: bannerH)
+        let banner = UIBezierPath(roundedRect: bannerRect, cornerRadius: bannerH / 4.0)
         ctx.setFillColor(UIColor(red: 0.08, green: 0.45, blue: 0.25, alpha: 0.9).cgColor)
         banner.fill()
 
+        let bannerFontSize = max(6.0, 7.5 * scale)
         let bannerAttrs: [NSAttributedString.Key: Any] = [
-            .font: UIFont.systemFont(ofSize: 7, weight: .bold),
+            .font: UIFont.systemFont(ofSize: bannerFontSize, weight: .bold),
             .foregroundColor: UIColor.white
         ]
         (" Turn Right (200m)" as NSString).draw(
-            in: bannerRect.insetBy(dx: 4, dy: 3),
+            in: bannerRect.insetBy(dx: 4, dy: max(1.0, (bannerH - bannerFontSize - 2) / 2.0)),
             withAttributes: bannerAttrs
         )
     }
 
-    private func drawMediaCard(ctx: CGContext, rect: CGRect) {
-        let card = UIBezierPath(roundedRect: rect, cornerRadius: 6)
+    private func drawMediaCard(ctx: CGContext, rect: CGRect, scale: CGFloat) {
+        let cardRadius = max(3.0, 6.0 * scale)
+        let card = UIBezierPath(roundedRect: rect, cornerRadius: cardRadius)
         ctx.setFillColor(UIColor(red: 0.16, green: 0.12, blue: 0.18, alpha: 0.95).cgColor)
         card.fill()
 
         // Album art square
-        let artSide = min(rect.height - 12, rect.width * 0.35)
+        let artSide = min(rect.height - 8, max(14.0, 36.0 * scale))
         let artRect = CGRect(x: rect.minX + 6, y: rect.midY - artSide / 2.0, width: artSide, height: artSide)
-        let art = UIBezierPath(roundedRect: artRect, cornerRadius: 4)
+        let art = UIBezierPath(roundedRect: artRect, cornerRadius: max(2.0, 4.0 * scale))
         ctx.setFillColor(UIColor(red: 0.85, green: 0.25, blue: 0.4, alpha: 0.8).cgColor)
         art.fill()
 
         // Song title and artist placeholders
         let labelX = artRect.maxX + 6
-        let line1W = min(rect.maxX - labelX - 6, 45.0)
-        let line1 = CGRect(x: labelX, y: rect.midY - 6, width: line1W, height: 4)
-        let line2 = CGRect(x: labelX, y: rect.midY + 2, width: line1W * 0.65, height: 3)
+        let line1W = min(rect.maxX - labelX - 6, max(25.0, 45.0 * scale))
+        let line1H = max(2.0, 4.0 * scale)
+        let line2H = max(1.5, 3.0 * scale)
+        let line1 = CGRect(x: labelX, y: rect.midY - line1H - 1, width: line1W, height: line1H)
+        let line2 = CGRect(x: labelX, y: rect.midY + 2, width: line1W * 0.65, height: line2H)
 
         ctx.setFillColor(UIColor.white.withAlphaComponent(0.85).cgColor)
-        UIBezierPath(roundedRect: line1, cornerRadius: 2).fill()
+        UIBezierPath(roundedRect: line1, cornerRadius: line1H / 2.0).fill()
         ctx.setFillColor(UIColor.white.withAlphaComponent(0.45).cgColor)
-        UIBezierPath(roundedRect: line2, cornerRadius: 1.5).fill()
+        UIBezierPath(roundedRect: line2, cornerRadius: line2H / 2.0).fill()
     }
 
-    private func drawWidgetCard(ctx: CGContext, rect: CGRect) {
-        let card = UIBezierPath(roundedRect: rect, cornerRadius: 6)
+    private func drawWidgetCard(ctx: CGContext, rect: CGRect, scale: CGFloat) {
+        let cardRadius = max(3.0, 6.0 * scale)
+        let card = UIBezierPath(roundedRect: rect, cornerRadius: cardRadius)
         ctx.setFillColor(UIColor(red: 0.14, green: 0.14, blue: 0.16, alpha: 0.95).cgColor)
         card.fill()
 
-        // Subtle calendar or weather widget mock
-        let iconSide = min(rect.height - 12, 18.0)
+        // Calendar or weather widget mock
+        let iconSide = min(rect.height - 8, max(12.0, 18.0 * scale))
         let iconRect = CGRect(x: rect.minX + 6, y: rect.midY - iconSide / 2.0, width: iconSide, height: iconSide)
         ctx.setFillColor(UIColor(red: 0.95, green: 0.65, blue: 0.15, alpha: 0.85).cgColor)
         UIBezierPath(ovalIn: iconRect).fill()
 
         let textX = iconRect.maxX + 6
-        let textW = min(rect.maxX - textX - 6, 50.0)
-        let text1 = CGRect(x: textX, y: rect.midY - 5, width: textW, height: 4)
-        let text2 = CGRect(x: textX, y: rect.midY + 3, width: textW * 0.5, height: 3)
+        let textW = min(rect.maxX - textX - 6, max(30.0, 50.0 * scale))
+        let text1H = max(2.0, 4.0 * scale)
+        let text2H = max(1.5, 3.0 * scale)
+        let text1 = CGRect(x: textX, y: rect.midY - text1H - 1, width: textW, height: text1H)
+        let text2 = CGRect(x: textX, y: rect.midY + 2, width: textW * 0.5, height: text2H)
 
         ctx.setFillColor(UIColor.white.withAlphaComponent(0.8).cgColor)
-        UIBezierPath(roundedRect: text1, cornerRadius: 2).fill()
+        UIBezierPath(roundedRect: text1, cornerRadius: text1H / 2.0).fill()
         ctx.setFillColor(UIColor.white.withAlphaComponent(0.4).cgColor)
-        UIBezierPath(roundedRect: text2, cornerRadius: 1.5).fill()
+        UIBezierPath(roundedRect: text2, cornerRadius: text2H / 2.0).fill()
     }
 }

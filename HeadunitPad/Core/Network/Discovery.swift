@@ -2,9 +2,9 @@
 //  Discovery.swift
 //  HeadunitPad
 //
-//  Intelligent network discovery for Android Auto Wireless Headunit Server (port 5277)
-//  and Wireless Helper (port 5289), incorporating DiscoverySubnetPolicy,
-//  DhcpGatewayFormat, NetworkAddresses, and SameEndpointConnectPolicy.
+//  Intelligent network discovery for Android Auto Wireless Headunit Server (port 5277).
+//  Optimized for phone hotspot scenarios with iOS Local Network permission awakening,
+//  Priority 1 immediate gateway probe (<subnet>.1:5277), and fast batched subnet scanning.
 //
 
 import Foundation
@@ -25,9 +25,6 @@ public struct DiscoveredDevice: Identifiable, Equatable {
     public var displayName: String {
         if let name = name {
             return name
-        }
-        if port == Discovery.launcherPort {
-            return "Wireless Helper at \(ip)"
         }
         return "\(ip):\(port)"
     }
@@ -57,21 +54,45 @@ public final class Discovery {
     public static let headunitPort: UInt16 = 5277
     public static let launcherPort: UInt16 = 5289
 
-    private var targetPorts: [UInt16] = [Discovery.launcherPort, Discovery.headunitPort]
-    private let connectionTimeout: TimeInterval = 1.5
+    private var targetPorts: [UInt16] = [Discovery.headunitPort]
+    private static var permissionTriggerBrowser: NWBrowser?
 
     public init() {}
 
+    // MARK: - iOS Local Network Permission Trigger
+
+    /// Awakens the iOS 14+ Local Network permission dialog using a Bonjour browser.
+    public static func triggerLocalNetworkPermission() {
+        guard permissionTriggerBrowser == nil else { return }
+        let descriptor = NWBrowser.Descriptor.bonjour(type: "_aap._tcp", domain: nil)
+        let params = NWParameters()
+        let browser = NWBrowser(for: descriptor, using: params)
+        permissionTriggerBrowser = browser
+        browser.stateUpdateHandler = { state in
+            print("Discovery: Local network browser state=\(state)")
+        }
+        browser.start(queue: DispatchQueue.global(qos: .utility))
+        DispatchQueue.global().asyncAfter(deadline: .now() + 2.0) {
+            permissionTriggerBrowser?.cancel()
+            permissionTriggerBrowser = nil
+        }
+    }
+
+    // MARK: - Public Scanning API
+
     public func startScan(
-        ports: [UInt16] = [Discovery.launcherPort, Discovery.headunitPort],
+        ports: [UInt16] = [Discovery.headunitPort],
         historicalIps: [String] = []
     ) {
         guard !isScanning else { return }
-        targetPorts = ports
+        targetPorts = ports.contains(Discovery.headunitPort) ? [Discovery.headunitPort] : ports
         isScanning = true
         reportedEndpoints.removeAll()
 
         browseWorkItem?.cancel()
+
+        // Trigger local network permission awakening
+        Discovery.triggerLocalNetworkPermission()
 
         let workItem = DispatchWorkItem { [weak self] in
             self?.performDiscoverySequence(historicalIps: historicalIps)
@@ -127,8 +148,12 @@ public final class Discovery {
 
         print("Discovery: Starting discovery on \(myIp) (/24: \(subnet).*)")
 
-        // Step 1: Quick Scan (Gateways, Heuristics, Historical IPs)
+        // Priority 1: Instant Gateway Probe (<subnet>.1:5277) + Historical IPs
         var prioritySuspects: [String] = []
+        let gatewayIp = "\(subnet).1"
+        if gatewayIp != myIp {
+            prioritySuspects.append(gatewayIp)
+        }
         for hist in historicalIps {
             if hist != myIp && !prioritySuspects.contains(hist) {
                 prioritySuspects.append(hist)
@@ -140,58 +165,80 @@ public final class Discovery {
             }
         }
 
-        if !prioritySuspects.isEmpty {
-            print("Discovery: Step 1 - Quick scan of \(prioritySuspects.count) suspects: \(prioritySuspects)")
-            let gatewayGroup = DispatchGroup()
-            var foundAny = false
+        print("Discovery: Priority 1 - probing immediate suspects on 5277: \(prioritySuspects)")
+        let priorityGroup = DispatchGroup()
+        var foundPriority = false
 
-            for suspect in prioritySuspects {
-                guard isScanning else { break }
-                gatewayGroup.enter()
-                checkHost(ip: suspect) { [weak self] success, foundIP, foundPort in
-                    if success, let fIP = foundIP, let fPort = foundPort {
-                        foundAny = true
-                        self?.reportFoundService(ip: fIP, port: fPort)
-                    }
-                    gatewayGroup.leave()
+        for suspect in prioritySuspects {
+            guard isScanning else { break }
+            priorityGroup.enter()
+            probePort(ip: suspect, port: Discovery.headunitPort, timeout: 0.5) { [weak self] success, conn in
+                defer { priorityGroup.leave() }
+                if success, let conn = conn {
+                    foundPriority = true
+                    print("Discovery: Priority suspect \(suspect):\(Discovery.headunitPort) connected!")
+                    self?.storePreparedConnection(conn, ip: suspect, port: Discovery.headunitPort)
+                    self?.reportFoundService(ip: suspect, port: Discovery.headunitPort)
                 }
-            }
-
-            gatewayGroup.wait()
-
-            if foundAny {
-                print("Discovery: Suspect responded, completing quick scan")
-                finishScan()
-                return
             }
         }
 
-        // Step 2: Full /24 Subnet Deep Scan
+        _ = priorityGroup.wait(timeout: .now() + 0.6)
+
+        // If gateway .1 or historical IP connected, finish immediately!
+        if foundPriority {
+            print("Discovery: Priority suspect responded, completing discovery immediately without scanning subnet.")
+            finishScan()
+            return
+        }
+
         guard isScanning else {
             finishScan()
             return
         }
 
-        print("Discovery: Step 2 - Deep scan of entire subnet \(subnet).1..254")
-        let subnetGroup = DispatchGroup()
-
-        for i in 1...254 {
-            guard isScanning else { break }
+        // Priority 2: Deep parallel scan of remainder of /24 subnet (.2 .. .254)
+        print("Discovery: Priority 2 - Deep scan of entire subnet \(subnet).2..254 in parallel batches")
+        var candidateIps: [String] = []
+        for i in 2...254 {
             let ip = "\(subnet).\(i)"
-            if ip == myIp || prioritySuspects.contains(ip) {
-                continue
-            }
-
-            subnetGroup.enter()
-            checkHost(ip: ip) { [weak self] success, foundIP, foundPort in
-                if success, let fIP = foundIP, let fPort = foundPort {
-                    self?.reportFoundService(ip: fIP, port: fPort)
-                }
-                subnetGroup.leave()
+            if ip != myIp && !prioritySuspects.contains(ip) {
+                candidateIps.append(ip)
             }
         }
 
-        subnetGroup.wait()
+        // Batches of 28 hosts, 400ms timeout per batch
+        let batchSize = 28
+        let batches = stride(from: 0, to: candidateIps.count, by: batchSize).map {
+            Array(candidateIps[$0..<min($0 + batchSize, candidateIps.count)])
+        }
+
+        for batch in batches {
+            guard isScanning else { break }
+            let batchGroup = DispatchGroup()
+            var batchFound = false
+
+            for ip in batch {
+                guard isScanning else { break }
+                batchGroup.enter()
+                probePort(ip: ip, port: Discovery.headunitPort, timeout: 0.4) { [weak self] success, conn in
+                    defer { batchGroup.leave() }
+                    if success, let conn = conn {
+                        batchFound = true
+                        print("Discovery: Host \(ip):\(Discovery.headunitPort) responded in subnet scan")
+                        self?.storePreparedConnection(conn, ip: ip, port: Discovery.headunitPort)
+                        self?.reportFoundService(ip: ip, port: Discovery.headunitPort)
+                    }
+                }
+            }
+
+            _ = batchGroup.wait(timeout: .now() + 0.45)
+            if batchFound {
+                print("Discovery: Device found in batch, finishing scan")
+                break
+            }
+        }
+
         finishScan()
     }
 
@@ -205,8 +252,7 @@ public final class Discovery {
         reportedEndpoints.insert(ep)
         probeLock.unlock()
 
-        let name = (port == Discovery.launcherPort) ? "Wireless Helper at \(ip)" : nil
-        let device = DiscoveredDevice(ip: ip, port: port, name: name)
+        let device = DiscoveredDevice(ip: ip, port: port, name: nil)
         DispatchQueue.main.async { [weak self] in
             self?.delegate?.discoveryDidFindDevice(device)
         }
@@ -220,23 +266,25 @@ public final class Discovery {
         }
     }
 
-    // MARK: - Host Probing
+    // MARK: - Host Probing via NWConnection
 
-    private func checkHost(ip: String, completion: @escaping (Bool, String?, UInt16?) -> Void) {
+    private func probePort(
+        ip: String,
+        port: UInt16,
+        timeout: TimeInterval,
+        completion: @escaping (Bool, NWConnection?) -> Void
+    ) {
         guard isScanning else {
-            completion(false, nil, nil)
-            return
-        }
-        checkPorts(ip: ip, ports: targetPorts, completion: completion)
-    }
-
-    private func checkPorts(ip: String, ports: [UInt16], completion: @escaping (Bool, String?, UInt16?) -> Void) {
-        guard isScanning, let port = ports.first else {
-            completion(false, nil, nil)
+            completion(false, nil)
             return
         }
 
-        let endpoint = NWEndpoint.hostPort(host: NWEndpoint.Host(ip), port: NWEndpoint.Port(rawValue: port)!)
+        guard let portEndpoint = NWEndpoint.Port(rawValue: port) else {
+            completion(false, nil)
+            return
+        }
+
+        let endpoint = NWEndpoint.hostPort(host: NWEndpoint.Host(ip), port: portEndpoint)
         let parameters = NWParameters.tcp
         parameters.prohibitExpensivePaths = false
 
@@ -257,13 +305,13 @@ public final class Discovery {
                 lock.unlock()
                 connection?.cancel()
                 self?.removeActiveProbe(probeId)
-                self?.checkPorts(ip: ip, ports: Array(ports.dropFirst()), completion: completion)
+                completion(false, nil)
             } else {
                 lock.unlock()
             }
         }
 
-        queue.asyncAfter(deadline: .now() + connectionTimeout, execute: timeoutWorkItem)
+        queue.asyncAfter(deadline: .now() + timeout, execute: timeoutWorkItem)
 
         connection.stateUpdateHandler = { [weak self, weak connection] state in
             guard let self = self, let conn = connection else { return }
@@ -279,13 +327,7 @@ public final class Discovery {
                 lock.unlock()
                 timeoutWorkItem.cancel()
                 self.removeActiveProbe(probeId)
-
-                if port == Discovery.headunitPort {
-                    self.storePreparedConnection(conn, ip: ip, port: port)
-                } else {
-                    conn.cancel()
-                }
-                completion(true, ip, port)
+                completion(true, conn)
 
             case .failed, .cancelled:
                 hasCompleted = true
@@ -293,7 +335,7 @@ public final class Discovery {
                 timeoutWorkItem.cancel()
                 conn.cancel()
                 self.removeActiveProbe(probeId)
-                self.checkPorts(ip: ip, ports: Array(ports.dropFirst()), completion: completion)
+                completion(false, nil)
 
             default:
                 lock.unlock()
