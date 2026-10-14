@@ -92,7 +92,7 @@ public final class MicPacketFlowControl<T: AnyObject> {
         defer { lock.unlock() }
 
         if !open { return .closed }
-        if pending.count >= MicFlowControl.maxPendingFrames { return .overflow }
+        if pending.count >= Self.maxPendingFrames { return .overflow }
         pending.append(frame)
         pumpLocked()
         return .accepted

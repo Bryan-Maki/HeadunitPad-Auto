@@ -13,6 +13,11 @@ public final class MixerDuckingEnvelope {
     public let sampleRate: Int
     public var duckedGain: Float
 
+    private var gain: Float = 1.0
+    private var target: Float = 1.0
+    private var step: Float = 0.0
+    private var remaining: Int = 0
+
     public var currentGain: Float {
         return gain
     }

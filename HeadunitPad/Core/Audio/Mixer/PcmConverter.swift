@@ -18,6 +18,7 @@ public final class PcmConverter {
     private var phase = 0
     private var previousLeft = 0
     private var previousRight = 0
+    private var hasPrevious = false
     public var inputRate: Int = 48000
     public var inputChannels: Int = 2
     public var outputChannels: Int = 2
