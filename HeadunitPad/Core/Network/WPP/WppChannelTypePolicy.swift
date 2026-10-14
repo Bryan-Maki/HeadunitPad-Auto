@@ -10,7 +10,7 @@ import Foundation
 
 public enum WppChannelTypePolicy {
     public static func channelTypeFor(supports5Ghz: Bool) -> WifiChannelType {
-        return supports5Ghz ? .wifiChannel24Ghz5Ghz : .wifiChannel24Ghz
+        return supports5Ghz ? .channelsDualBand : .channels24GhzOnly
     }
 
     public static func defaultChannelsFor(supports5Ghz: Bool) -> [Int] {

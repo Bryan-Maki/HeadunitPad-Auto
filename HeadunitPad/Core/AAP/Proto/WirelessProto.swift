@@ -17,6 +17,10 @@ public enum WifiChannelType: Int32, CaseIterable {
     case channels24GhzOnly = 1
     case channelsDualBand = 2
     case noChannelsSupported = 3
+
+    public static let wifiChannel24Ghz5Ghz: WifiChannelType = .channelsDualBand
+    public static let wifiChannel24Ghz: WifiChannelType = .channels24GhzOnly
+    public static let wifiChannel5Ghz: WifiChannelType = .channels5GhzOnly
 }
 
 public enum SecurityMode: Int32, CaseIterable {
