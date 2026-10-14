@@ -277,7 +277,8 @@ public final class AdaptivePcmBuffer {
                 waitMs = prerollDeadlineMs
             }
 
-            if count == 0 || (!ended && (count / channels < target) && (nowMs - firstDataMs < waitMs)) {
+            let shouldWaitPreroll = (outputBurstFrames == nil) && !ended && (count / channels < target) && (nowMs - firstDataMs < waitMs)
+            if count == 0 || shouldWaitPreroll {
                 if endingFrames == 0 { return false }
                 _ = renderEnding(out: &out, offsetFrames: 0)
                 for i in 0..<cycleSamples { previousOutput[i] = out[i] }
