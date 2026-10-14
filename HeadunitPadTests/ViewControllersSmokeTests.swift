@@ -48,9 +48,13 @@ final class ViewControllersSmokeTests: XCTestCase {
         previewView.panelWidthPx = 1920
         previewView.panelHeightPx = 1080
 
+        let renderer = UIGraphicsImageRenderer(bounds: CGRect(x: 0, y: 0, width: 400, height: 300))
+
         // Test at 120 DPI (spacious, smaller dock & cards)
         previewView.dpi = 120
-        previewView.draw(CGRect(x: 0, y: 0, width: 400, height: 300))
+        _ = renderer.image { _ in
+            previewView.draw(CGRect(x: 0, y: 0, width: 400, height: 300))
+        }
         let railW120 = previewView.lastCalculatedRailWidth
         let cardW120 = previewView.lastCalculatedSecondaryCardWidth
         XCTAssertEqual(previewView.virtualWidthDp, 2560)
@@ -58,7 +62,9 @@ final class ViewControllersSmokeTests: XCTestCase {
 
         // Test at 240 DPI (dense, larger dock & cards)
         previewView.dpi = 240
-        previewView.draw(CGRect(x: 0, y: 0, width: 400, height: 300))
+        _ = renderer.image { _ in
+            previewView.draw(CGRect(x: 0, y: 0, width: 400, height: 300))
+        }
         let railW240 = previewView.lastCalculatedRailWidth
         let cardW240 = previewView.lastCalculatedSecondaryCardWidth
         XCTAssertEqual(previewView.virtualWidthDp, 1280)
@@ -72,7 +78,9 @@ final class ViewControllersSmokeTests: XCTestCase {
         previewView.panelWidthPx = 1280
         previewView.panelHeightPx = 720
         previewView.dpi = 320
-        previewView.draw(CGRect(x: 0, y: 0, width: 400, height: 300))
+        _ = renderer.image { _ in
+            previewView.draw(CGRect(x: 0, y: 0, width: 400, height: 300))
+        }
         XCTAssertEqual(previewView.virtualWidthDp, 640)
         XCTAssertFalse(previewView.isCoolwalkSplitScreen, "Should drop out of Coolwalk split screen when dp < 800")
     }

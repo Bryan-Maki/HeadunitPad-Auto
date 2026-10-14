@@ -92,7 +92,52 @@ public final class DpiPreviewView: UIView {
         layer.cornerRadius = 14
     }
 
+    @discardableResult
+    public func calculateLayoutMetrics(in rect: CGRect) -> (railWidth: CGFloat, secondaryCardWidth: CGFloat, isSplit: Bool) {
+        let pad: CGFloat = 8.0
+        let availW = rect.width - pad * 2
+        let availH = rect.height - pad * 2
+        guard availW > 40 && availH > 40 else {
+            lastCalculatedRailWidth = 0
+            lastCalculatedSecondaryCardWidth = 0
+            return (0, 0, false)
+        }
+
+        let panelAspect: CGFloat = (panelWidthPx > 0 && panelHeightPx > 0)
+            ? CGFloat(panelWidthPx) / CGFloat(panelHeightPx)
+            : 16.0 / 9.0
+
+        var screenW = availW
+        var screenH = screenW / panelAspect
+        if screenH > availH - 24 {
+            screenH = availH - 24
+            screenW = screenH * panelAspect
+        }
+
+        let innerPadding: CGFloat = 4.0
+        let contentWidth = screenW - innerPadding * 2
+        let contentHeight = screenH - innerPadding * 2
+
+        let dpToCanvas = screenW / CGFloat(max(1, virtualWidthDp))
+        let isSplit = isCoolwalkSplitScreen
+
+        let railWidth: CGFloat = isSplit ? min(contentWidth * 0.35, max(8.0, 64.0 * dpToCanvas)) : 0
+        let bottomBarHeight: CGFloat = isSplit ? 0 : min(contentHeight * 0.30, max(8.0, 56.0 * dpToCanvas))
+
+        let cardsW = contentWidth - (isSplit ? (railWidth + 3) : 0)
+        let gap: CGFloat = 4.0
+        let targetSecondaryW = 340.0 * dpToCanvas
+        let maxSecondaryW = (cardsW - gap) * 0.48
+        let secondaryCardWidth = isSplit ? min(maxSecondaryW, max(16.0, targetSecondaryW)) : 0
+
+        lastCalculatedRailWidth = isSplit ? railWidth : bottomBarHeight
+        lastCalculatedSecondaryCardWidth = secondaryCardWidth
+
+        return (lastCalculatedRailWidth, lastCalculatedSecondaryCardWidth, isSplit)
+    }
+
     public override func draw(_ rect: CGRect) {
+        _ = calculateLayoutMetrics(in: rect)
         guard let ctx = UIGraphicsGetCurrentContext() else { return }
         ctx.saveGState()
 
@@ -145,12 +190,8 @@ public final class DpiPreviewView: UIView {
         let scale = densityScale
 
         let isSplit = isCoolwalkSplitScreen
-
-        // In Android Auto: vertical rail is typically 64 dp; horizontal bottom bar is 56 dp
-        let railWidth: CGFloat = isSplit ? min(contentRect.width * 0.32, max(16.0, 64.0 * dpToCanvas)) : 0
-        let bottomBarHeight: CGFloat = isSplit ? 0 : min(contentRect.height * 0.28, max(16.0, 56.0 * dpToCanvas))
-
-        lastCalculatedRailWidth = isSplit ? railWidth : bottomBarHeight
+        let railWidth = isSplit ? lastCalculatedRailWidth : 0
+        let bottomBarHeight = isSplit ? 0 : lastCalculatedRailWidth
 
         // Rail rect
         let railRect: CGRect
@@ -205,14 +246,8 @@ public final class DpiPreviewView: UIView {
         // Draw Cards
         if isSplit {
             let gap: CGFloat = 4.0
-            // In Android Auto: secondary cards are typically ~340 dp wide
-            let targetSecondaryW = 340.0 * dpToCanvas
-            let maxSecondaryW = (cardsContainerRect.width - gap) * 0.45
-            let minSecondaryW = (cardsContainerRect.width - gap) * 0.20
-            let secondaryCardWidth = min(maxSecondaryW, max(minSecondaryW, targetSecondaryW))
+            let secondaryCardWidth = lastCalculatedSecondaryCardWidth
             let primaryCardWidth = cardsContainerRect.width - gap - secondaryCardWidth
-
-            lastCalculatedSecondaryCardWidth = secondaryCardWidth
 
             let mapRect: CGRect
             let secondaryContainerRect: CGRect
