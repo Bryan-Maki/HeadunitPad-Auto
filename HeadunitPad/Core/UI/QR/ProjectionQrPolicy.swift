@@ -99,4 +99,8 @@ public enum ProjectionQrPolicy {
             }
         }
     }
+
+    public static func isValidPairingUri(_ uri: String) -> Bool {
+        return uri.hasPrefix(ProjectionDeepLink.baseUrl) && uri.contains("?data=")
+    }
 }

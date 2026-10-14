@@ -98,4 +98,28 @@ public enum ProjectionDeepLink {
         base64 = base64.replacingOccurrences(of: "=", with: "")
         return base64
     }
+
+    public static func generateUri(
+        ssid: String,
+        passphrase: String,
+        ipAddress: String,
+        port: Int,
+        bssid: String = "00:11:22:33:44:55",
+        bluetoothMac: String = "AA:BB:CC:DD:EE:FF"
+    ) -> String {
+        let linkData = ProjectionDeepLinkData(
+            ssid: ssid,
+            bssid: bssid.lowercased(),
+            passkey: passphrase,
+            wppTcpIp: ipAddress,
+            wppTcpPort: Int32(port),
+            bluetoothMac: bluetoothMac.uppercased(),
+            securityMode: .wpa2Personal
+        )
+
+        var writer = ProtoWriter()
+        linkData.encode(to: &writer)
+        let base64 = base64Url(writer.data)
+        return "\(baseUrl)?data=\(base64)"
+    }
 }

@@ -36,4 +36,8 @@ public enum QrCodeGenerator {
 
         return UIImage(cgImage: cgImage)
     }
+
+    public static func generateQRCode(from content: String, targetSize: CGSize) -> UIImage? {
+        return generateQrCode(content: content, size: max(targetSize.width, targetSize.height))
+    }
 }
