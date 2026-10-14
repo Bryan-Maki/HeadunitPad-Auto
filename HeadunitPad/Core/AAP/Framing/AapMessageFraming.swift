@@ -18,6 +18,14 @@ public enum AapMessageFraming {
         return (flags & FLAG_BIT_LAST) != 0
     }
 
+    public static func isLast(flags: UInt8) -> Bool {
+        return isLast(flags)
+    }
+
+    public static func isLast(flags: Int) -> Bool {
+        return isLast(UInt8(flags & 0xFF))
+    }
+
     public static func carriesTotalLength(_ flags: UInt8) -> Bool {
         return carriesMessageType(flags) && !isLast(flags)
     }

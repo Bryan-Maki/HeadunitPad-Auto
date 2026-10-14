@@ -348,10 +348,10 @@ final class Phase1ScreenAndFramingTests: XCTestCase {
         var reader = ProtoReader(data: payload)
         let decoded = try UpdateUiConfigRequestProto(from: &reader)
 
-        XCTAssertEqual(decoded.uiConfig?.margins?.left, 240)
-        XCTAssertEqual(decoded.uiConfig?.margins?.top, 0)
-        XCTAssertEqual(decoded.uiConfig?.margins?.right, 240)
-        XCTAssertEqual(decoded.uiConfig?.margins?.bottom, 0)
+        XCTAssertEqual(decoded.uiConfig.margins?.left, 240)
+        XCTAssertEqual(decoded.uiConfig.margins?.top, 0)
+        XCTAssertEqual(decoded.uiConfig.margins?.right, 240)
+        XCTAssertEqual(decoded.uiConfig.margins?.bottom, 0)
     }
 
     func testAapTouchEventMessageSerialization() throws {
@@ -371,9 +371,9 @@ final class Phase1ScreenAndFramingTests: XCTestCase {
 
         XCTAssertEqual(report.timestamp, 123456789)
         XCTAssertEqual(report.touchEvent?.action, .press)
-        XCTAssertEqual(report.touchEvent?.pointerData?.count, 1)
-        XCTAssertEqual(report.touchEvent?.pointerData?.first?.x, 960)
-        XCTAssertEqual(report.touchEvent?.pointerData?.first?.y, 540)
+        XCTAssertEqual(report.touchEvent?.pointerData.count, 1)
+        XCTAssertEqual(report.touchEvent?.pointerData.first?.x, 960)
+        XCTAssertEqual(report.touchEvent?.pointerData.first?.y, 540)
     }
 
     func testServiceDiscoveryResponseSerialization() throws {

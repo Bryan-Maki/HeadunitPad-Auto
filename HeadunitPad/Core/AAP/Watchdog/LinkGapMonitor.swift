@@ -18,6 +18,7 @@ public final class LinkGapMonitor {
     public struct Report: Equatable {
         public let subject: String
         public let gapCount: Int
+        public var gaps: Int { return gapCount }
         public let deadMs: Int64
         public let longestMs: Int64
         public let windowMs: Int64

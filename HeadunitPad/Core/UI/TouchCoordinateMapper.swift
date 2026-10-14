@@ -19,7 +19,31 @@ public struct TouchCoordinate: Equatable {
     }
 }
 
-public enum TouchCoordinateMapper {
+public struct TouchCoordinateMapper: Sendable {
+    public init() {}
+
+    public func map(
+        point: CGPoint,
+        containerSize: CGSize,
+        videoSize: CGSize,
+        mode: VideoFitMode,
+        marginW: CGFloat,
+        marginH: CGFloat
+    ) -> CGPoint {
+        let coord = Self.map(
+            rawX: Float(point.x),
+            rawY: Float(point.y),
+            inputSurfaceWidth: Float(containerSize.width),
+            inputSurfaceHeight: Float(containerSize.height),
+            negotiatedWidth: Int(videoSize.width),
+            negotiatedHeight: Int(videoSize.height),
+            marginWidth: Float(marginW),
+            marginHeight: Float(marginH),
+            fitMode: mode
+        )
+        return CGPoint(x: coord.x, y: coord.y)
+    }
+
     public static func map(
         rawX: Float,
         rawY: Float,

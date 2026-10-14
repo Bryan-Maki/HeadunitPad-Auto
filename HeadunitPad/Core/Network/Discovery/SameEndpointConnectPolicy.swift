@@ -8,7 +8,23 @@
 
 import Foundation
 
-public enum SameEndpointConnectPolicy {
+public final class SameEndpointConnectPolicy {
+    public init() {}
+
+    private var activeEndpoints = Set<String>()
+
+    public func shouldConnect(endpoint: String) -> Bool {
+        return !activeEndpoints.contains(endpoint)
+    }
+
+    public func recordConnectionStarted(endpoint: String) {
+        activeEndpoints.insert(endpoint)
+    }
+
+    public func recordConnectionEnded(endpoint: String) {
+        activeEndpoints.remove(endpoint)
+    }
+
     public enum Route: Equatable {
         case adoptHeld
         case join
