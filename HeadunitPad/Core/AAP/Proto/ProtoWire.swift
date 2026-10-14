@@ -55,6 +55,10 @@ public extension ProtoEncodable {
         encode(to: &writer)
         return writer.data
     }
+
+    func encode() -> Data {
+        return serializedData()
+    }
 }
 
 // MARK: - ProtoWriter
@@ -300,7 +304,7 @@ public struct ProtoReader {
         return s
     }
 
-    public mutating func readMessage<M: ProtoDecodable>(_ type: M.Type) throws -> M {
+    public mutating func readMessage<M: ProtoDecodable>(_ type: M.Type = M.self) throws -> M {
         let subData = try readBytes()
         var subReader = ProtoReader(data: subData)
         return try M(from: &subReader)
@@ -345,3 +349,36 @@ public struct ProtoReader {
         }
     }
 }
+
+// MARK: - Compatibility & Convenience Extensions
+
+extension ProtoWriter {
+    public mutating func writeVarint(field: Int, value: UInt64) {
+        writeUInt64(fieldNumber: field, value: value)
+    }
+    public mutating func writeZigZag64(field: Int, value: Int64) {
+        writeSInt64(fieldNumber: field, value: value)
+    }
+    public mutating func writeFixed32(field: Int, value: UInt32) {
+        writeFixed32(fieldNumber: field, value: value)
+    }
+    public mutating func writeFixed64(field: Int, value: UInt64) {
+        writeFixed64(fieldNumber: field, value: value)
+    }
+    public mutating func writeString(field: Int, value: String) {
+        writeString(fieldNumber: field, value: value)
+    }
+    public mutating func writeBytes(field: Int, value: Data) {
+        writeBytes(fieldNumber: field, value: value)
+    }
+}
+
+extension ProtoReader {
+    public mutating func nextTag() throws -> (fieldNumber: Int, wireType: Int)? {
+        return try readTag()
+    }
+    public mutating func readZigZag64() throws -> Int64 {
+        return try readSInt64()
+    }
+}
+

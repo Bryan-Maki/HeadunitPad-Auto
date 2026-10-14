@@ -10,7 +10,7 @@ import Foundation
 enum NarrowBandProfilePolicy {
     static let fullFrameRate = 60
     static let cappedFrameRate = 30
-    static let cappedResolution = ResolutionPreset.r1280x720
+    static let cappedResolution = ProjectionResolution.p720
     static let max24GhzFrequencyMhz = 4000
 
     static func runsNarrow(

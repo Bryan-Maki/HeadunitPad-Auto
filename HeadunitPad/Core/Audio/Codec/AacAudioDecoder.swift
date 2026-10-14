@@ -115,13 +115,13 @@ public final class AacAudioDecoder {
             ioData.pointee.mBuffers.mData = rawBuffer
 
             if let outDesc = outDataPacketDescription {
-                let descPtr = UnsafeMutablePointer<AudioStreamPacketDescription>.allocate(capacity: 1)
-                descPtr.initialize(to: AudioStreamPacketDescription(
+                var desc = AudioStreamPacketDescription(
                     mStartOffset: 0,
                     mVariableFramesInPacket: 0,
                     mDataByteSize: UInt32(remaining)
-                ))
-                outDesc.pointee = descPtr
+                )
+                outDesc.pointee = UnsafeMutablePointer<AudioStreamPacketDescription>.allocate(capacity: 1)
+                outDesc.pointee.initialize(to: desc)
             }
 
             statePtr.pointee.bytesConsumed += remaining

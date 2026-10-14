@@ -206,6 +206,9 @@ logs/
 *.trace
 coverage/
 dist/
+logs_*.zip
+gh_cli/
 
 # 保证 Swift 源代码文件绝不被意外规则忽略
 !*.swift
+

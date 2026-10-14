@@ -53,8 +53,8 @@ public final class MicChunkAccumulator {
     ) -> Int {
         var i = 0
 
-        src.withUnsafeBytes { raw in
-            let srcPtr = raw.baseAddress!
+        return src.withUnsafeBytes { raw -> Int in
+            guard let srcPtr = raw.baseAddress else { return 0 }
 
             while i < srcLen {
                 if pending == 0 {
@@ -64,8 +64,9 @@ public final class MicChunkAccumulator {
 
                 let take = min(chunkBytes - pending, srcLen - i)
                 chunk.withUnsafeMutableBytes { chunkRaw in
-                    let chunkPtr = chunkRaw.baseAddress!
-                    memcpy(chunkPtr.advanced(by: pending), srcPtr.advanced(by: i), take)
+                    if let chunkPtr = chunkRaw.baseAddress {
+                        memcpy(chunkPtr.advanced(by: pending), srcPtr.advanced(by: i), take)
+                    }
                 }
 
                 pending += take
@@ -82,8 +83,8 @@ public final class MicChunkAccumulator {
                     }
                 }
             }
+            return 0
         }
-        return 0
     }
 
     /// Drop the partial chunk and return how many bytes were discarded.

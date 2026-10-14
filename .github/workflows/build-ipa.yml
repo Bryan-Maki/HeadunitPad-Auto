@@ -38,6 +38,7 @@ jobs:
             -workspace HeadunitPad.xcworkspace \
             -scheme HeadunitPad \
             -destination "platform=iOS Simulator,id=$SIM_ID" \
+            -continueBuildingAfterErrors YES \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY=""
