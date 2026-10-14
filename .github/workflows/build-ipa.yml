@@ -34,11 +34,11 @@ jobs:
           fi
           echo "Selected simulator ID: $SIM_ID"
           xcrun simctl boot "$SIM_ID" || true
+          defaults write com.apple.dt.Xcode ContinueBuildingAfterErrors -bool true || true
           xcodebuild test \
             -workspace HeadunitPad.xcworkspace \
             -scheme HeadunitPad \
             -destination "platform=iOS Simulator,id=$SIM_ID" \
-            -continueBuildingAfterErrors YES \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY=""
