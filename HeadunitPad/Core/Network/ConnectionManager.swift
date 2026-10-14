@@ -112,9 +112,23 @@ class ConnectionManager {
         }
         locationCapture.onLocation = { [weak self] location in
             self?.aapTransport?.sendLocationUpdate(location)
+            NightModeManager.shared.updateLocation(
+                latitude: location.coordinate.latitude,
+                longitude: location.coordinate.longitude
+            )
         }
         NowPlayingCoordinator.shared.onRemoteCommand = { [weak self] command in
             self?.sendRemoteMediaCommand(command)
+        }
+        NightModeManager.shared.onNightModeChanged = { [weak self] isNight in
+            self?.aapTransport?.sendNightMode(isNight)
+        }
+        KeymapManager.shared.onSendKey = { [weak self] keyCode, isPress in
+            self?.aapTransport?.sendKeyCode(keycode: keyCode, isPress: isPress)
+        }
+        KeymapManager.shared.onNightModeToggle = {
+            let current = NightModeManager.shared.currentNightState
+            NightModeManager.shared.preference = current ? .day : .night
         }
     }
 
@@ -503,6 +517,11 @@ extension ConnectionManager: AapTransportDelegate {
                 reachedHandshake: true,
                 renderedAnyFrame: true
             )
+
+            // Emit unrestricted driving status to unlock typing restrictions
+            transport.sendDrivingStatus(DrivingStatusPolicy.unrestricted)
+            // Emit current day/night mode
+            transport.sendNightMode(NightModeManager.shared.currentNightState)
 
             // Auto resume playback evaluation
             let nowMs = Int64(Date().timeIntervalSince1970 * 1000)

@@ -665,6 +665,37 @@ class AapTransport {
         sendKeyEvent(keyCode: keyCode, isDown: false)
     }
 
+    func sendKeyCode(keycode: Int, isPress: Bool) {
+        guard state == .running else { return }
+        let message = KeyCodeEventMessage.make(
+            timestampNs: DispatchTime.now().uptimeNanoseconds,
+            keycode: keycode,
+            isPress: isPress
+        )
+        send(message: message)
+    }
+
+    func sendScrollWheel(delta: Int) {
+        guard state == .running else { return }
+        let message = ScrollWheelEventMessage.make(
+            timestampNs: DispatchTime.now().uptimeNanoseconds,
+            delta: delta
+        )
+        send(message: message)
+    }
+
+    func sendNightMode(_ isNight: Bool) {
+        guard state == .running else { return }
+        let message = NightModeEventMessage.make(isNight: isNight)
+        send(message: message)
+    }
+
+    func sendDrivingStatus(_ status: Int32 = DrivingStatusPolicy.unrestricted) {
+        guard state == .running else { return }
+        let message = DrivingStatusEventMessage.make(status: status)
+        send(message: message)
+    }
+
     private func sendKeyEvent(keyCode: Int, isDown: Bool) {
         let key = ProtoWire.fieldVarint(1, value: UInt64(max(keyCode, 0)))
             + ProtoWire.fieldVarint(2, value: isDown ? 1 : 0)
@@ -1175,6 +1206,7 @@ class AapTransport {
     }
 
     private func handleNavigationMessage(_ message: AapMessage) {
+        _ = AapNavigation.shared.process(message: message)
         switch message.type {
         case 0x8003: // NavigationStatus.MsgType.STATUS
             let status = ProtoWire.extractFirstVarint(from: message.payload, fieldNumber: 1)
@@ -1363,7 +1395,7 @@ class AapTransport {
             fpsLimit: ProjectionSettings.effectiveFpsLimit.rawValue,
             rightHandDrive: isRhd,
             useGps: useGps,
-            useMic: true,
+            useMic: ProjectionSettings.headUnitMicEnabled,
             requestedDpi: ProjectionSettings.effectiveDpi
         )
         send(message: message)

@@ -14,21 +14,69 @@ final class VideoOnlyViewController: UIViewController {
         return view
     }()
 
+    private let navigationHud = NavigationHudView()
+
+    override var canBecomeFirstResponder: Bool {
+        return true
+    }
+
+    override var keyCommands: [UIKeyCommand]? {
+        let inputs = [
+            UIKeyCommand.inputUpArrow,
+            UIKeyCommand.inputDownArrow,
+            UIKeyCommand.inputLeftArrow,
+            UIKeyCommand.inputRightArrow,
+            UIKeyCommand.inputEscape,
+            "\r",
+            " ",
+            "\u{8}",
+            "\t"
+        ]
+        return inputs.map {
+            UIKeyCommand(input: $0, modifierFlags: [], action: #selector(handleKeyCommand(_:)))
+        }
+    }
+
+    @objc private func handleKeyCommand(_ command: UIKeyCommand) {
+        guard let input = command.input,
+              let aapCode = KeymapManager.shared.resolveAapKeyCode(for: input) else {
+            return
+        }
+        KeymapManager.shared.handleKeyEvent(aapKeyCode: aapCode, isPress: true)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            KeymapManager.shared.handleKeyEvent(aapKeyCode: aapCode, isPress: false)
+        }
+    }
+
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .black
+        becomeFirstResponder()
 
         videoRenderer.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(videoRenderer)
+
+        navigationHud.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(navigationHud)
 
         NSLayoutConstraint.activate([
             videoRenderer.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             videoRenderer.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             videoRenderer.topAnchor.constraint(equalTo: view.topAnchor),
-            videoRenderer.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+            videoRenderer.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+
+            navigationHud.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 16),
+            navigationHud.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 16),
+            navigationHud.trailingAnchor.constraint(lessThanOrEqualTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16)
         ])
 
         view.addSubview(cursorView)
+
+        AapNavigation.shared.onNavigationUpdate = { [weak self] snapshot in
+            DispatchQueue.main.async {
+                self?.navigationHud.update(with: snapshot)
+            }
+        }
 
         frameSubscriptionId = VideoFrameBus.shared.subscribe { [weak self] frame in
             self?.videoRenderer.enqueueAnnexBFrame(frame)

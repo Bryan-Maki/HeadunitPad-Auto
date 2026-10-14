@@ -15,10 +15,11 @@ public final class AapServiceDiscoveryResponseMessage {
         useGps: Bool = true,
         useMic: Bool = true,
         requestedDpi: Int = 160,
-        vehicleMake: String = "Apple",
-        vehicleModel: String = "iPad",
-        vehicleYear: String = "2024",
-        vehicleId: String = "iPad-HeadunitPad",
+        vehicleMake: String = ProjectionSettings.vehicleMake,
+        vehicleModel: String = ProjectionSettings.vehicleModel,
+        vehicleYear: String = ProjectionSettings.vehicleYear,
+        vehicleId: String = ProjectionSettings.effectiveVehicleId,
+        vehicleType: Int = ProjectionSettings.effectiveVehicleType,
         headUnitMake: String = "HeadunitPad",
         headUnitModel: String = "HeadunitPad-Auto"
     ) -> AapMessage {
@@ -157,7 +158,7 @@ public final class AapServiceDiscoveryResponseMessage {
             headUnitModel: headUnitModel,
             headUnitSoftwareBuild: "1",
             headUnitSoftwareVersion: "0.1.0",
-            vehicleType: 1 // Car
+            vehicleType: Int32(vehicleType)
         )
 
         let response = ServiceDiscoveryResponseProto(

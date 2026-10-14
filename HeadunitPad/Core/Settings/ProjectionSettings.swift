@@ -97,12 +97,64 @@ public enum ProjectionSettings {
     private static let autoResumePlaybackKey = "projection-auto-resume-playback"
     private static let videoCodecPreferenceKey = "projection-video-codec-preference"
     private static let audioCodecPreferenceKey = "projection-audio-codec-preference"
+    private static let vehicleMakeKey = "projection-vehicle-make"
+    private static let vehicleModelKey = "projection-vehicle-model"
+    private static let vehicleYearKey = "projection-vehicle-year"
+    private static let vehicleIdKey = "projection-vehicle-id"
+    private static let vehicleTypeKey = "projection-vehicle-type"
+    private static let headUnitMicEnabledKey = "projection-headunit-mic-enabled"
 
     public static let defaultDpi = 160
     public static let minDpi = 100
     public static let maxDpi = 320
 
     private static var cachedCellularSupport: Bool?
+
+    public static var vehicleMake: String {
+        get { defaults.string(forKey: vehicleMakeKey) ?? "Apple" }
+        set { defaults.set(newValue, forKey: vehicleMakeKey) }
+    }
+
+    public static var vehicleModel: String {
+        get { defaults.string(forKey: vehicleModelKey) ?? "iPad" }
+        set { defaults.set(newValue, forKey: vehicleModelKey) }
+    }
+
+    public static var vehicleYear: String {
+        get { defaults.string(forKey: vehicleYearKey) ?? "2024" }
+        set { defaults.set(newValue, forKey: vehicleYearKey) }
+    }
+
+    public static var vehicleId: String {
+        get { defaults.string(forKey: vehicleIdKey) ?? "iPad-HeadunitPad" }
+        set { defaults.set(newValue, forKey: vehicleIdKey) }
+    }
+
+    public static var vehicleType: Int {
+        get {
+            let val = defaults.integer(forKey: vehicleTypeKey)
+            return val == 0 ? VehicleTypePolicy.car : VehicleTypePolicy.sanitised(val)
+        }
+        set { defaults.set(newValue, forKey: vehicleTypeKey) }
+    }
+
+    public static var headUnitMicEnabled: Bool {
+        get {
+            if defaults.object(forKey: headUnitMicEnabledKey) == nil {
+                return true
+            }
+            return defaults.bool(forKey: headUnitMicEnabledKey)
+        }
+        set { defaults.set(newValue, forKey: headUnitMicEnabledKey) }
+    }
+
+    public static var effectiveVehicleType: Int {
+        return VehicleTypePolicy.vehicleType(selected: vehicleType, headUnitMicEnabled: headUnitMicEnabled)
+    }
+
+    public static var effectiveVehicleId: String {
+        return VehicleIdentityPolicy.vehicleId(base: vehicleId, vehicleType: effectiveVehicleType)
+    }
 
     public static var resolution: ResolutionPreset {
         get {
