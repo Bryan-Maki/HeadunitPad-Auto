@@ -14,6 +14,15 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
         guard let windowScene = scene as? UIWindowScene else { return }
 
+        // Skip loading heavy UI / hardware managers when running under XCTest
+        if NSClassFromString("XCTestCase") != nil || ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
+            let testWindow = UIWindow(windowScene: windowScene)
+            testWindow.rootViewController = UIViewController()
+            self.window = testWindow
+            testWindow.makeKeyAndVisible()
+            return
+        }
+
         let requestedActivityType = connectionOptions.userActivities.first?.activityType
             ?? session.stateRestorationActivity?.activityType
 

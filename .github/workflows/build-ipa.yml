@@ -43,6 +43,7 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY=""
           xcrun simctl boot "$SIM_ID" || true
+          xcrun simctl bootstatus "$SIM_ID" -b
           xcodebuild test-without-building \
             -workspace HeadunitPad.xcworkspace \
             -scheme HeadunitPad \
