@@ -1,6 +1,6 @@
 import Foundation
 
-nonisolated enum H264NALParser {
+enum H264NALParser {
     static func nalUnits(from data: Data) -> [Data] {
         let bytes = [UInt8](data)
         guard !bytes.isEmpty else { return [] }

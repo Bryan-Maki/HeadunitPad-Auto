@@ -198,7 +198,7 @@ public final class HeadUnitScreenConfig {
         self.announcedCanvasH = 0
     }
 
-    public var onMarginsDiverged: ((_ left: Int, _ top: Int, _ right: Int, _ bottom: Int) -> Void)?
+    public var onMarginsDivergedDetailed: ((_ left: Int, _ top: Int, _ right: Int, _ bottom: Int) -> Void)?
 
     public func checkAndNotifyMarginDivergence() {
         let currentWidthMargin = getWidthMargin()
@@ -214,7 +214,7 @@ public final class HeadUnitScreenConfig {
             let top = getTopMargin()
             let bottom = getBottomMargin()
             recordAnnouncedMargins(widthMargin: currentWidthMargin, heightMargin: currentHeightMargin)
-            onMarginsDiverged?(left, top, right, bottom)
+            onMarginsDivergedDetailed?(left, top, right, bottom)
         }
     }
 

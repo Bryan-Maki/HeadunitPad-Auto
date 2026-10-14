@@ -68,7 +68,7 @@ class ConnectionManager {
     private let wirelessHelperServer = WirelessHelperServer()
     private let wppServer = WppTcpServer()
     private let arbiter = ConnectionArbiter()
-    private let teardownGuard = TeardownGuard()
+    // TeardownGuard is used via its static methods (e.g. TeardownGuard.runThenClose(...))
     private let playbackSnapshot = ReconnectPlaybackSnapshot()
     private let microphoneCapture = MicrophoneCapture()
     private let locationCapture = LocationCapture()
@@ -220,18 +220,25 @@ class ConnectionManager {
         isUserInitiatedDisconnect = true
         autoReconnect.cancel()
 
-        teardownGuard.executeTeardown(reason: "user-disconnect") { [weak self] in
-            guard let self = self else { return }
-            NowPlayingCoordinator.shared.deactivate()
-            self.microphoneCapture.stop()
-            self.locationCapture.stop()
-            self.wirelessHelperServer.stop()
-            self.wppServer.stop()
-            self.activeConnection?.disconnect()
-            self.connectedDevice = nil
-            self.state = .disconnected
-            self.updateStatus("Ready to connect")
-        }
+        TeardownGuard.runThenClose(
+            teardown: { [weak self] in
+                guard let self = self else { return }
+                NowPlayingCoordinator.shared.deactivate()
+                self.microphoneCapture.stop()
+                self.locationCapture.stop()
+                self.wirelessHelperServer.stop()
+                self.wppServer.stop()
+                self.connectedDevice = nil
+                self.state = .disconnected
+                self.updateStatus("Ready to connect")
+            },
+            close: { [weak self] in
+                self?.activeConnection?.disconnect()
+            },
+            onError: { phase, error in
+                print("ConnectionManager: disconnect error during \(phase): \(error.localizedDescription)")
+            }
+        )
     }
 
     func send(_ data: Data) {
@@ -599,10 +606,10 @@ extension ConnectionManager: WirelessHelperServerDelegate {
 }
 
 extension ConnectionManager: WppTcpServerDelegate {
-    func wppTcpServer(_ server: WppTcpServer, didCompleteHandshakeWith clientIp: String, port: UInt16) {
-        print("ConnectionManager: WPP Handshake completed successfully with \(clientIp):\(port)")
+    func wppTcpServer(_ server: WppTcpServer, didCompleteHandshakeFor clientIp: String) {
+        print("ConnectionManager: WPP Handshake completed successfully with \(clientIp)")
         updateStatus("WPP Handshake completed with \(clientIp). Starting Android Auto...")
-        connect(to: clientIp, port: port)
+        connect(to: clientIp)
     }
 
     func wppTcpServer(_ server: WppTcpServer, didFailWith error: Error) {

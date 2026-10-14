@@ -18,7 +18,7 @@ enum TcpHandlerError: Error {
     case timeout
 }
 
-nonisolated class TcpHandler: ByteStreamConnection, @unchecked Sendable {
+class TcpHandler: ByteStreamConnection, @unchecked Sendable {
     weak var delegate: ByteStreamConnectionDelegate?
 
     private var connection: NWConnection?

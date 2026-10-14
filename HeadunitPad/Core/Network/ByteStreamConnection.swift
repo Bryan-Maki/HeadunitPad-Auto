@@ -5,13 +5,13 @@
 
 import Foundation
 
-nonisolated protocol ByteStreamConnectionDelegate: AnyObject {
+protocol ByteStreamConnectionDelegate: AnyObject {
     func byteStreamConnectionDidConnect(_ connection: ByteStreamConnection)
     func byteStreamConnection(_ connection: ByteStreamConnection, didReceive data: Data)
     func byteStreamConnection(_ connection: ByteStreamConnection, didDisconnect error: Error?)
 }
 
-nonisolated protocol ByteStreamConnection: AnyObject {
+protocol ByteStreamConnection: AnyObject {
     var delegate: ByteStreamConnectionDelegate? { get set }
     var isConnected: Bool { get }
 

@@ -28,6 +28,9 @@ public final class LinkGapMonitor {
         }
     }
 
+    public static let minGapsMedia: Int = 2
+    public static let maxDeadPercentMedia: Int = 85
+
     public let subject: String
     private let minGapsToReport: Int
     private let maxDeadPercentToReport: Int
@@ -42,12 +45,20 @@ public final class LinkGapMonitor {
 
     public init(
         subject: String = LinkGapMonitor.subjectLink,
-        minGapsToReport: Int = 1,
-        maxDeadPercentToReport: Int = 100
+        minGaps: Int = 1,
+        maxDeadPercent: Int = 100
     ) {
         self.subject = subject
-        self.minGapsToReport = minGapsToReport
-        self.maxDeadPercentToReport = maxDeadPercentToReport
+        self.minGapsToReport = minGaps
+        self.maxDeadPercentToReport = maxDeadPercent
+    }
+
+    public convenience init(
+        subject: String = LinkGapMonitor.subjectLink,
+        minGapsToReport: Int,
+        maxDeadPercentToReport: Int = 100
+    ) {
+        self.init(subject: subject, minGaps: minGapsToReport, maxDeadPercent: maxDeadPercentToReport)
     }
 
     public func onMessage(nowMs: Int64) -> Report? {

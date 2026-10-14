@@ -8,6 +8,8 @@
 
 import Foundation
 
+public typealias VideoCodecResolutionType = ControlService.MediaSinkService.VideoConfiguration.VideoCodecResolutionType
+
 public enum VideoFallbackPolicy {
     public static let fallbackIndex = 1
 
@@ -24,10 +26,10 @@ public enum VideoFallbackPolicy {
     /// Provides fallback resolution for primary resolution
     public static func fallbackFor(primary: VideoCodecResolutionType) -> VideoCodecResolutionType? {
         switch primary {
-        case .resolution1920X1080, .resolution2560X1440, .resolution3840X2160:
-            return .resolution1280X720
-        case .resolution1080X1920, .resolution1440X2560, .resolution2160X3840:
-            return .resolution720X1280
+        case ._1920x1080, ._2560x1440, ._3840x2160:
+            return ._1280x720
+        case ._1080x1920, ._1440x2560, ._2160x3840:
+            return ._720x1280
         default:
             return nil
         }
@@ -46,15 +48,15 @@ public enum VideoFallbackPolicy {
 
     public static func sizeOf(_ type: VideoCodecResolutionType) -> (width: Int, height: Int) {
         switch type {
-        case .resolution800X480: return (800, 480)
-        case .resolution1280X720: return (1280, 720)
-        case .resolution1920X1080: return (1920, 1080)
-        case .resolution2560X1440: return (2560, 1440)
-        case .resolution3840X2160: return (3840, 2160)
-        case .resolution720X1280: return (720, 1280)
-        case .resolution1080X1920: return (1080, 1920)
-        case .resolution1440X2560: return (1440, 2560)
-        case .resolution2160X3840: return (2160, 3840)
+        case ._800x480: return (800, 480)
+        case ._1280x720: return (1280, 720)
+        case ._1920x1080: return (1920, 1080)
+        case ._2560x1440: return (2560, 1440)
+        case ._3840x2160: return (3840, 2160)
+        case ._720x1280: return (720, 1280)
+        case ._1080x1920: return (1080, 1920)
+        case ._1440x2560: return (1440, 2560)
+        case ._2160x3840: return (2160, 3840)
         }
     }
 

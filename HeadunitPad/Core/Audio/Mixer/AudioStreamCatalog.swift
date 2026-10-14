@@ -7,7 +7,7 @@
 
 import Foundation
 
-public enum AudioStreamType: Int, CaseIterable, Sendable {
+public enum MixerStreamType: Int, CaseIterable, Sendable {
     case media = 0
     case guidance = 1
     case system = 2
@@ -22,7 +22,7 @@ public enum AudioStreamType: Int, CaseIterable, Sendable {
 }
 
 public enum AudioStreamCatalog {
-    public static func streamType(for channel: UInt8) -> AudioStreamType {
+    public static func streamType(for channel: UInt8) -> MixerStreamType {
         switch channel {
         case Channel.ID_AUD:
             return .media

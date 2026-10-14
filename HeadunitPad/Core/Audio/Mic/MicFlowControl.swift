@@ -15,7 +15,7 @@ public final class MicFlowControl<T: AnyObject> {
         case overflow
     }
 
-    public static let maxPendingFrames = 4
+    public static var maxPendingFrames: Int { 4 }
 
     private let lock = NSLock()
     private let dispatch: (Int64, T) -> Void

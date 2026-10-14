@@ -60,31 +60,8 @@ public enum ProjectionConnectionMode: Int, CaseIterable {
     }
 }
 
-public enum DriverPosition: Int, CaseIterable {
-    case left = 0
-    case right = 1
-
-    public var title: String {
-        switch self {
-        case .left: return "Left-Hand Drive (LHD)"
-        case .right: return "Right-Hand Drive (RHD)"
-        }
-    }
-}
-
-public enum VideoCodecPreference: Int, CaseIterable {
-    case auto = 0
-    case h264 = 1
-    case hevc = 2
-
-    public var title: String {
-        switch self {
-        case .auto: return "Auto (HEVC / H.264)"
-        case .h264: return "H.264 (AVC)"
-        case .hevc: return "HEVC (H.265)"
-        }
-    }
-}
+// DriverPosition is defined in ControlProto.swift (Int32, proto semantics).
+// VideoCodecPreference is defined in CodecTypeSelectionPolicy.swift (String, codec semantics).
 
 public enum AudioCodecPreference: Int, CaseIterable {
     case auto = 0
@@ -101,6 +78,7 @@ public enum AudioCodecPreference: Int, CaseIterable {
 }
 
 public typealias ProjectionVideoResolution = ResolutionPreset
+public typealias ProjectionResolution = ResolutionPreset
 
 public enum ProjectionSettings {
     private static let defaults = UserDefaults.standard
@@ -264,8 +242,8 @@ public enum ProjectionSettings {
 
     public static var videoCodecPreference: VideoCodecPreference {
         get {
-            let val = defaults.integer(forKey: videoCodecPreferenceKey)
-            return VideoCodecPreference(rawValue: val) ?? .auto
+            let raw = defaults.string(forKey: videoCodecPreferenceKey) ?? VideoCodecPreference.auto.rawValue
+            return VideoCodecPreference(rawValue: raw) ?? .auto
         }
         set {
             defaults.set(newValue.rawValue, forKey: videoCodecPreferenceKey)
@@ -295,6 +273,10 @@ public enum ProjectionSettings {
     public static var driverPosition: DriverPosition {
         get { rightHandDrive ? .right : .left }
         set { rightHandDrive = (newValue == .right) }
+    }
+
+    public static var driverPositionTitle: String {
+        return rightHandDrive ? "Right-Hand Drive (RHD)" : "Left-Hand Drive (LHD)"
     }
 
     public static var effectiveFpsLimit: ProjectionFpsLimit {

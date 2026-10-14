@@ -15,6 +15,12 @@ public enum ResolutionPreset: Int, CaseIterable {
     case r2560x1440 = 4
     case r3840x2160 = 5
 
+    public static let p480: ResolutionPreset = .r800x480
+    public static let p720: ResolutionPreset = .r1280x720
+    public static let p1080: ResolutionPreset = .r1920x1080
+    public static let p1440: ResolutionPreset = .r2560x1440
+    public static let p2160: ResolutionPreset = .r3840x2160
+
     public var title: String {
         switch self {
         case .auto: return "Auto"
