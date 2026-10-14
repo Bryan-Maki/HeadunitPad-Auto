@@ -50,4 +50,16 @@ public enum MicUplinkFrame {
 
         return into
     }
+
+    public static func frame(timestampUs: UInt64, pcmData: Data) -> Data {
+        var data = Data(count: 2 + 8 + pcmData.count)
+        data[0] = 0x00
+        data[1] = 0x00
+        var ts = timestampUs.bigEndian
+        withUnsafeBytes(of: &ts) { raw in
+            data.replaceSubrange(2..<10, with: raw)
+        }
+        data.replaceSubrange(10..<(10 + pcmData.count), with: pcmData)
+        return data
+    }
 }

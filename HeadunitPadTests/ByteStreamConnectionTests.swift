@@ -7,9 +7,9 @@ final class ByteStreamConnectionTests: XCTestCase {
     func testUserSelectionByebyeRequestUsesAAPControlEncoding() {
         let request = AapMessage.userSelectionByebyeRequest
 
-        XCTAssertEqual(request.channel, Channel.ID_CTR)
+        XCTAssertEqual(request.channelUInt8, Channel.ID_CTR)
         XCTAssertEqual(request.flags, AapFlags.CONTROL_MESSAGE)
-        XCTAssertEqual(request.type, AapMessageType.BYEBYE_REQUEST.rawValue)
+        XCTAssertEqual(request.typeUInt16, AapMessageType.BYEBYE_REQUEST.rawValue)
         XCTAssertEqual(request.payload, Data([0x08, 0x01]))
         XCTAssertEqual(request.toData(), Data([0x00, 0x03, 0x00, 0x04, 0x00, 0x0F, 0x08, 0x01]))
     }

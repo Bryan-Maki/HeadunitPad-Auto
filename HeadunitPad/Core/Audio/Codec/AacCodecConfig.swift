@@ -41,6 +41,34 @@ public final class AacCodecConfig: Equatable, Sendable {
         return AacCodecConfig(data: data)
     }
 
+    public struct ParsedConfig: Equatable, Sendable {
+        public let audioObjectType: Int
+        public let sampleRate: Int
+        public let channels: Int
+
+        public init(audioObjectType: Int, sampleRate: Int, channels: Int) {
+            self.audioObjectType = audioObjectType
+            self.sampleRate = sampleRate
+            self.channels = channels
+        }
+    }
+
+    public static func defaultConfig(sampleRate: Int, channels: Int) -> Data {
+        return makeDefault(sampleRate: sampleRate, channels: channels).copyBytes()
+    }
+
+    public static func parse(csd: Data) -> ParsedConfig? {
+        guard csd.count >= 2 else { return nil }
+        let b0 = Int(csd[csd.startIndex])
+        let b1 = Int(csd[csd.startIndex + 1])
+        let bits = (b0 << 8) | b1
+        let audioObjectType = (bits >> 11) & 0x1F
+        let rateIndex = (bits >> 7) & 0x0F
+        let channels = (bits >> 3) & 0x0F
+        guard rateIndex < rates.count else { return nil }
+        return ParsedConfig(audioObjectType: audioObjectType, sampleRate: rates[rateIndex], channels: channels)
+    }
+
     /// Accept the advertised AAC-LC format, without allowing CSD to change the PCM sink.
     public static func parse(data: Data, offset: Int, size: Int, sampleRate: Int, channels: Int) -> AacCodecConfig? {
         guard offset >= 0, (2...64).contains(size), offset <= data.count - size else {

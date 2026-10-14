@@ -15,10 +15,11 @@
 
 import Foundation
 
-public enum WppFramingError: Error, CustomStringConvertible {
+public enum WppFramingError: Error, Equatable, CustomStringConvertible {
     case payloadTooLarge(Int)
     case invalidHeaderSize(Int)
     case invalidType(Int)
+    case headerTooShort
 
     public var description: String {
         switch self {
@@ -28,6 +29,8 @@ public enum WppFramingError: Error, CustomStringConvertible {
             return "WPP header requires 4 bytes, got \(sz)"
         case .invalidType(let t):
             return "WPP message type \(t) exceeds uint16 maximum"
+        case .headerTooShort:
+            return "WPP frame header is too short"
         }
     }
 }
@@ -79,5 +82,22 @@ public enum WppFraming {
         let hi = Int(header[2])
         let lo = Int(header[3])
         return (hi << 8) | lo
+    }
+
+    public static func frame(type: WppMessageType, payload: Data) -> Data {
+        return (try? encodeFrame(payload: payload, type: Int(type.rawValue))) ?? Data()
+    }
+
+    public static func unframe(data: Data) throws -> (WppMessageType, Data) {
+        guard data.count >= headerSize else {
+            throw WppFramingError.headerTooShort
+        }
+        let size = try decodePayloadSize(header: data.prefix(headerSize))
+        let typeRaw = try decodeType(header: data.prefix(headerSize))
+        guard let type = WppMessageType(rawValue: Int32(typeRaw)) else {
+            throw WppFramingError.invalidType(typeRaw)
+        }
+        let payload = data.count > headerSize ? data.subdata(in: headerSize..<min(data.count, headerSize + size)) : Data()
+        return (type, payload)
     }
 }

@@ -19,4 +19,10 @@ public enum DhcpGatewayFormat {
         let b3 = (value >> 24) & 0xFF
         return "\(b0).\(b1).\(b2).\(b3)"
     }
+
+    /// Derives the standard default gateway address (.1) from an interface IP.
+    public static func gatewayAddress(forInterfaceIp ip: String) -> String? {
+        guard let subnet = DiscoverySubnetPolicy.subnetOf(ipv4: ip) else { return nil }
+        return "\(subnet).1"
+    }
 }

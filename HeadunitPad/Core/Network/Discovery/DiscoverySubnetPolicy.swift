@@ -43,4 +43,15 @@ public enum DiscoverySubnetPolicy {
         }
         return parts.prefix(3).joined(separator: ".")
     }
+
+    /// Generates candidate IPv4 host addresses in the /24 subnet for discovery sweeps.
+    public static func generateSubnetCandidates(baseIp: String, maxHosts: Int = 254) -> [String] {
+        guard let subnet = subnetOf(ipv4: baseIp) else { return [] }
+        var list: [String] = []
+        let count = min(max(1, maxHosts), 254)
+        for i in 1...count {
+            list.append("\(subnet).\(i)")
+        }
+        return list
+    }
 }

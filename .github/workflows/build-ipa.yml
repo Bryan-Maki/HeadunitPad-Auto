@@ -33,9 +33,17 @@ jobs:
             SIM_ID=$(xcrun simctl list devices available | grep -E "iPhone" | grep -E -o '[0-9A-F]{8}-([0-9A-F]{4}-){3}[0-9A-F]{12}' | tail -n 1)
           fi
           echo "Selected simulator ID: $SIM_ID"
-          xcrun simctl boot "$SIM_ID" || true
           defaults write com.apple.dt.Xcode ContinueBuildingAfterErrors -bool true || true
-          xcodebuild test \
+          xcodebuild build-for-testing \
+            -workspace HeadunitPad.xcworkspace \
+            -scheme HeadunitPad \
+            -destination "platform=iOS Simulator,id=$SIM_ID" \
+            -continueBuildingAfterErrors YES \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+          xcrun simctl boot "$SIM_ID" || true
+          xcodebuild test-without-building \
             -workspace HeadunitPad.xcworkspace \
             -scheme HeadunitPad \
             -destination "platform=iOS Simulator,id=$SIM_ID" \

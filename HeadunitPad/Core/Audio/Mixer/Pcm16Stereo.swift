@@ -22,4 +22,21 @@ public enum Pcm16Stereo {
             }
         }
     }
+
+    public static func toSamples(data: Data) -> [Int16] {
+        let count = data.count / 2
+        var samples = [Int16](repeating: 0, count: count)
+        _ = data.withUnsafeBytes { raw in
+            if let ptr = raw.baseAddress?.assumingMemoryBound(to: Int16.self) {
+                for i in 0..<count {
+                    samples[i] = ptr[i]
+                }
+            }
+        }
+        return samples
+    }
+
+    public static func toData(samples: [Int16]) -> Data {
+        return samples.withUnsafeBufferPointer { Data(buffer: $0) }
+    }
 }

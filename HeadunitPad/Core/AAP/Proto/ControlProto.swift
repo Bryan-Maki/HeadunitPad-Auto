@@ -35,6 +35,20 @@ public enum ControlMsgType: Int32, CaseIterable {
     case messageServiceDiscoveryUpdate = 26
     case messageUnexpectedMessage = 255
     case messageFramingError = 65535
+
+    public static let versionRequest = ControlMsgType.messageVersionRequest
+    public static let versionResponse = ControlMsgType.messageVersionResponse
+    public static let encapsulatedSsl = ControlMsgType.messageEncapsulatedSsl
+    public static let authComplete = ControlMsgType.messageAuthComplete
+    public static let serviceDiscoveryRequest = ControlMsgType.messageServiceDiscoveryRequest
+    public static let serviceDiscoveryResponse = ControlMsgType.messageServiceDiscoveryResponse
+    public static let channelOpenRequest = ControlMsgType.messageChannelOpenRequest
+    public static let channelOpenResponse = ControlMsgType.messageChannelOpenResponse
+    public static let channelCloseNotification = ControlMsgType.messageChannelCloseNotification
+    public static let byebyeRequest = ControlMsgType.messageByebyeRequest
+    public static let byebyeResponse = ControlMsgType.messageByebyeResponse
+    public static let pingRequest = ControlMsgType.messagePingRequest
+    public static let pingResponse = ControlMsgType.messagePingResponse
 }
 
 public enum BluetoothPairingMethod: Int32, CaseIterable {
