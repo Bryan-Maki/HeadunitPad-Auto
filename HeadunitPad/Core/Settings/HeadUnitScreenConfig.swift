@@ -62,7 +62,7 @@ public final class HeadUnitScreenConfig {
                 panelH: screenHeightPx,
                 fitMode: videoFitMode,
                 hevcSupported: true,
-                canHevcHighRes: true
+                canHevcHighRes: false
             ) ?? .r1280x720
 
             self.negotiatedResolutionType = res.protoType

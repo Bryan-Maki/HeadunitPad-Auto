@@ -267,7 +267,9 @@ public final class AdaptivePcmBuffer {
         let target = playbackTargetFrames()
         if !started {
             let waitMs: Int64
-            if isMediaSink && startupFramesPlayed == 0 {
+            if outputBurstFrames != nil {
+                waitMs = 0
+            } else if isMediaSink && startupFramesPlayed == 0 {
                 waitMs = max(prerollDeadlineMs, mediaPrerollDeadlineMs)
             } else if isMediaSink || rebanking {
                 waitMs = max(prerollDeadlineMs, Int64(target) * 1000 / Int64(sampleRate) + 50)

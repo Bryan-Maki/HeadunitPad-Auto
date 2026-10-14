@@ -15,7 +15,7 @@ public enum KeyframeCycleEscalationPolicy {
     public static let cycleCooldownMs: Int64 = 30_000
     public static let maxCyclesPerSession: Int = 3
     public static let corruptionQuietMs: Int64 = 3000
-    public static let deferForQuietLimitMs: Int64 = 15_000
+    public static let deferForQuietLimitMs: Int64 = 60_000
     public static let cycleRefundAfterQuietMs: Int64 = 300_000
     public static let maxCyclesPerDrive: Int = 8
 

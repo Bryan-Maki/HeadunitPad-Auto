@@ -166,7 +166,7 @@ public final class AapMessage: Equatable, CustomStringConvertible {
 public enum AapFlags {
     public static let CONTROL_MESSAGE: UInt8 = 3
     public static let CONTROL_RESPONSE: UInt8 = 2
-    public static let NORMAL_MESSAGE: UInt8 = 0
+    public static let NORMAL_MESSAGE: UInt8 = 3
 }
 
 public enum AapMessageType: UInt16 {

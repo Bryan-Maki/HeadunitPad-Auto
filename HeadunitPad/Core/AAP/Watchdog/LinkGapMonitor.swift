@@ -84,13 +84,14 @@ public final class LinkGapMonitor {
         }
 
         let elapsedMs = nowMs - windowStartMs
-        if elapsedMs < Self.windowMs {
+        let shouldReport = (gapCount >= minGapsToReport) || (elapsedMs >= Self.windowMs)
+        if !shouldReport {
             return nil
         }
 
         let report: Report?
         let deadPercent = elapsedMs > 0 ? Int((deadMs * 100) / elapsedMs) : 0
-        if gapCount >= minGapsToReport && deadPercent <= maxDeadPercentToReport {
+        if gapCount >= minGapsToReport && (elapsedMs < Self.windowMs || deadPercent <= maxDeadPercentToReport) {
             var interval: Double? = nil
             if gapStarts.count >= 2 {
                 let first = gapStarts.first!

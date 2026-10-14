@@ -20,7 +20,8 @@ public enum MarginStrategyPolicy {
         videoW: Int,
         videoH: Int
     ) -> Strategy {
-        if mode != .fill { return .margin }
+        if mode == .fillMargin { return .margin }
+        if mode == .fit || mode == .contain || mode == .fill { return .par }
         if panelW <= 0 || panelH <= 0 || videoW <= 0 || videoH <= 0 { return .margin }
         let derived = Int(((Float(panelW) * Float(videoH)) / (Float(panelH) * Float(videoW)) * 10000.0).rounded())
         if derived <= ProjectionGeometryPolicy.squarePixelsE4 { return .margin }
