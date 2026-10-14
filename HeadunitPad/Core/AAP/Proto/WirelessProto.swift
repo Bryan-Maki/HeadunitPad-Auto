@@ -314,8 +314,8 @@ public struct WifiVersionRequest: ProtoCodable, Equatable {
         if !supportedWifiChannels.isEmpty {
             writer.writePackedInt32(fieldNumber: 4, values: supportedWifiChannels)
         }
-        if let car = carInfo { writer.writeMessage(fieldNumber: 5, value: car) }
-        if let wpp = wppInfo { writer.writeMessage(fieldNumber: 6, value: wpp) }
+        if let car = carInfo { writer.writeMessage(fieldNumber: 5, message: car) }
+        if let wpp = wppInfo { writer.writeMessage(fieldNumber: 6, message: wpp) }
     }
 
     public init(from reader: inout ProtoReader) throws {
@@ -326,13 +326,13 @@ public struct WifiVersionRequest: ProtoCodable, Equatable {
             case 2: self.minor = try reader.readInt32()
             case 3: self.supportedWifiChannelType = WifiChannelType(rawValue: try reader.readInt32())
             case 4:
-                if w == .lengthDelimited {
+                if w == ProtoWireType.lengthDelimited {
                     self.supportedWifiChannels = try reader.readPackedInt32()
                 } else {
                     self.supportedWifiChannels.append(try reader.readInt32())
                 }
-            case 5: self.carInfo = try reader.readMessage()
-            case 6: self.wppInfo = try reader.readMessage()
+            case 5: self.carInfo = try reader.readMessage(WppCarInfo.self)
+            case 6: self.wppInfo = try reader.readMessage(WifiProjectionProtocolInfo.self)
             default: try reader.skipField(wireType: w)
             }
         }
@@ -405,7 +405,7 @@ public struct WifiVersionResponse: ProtoCodable, Equatable {
         if let serial = deviceSerial { writer.writeString(fieldNumber: 3, value: serial) }
         if let st = status { writer.writeInt32(fieldNumber: 4, value: st) }
         if let sel = selectedWifiChannelType { writer.writeInt32(fieldNumber: 5, value: sel) }
-        if let dev = deviceInfo { writer.writeMessage(fieldNumber: 6, value: dev) }
+        if let dev = deviceInfo { writer.writeMessage(fieldNumber: 6, message: dev) }
         if let tok = setupToken { writer.writeBytes(fieldNumber: 7, value: tok) }
     }
 
@@ -417,7 +417,7 @@ public struct WifiVersionResponse: ProtoCodable, Equatable {
             case 3: self.deviceSerial = try reader.readString()
             case 4: self.status = try reader.readInt32()
             case 5: self.selectedWifiChannelType = try reader.readInt32()
-            case 6: self.deviceInfo = try reader.readMessage()
+            case 6: self.deviceInfo = try reader.readMessage(WppWifiDeviceInfo.self)
             case 7: self.setupToken = try reader.readBytes()
             default: try reader.skipField(wireType: w)
             }
@@ -531,4 +531,3 @@ public struct WifiConnectionRejection: ProtoCodable, Equatable {
         }
     }
 }
-

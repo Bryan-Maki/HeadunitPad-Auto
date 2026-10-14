@@ -15,6 +15,9 @@ enum Channel {
     static let ID_AUD: UInt8 = 6    // Audio
     static let ID_AU1: UInt8 = 4    // Audio 1
     static let ID_AU2: UInt8 = 5    // Audio 2
+    static let ID_MED: UInt8 = ID_AUD // Media audio
+    static let ID_GUD: UInt8 = ID_AU1 // Guidance audio
+    static let ID_SYS: UInt8 = ID_AU2 // System audio
     static let ID_MIC: UInt8 = 7    // Microphone
     static let ID_BTH: UInt8 = 8    // Bluetooth
     static let ID_MPB: UInt8 = 9    // Media Playback
