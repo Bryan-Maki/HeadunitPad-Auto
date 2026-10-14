@@ -60,6 +60,34 @@ public enum ProjectionConnectionMode: Int, CaseIterable {
     }
 }
 
+public enum DriverPosition: Int, CaseIterable {
+    case left = 0
+    case right = 1
+
+    public var title: String {
+        switch self {
+        case .left: return "Left-Hand Drive (LHD)"
+        case .right: return "Right-Hand Drive (RHD)"
+        }
+    }
+}
+
+public enum VideoCodecPreference: Int, CaseIterable {
+    case auto = 0
+    case h264 = 1
+    case hevc = 2
+
+    public var title: String {
+        switch self {
+        case .auto: return "Auto (HEVC / H.264)"
+        case .h264: return "H.264 (AVC)"
+        case .hevc: return "HEVC (H.265)"
+        }
+    }
+}
+
+public typealias ProjectionVideoResolution = ResolutionPreset
+
 public enum ProjectionSettings {
     private static let defaults = UserDefaults.standard
 
@@ -75,6 +103,7 @@ public enum ProjectionSettings {
     private static let connectionModeKey = "projection-connection-mode"
     private static let autoReconnectKey = "projection-auto-reconnect"
     private static let autoResumePlaybackKey = "projection-auto-resume-playback"
+    private static let videoCodecPreferenceKey = "projection-video-codec-preference"
 
     public static let defaultDpi = 160
     public static let minDpi = 100
@@ -216,6 +245,58 @@ public enum ProjectionSettings {
         set {
             defaults.set(newValue, forKey: autoResumePlaybackKey)
         }
+    }
+
+    public static var videoCodecPreference: VideoCodecPreference {
+        get {
+            let val = defaults.integer(forKey: videoCodecPreferenceKey)
+            return VideoCodecPreference(rawValue: val) ?? .auto
+        }
+        set {
+            defaults.set(newValue.rawValue, forKey: videoCodecPreferenceKey)
+        }
+    }
+
+    public static var videoResolution: ResolutionPreset {
+        get { resolution }
+        set { resolution = newValue }
+    }
+
+    public static var videoFitMode: VideoFitMode {
+        get { fitMode }
+        set { fitMode = newValue }
+    }
+
+    public static var driverPosition: DriverPosition {
+        get { rightHandDrive ? .right : .left }
+        set { rightHandDrive = (newValue == .right) }
+    }
+
+    public static var effectiveFpsLimit: ProjectionFpsLimit {
+        if orientation == .portrait {
+            return .fps30
+        }
+        return fpsLimit
+    }
+
+    public static var effectiveDpi: Int {
+        return dpi
+    }
+
+    public static var effectiveVideoCodecResolutionValue: Int {
+        return resolution.codecResolutionValue
+    }
+
+    public static var effectiveVideoDimensions: (width: Int, height: Int) {
+        return resolution.dimensions
+    }
+
+    public static func resetDpiToDefault() {
+        dpi = defaultDpi
+    }
+
+    public static func availableResolutions(for orientation: ProjectionOrientation) -> [ResolutionPreset] {
+        return [.r800x480, .r1280x720, .r1920x1080, .r2560x1440, .r3840x2160]
     }
 
     public static func supportsCellularIpad() -> Bool {

@@ -101,6 +101,11 @@ class AapTransport {
     private var videoAssemblyMessageType: UInt16 = 0
     private var videoFirstFragmentAtMs: UInt64 = 0
     private var lastVideoRecoveryRequestAtMs: UInt64 = 0
+    private let focusCycleLever = FocusCycleLever()
+    private var focusCyclesUsedThisSession = 0
+    private var lastFocusCycleAtMs: Int64 = 0
+    private var lastWireCorruptionAtMs: Int64 = 0
+    private var unrepairedSinceAtMs: Int64 = 0
     private let videoAssemblyTimeoutMs: UInt64 = 1200
     private let minVideoRecoveryIntervalMs: UInt64 = 1500
     private let maxVideoAssemblyBytes = 6 * 1024 * 1024
@@ -251,6 +256,11 @@ class AapTransport {
         videoFirstFragmentAtMs = 0
         lastVideoPacketRxAtMs = 0
         lastVideoRecoveryRequestAtMs = 0
+        focusCyclesUsedThisSession = 0
+        lastFocusCycleAtMs = 0
+        lastWireCorruptionAtMs = 0
+        unrepairedSinceAtMs = 0
+        focusCycleLever.release()
         videoDiagnosticsLock.lock()
         videoPacketCount = 0
         completedVideoFrameCount = 0
@@ -1417,10 +1427,28 @@ class AapTransport {
         print("AapTransport: Sent driving status unrestricted")
     }
 
-    private func sendVideoFocusNotification(on channel: UInt8, reason: String) {
-        let message = AapVideoFocusEventMessage.make(gain: true, unsolicited: true)
+    private func sendVideoFocusNotification(on channel: UInt8, gain: Bool = true, reason: String) {
+        let message = AapVideoFocusEventMessage.make(gain: gain, unsolicited: true)
         send(message: message)
-        print("AapTransport: Sent video focus notification reason=\(reason)")
+        print("AapTransport: Sent video focus notification gain=\(gain) reason=\(reason)")
+    }
+
+    public func performVideoFocusCycle(reason: String) {
+        guard focusCycleLever.tryClaim() else {
+            print("AapTransport: Focus cycle already in flight, skipping redundant cycle")
+            return
+        }
+        focusCyclesUsedThisSession += 1
+        lastFocusCycleAtMs = Int64(uptimeMs())
+        print("AapTransport: Initiating VideoFocus release/regain cycle (reason: \(reason), cycle #\(focusCyclesUsedThisSession))")
+        sendVideoFocusNotification(on: Channel.ID_VID, gain: false, reason: "cycle-release-\(reason)")
+
+        DispatchQueue.global().asyncAfter(deadline: .now() + .milliseconds(Int(WarmRelaunchKeyframePolicy.focusCycleGapMs))) { [weak self] in
+            guard let self = self else { return }
+            self.sendVideoFocusNotification(on: Channel.ID_VID, gain: true, reason: "cycle-regain-\(reason)")
+            self.focusCycleLever.release()
+            print("AapTransport: Completed VideoFocus release/regain cycle")
+        }
     }
 
     func sendUpdateUiConfigRequest(left: Int, top: Int, right: Int, bottom: Int) {
@@ -2118,9 +2146,33 @@ private enum ProtoWire {
         videoRecoveryRequestCount += 1
         lastVideoRecoveryReason = reason
         videoDiagnosticsLock.unlock()
-        print("AapTransport: Requesting video recovery, reason=\(reason)")
-        sendMediaConfig(on: Channel.ID_VID)
-        sendVideoFocusNotification(on: Channel.ID_VID, reason: "recovery-\(reason)")
+
+        let nowInt64 = Int64(nowMs)
+        if unrepairedSinceAtMs == 0 {
+            unrepairedSinceAtMs = nowInt64
+        }
+        lastWireCorruptionAtMs = nowInt64
+
+        let action = KeyframeCycleEscalationPolicy.decide(
+            nowMs: nowInt64,
+            unrepairedSinceMs: unrepairedSinceAtMs,
+            cyclesUsedThisSession: focusCyclesUsedThisSession,
+            lastCycleMs: lastFocusCycleAtMs,
+            lastWireCorruptionMs: lastWireCorruptionAtMs
+        )
+
+        switch action {
+        case .nudge:
+            print("AapTransport: Requesting video recovery (nudge), reason=\(reason)")
+            sendMediaConfig(on: Channel.ID_VID)
+            sendVideoFocusNotification(on: Channel.ID_VID, gain: true, reason: "recovery-\(reason)")
+        case .cycleFocus:
+            print("AapTransport: Requesting video recovery (escalated cycle), reason=\(reason)")
+            performVideoFocusCycle(reason: reason)
+        case .waitForQuiet:
+            print("AapTransport: Wire corruption active, waiting for quiet before video recovery cycle")
+            sendMediaConfig(on: Channel.ID_VID)
+        }
     }
 
     private func uptimeMs() -> UInt64 {

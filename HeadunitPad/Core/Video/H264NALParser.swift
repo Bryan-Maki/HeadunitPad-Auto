@@ -53,6 +53,56 @@ nonisolated enum H264NALParser {
         return output
     }
 
+    // MARK: - Dual-Codec Parameter Sets Extraction
+
+    static func hevcParameterSets(from data: Data) -> (vps: Data?, sps: Data?, pps: Data?) {
+        let nals = nalUnits(from: data)
+        var vps: Data?
+        var sps: Data?
+        var pps: Data?
+
+        for nal in nals {
+            guard let first = nal.first else { continue }
+            let nalType = (first & 0x7E) >> 1
+            if nalType == 32 && vps == nil {
+                vps = nal
+            } else if nalType == 33 && sps == nil {
+                sps = nal
+            } else if nalType == 34 && pps == nil {
+                pps = nal
+            }
+        }
+        return (vps, sps, pps)
+    }
+
+    static func h264ParameterSets(from data: Data) -> (sps: Data?, pps: Data?) {
+        let nals = nalUnits(from: data)
+        var sps: Data?
+        var pps: Data?
+
+        for nal in nals {
+            guard let first = nal.first else { continue }
+            let nalType = first & 0x1F
+            if nalType == 7 && sps == nil {
+                sps = nal
+            } else if nalType == 8 && pps == nil {
+                pps = nal
+            }
+        }
+        return (sps, pps)
+    }
+
+    static func isKeyframe(nalUnit: Data, isHevc: Bool) -> Bool {
+        guard let first = nalUnit.first else { return false }
+        if isHevc {
+            let nalType = (first & 0x7E) >> 1
+            return (16...21).contains(nalType)
+        } else {
+            let nalType = first & 0x1F
+            return nalType == 5
+        }
+    }
+
     private static func candidateOffsets(for count: Int) -> [Int] {
         [0, 2, 8, 10].filter { $0 < count }
     }

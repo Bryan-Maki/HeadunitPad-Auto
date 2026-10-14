@@ -597,10 +597,11 @@ class MainViewController: UIViewController {
         let effectiveDpi = ProjectionSettings.effectiveDpi
         let connectionMode = ProjectionSettings.connectionMode.title
         let autoReconnect = ProjectionSettings.autoReconnect ? "On" : "Off"
+        let codec = ProjectionSettings.videoCodecPreference.title
 
         let alert = UIAlertController(
             title: "Settings",
-            message: "Changes apply on next connection.\nMode: \(connectionMode)\nAuto reconnect: \(autoReconnect)\nOrientation: \(orientation)\nResolution: \(resolution)\nFPS: \(fps)\(fps != effectiveFps ? " (effective: \(effectiveFps))" : "")\nDPI: \(dpi)\(dpi != effectiveDpi ? " (effective: \(effectiveDpi))" : "")\nFit: \(ProjectionSettings.videoFitMode.title)\nPosition: \(ProjectionSettings.driverPosition == .left ? "LHD" : "RHD")\nGPS: \(gpsSource)",
+            message: "Changes apply on next connection.\nMode: \(connectionMode)\nAuto reconnect: \(autoReconnect)\nCodec: \(codec)\nOrientation: \(orientation)\nResolution: \(resolution)\nFPS: \(fps)\(fps != effectiveFps ? " (effective: \(effectiveFps))" : "")\nDPI: \(dpi)\(dpi != effectiveDpi ? " (effective: \(effectiveDpi))" : "")\nFit: \(ProjectionSettings.videoFitMode.title)\nPosition: \(ProjectionSettings.driverPosition == .left ? "LHD" : "RHD")\nGPS: \(gpsSource)",
             preferredStyle: .actionSheet
         )
 
@@ -617,6 +618,10 @@ class MainViewController: UIViewController {
             ProjectionSettings.autoReconnect.toggle()
             self?.updateConnectButtonTitle()
             self?.presentSettingsMenu()
+        })
+
+        alert.addAction(UIAlertAction(title: "Video Codec: \(codec)", style: .default) { [weak self] _ in
+            self?.presentCodecMenu()
         })
 
         alert.addAction(UIAlertAction(title: "Display Fit Mode: \(ProjectionSettings.videoFitMode.title)", style: .default) { [weak self] _ in
@@ -752,6 +757,25 @@ class MainViewController: UIViewController {
             let title = option == ProjectionSettings.fpsLimit ? "\(option.title) (Current)" : option.title
             alert.addAction(UIAlertAction(title: title, style: .default) { [weak self] _ in
                 ProjectionSettings.fpsLimit = option
+                self?.presentSettingsMenu()
+            })
+        }
+
+        alert.addAction(UIAlertAction(title: "Back", style: .cancel) { [weak self] _ in
+            self?.presentSettingsMenu()
+        })
+
+        configurePopoverSource(for: alert)
+        present(alert, animated: true)
+    }
+
+    private func presentCodecMenu() {
+        let alert = UIAlertController(title: "Video Codec", message: "Hardware decoding preference", preferredStyle: .actionSheet)
+
+        for option in VideoCodecPreference.allCases {
+            let title = option == ProjectionSettings.videoCodecPreference ? "\(option.title) (Current)" : option.title
+            alert.addAction(UIAlertAction(title: title, style: .default) { [weak self] _ in
+                ProjectionSettings.videoCodecPreference = option
                 self?.presentSettingsMenu()
             })
         }

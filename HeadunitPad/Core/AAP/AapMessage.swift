@@ -169,6 +169,41 @@ public enum AapFlags {
     public static let NORMAL_MESSAGE: UInt8 = 0
 }
 
+public enum AapMessageType: UInt16 {
+    case VERSION_REQUEST = 1
+    case VERSION_RESPONSE = 2
+    case MESSAGE_ENCAPSULATED_SSL = 3
+    case AUTH_COMPLETE = 4
+    case SERVICE_DISCOVERY_REQUEST = 5
+    case SERVICE_DISCOVERY_RESPONSE = 6
+    case CHANNEL_OPEN_REQUEST = 7
+    case CHANNEL_OPEN_RESPONSE = 8
+    case CHANNEL_CLOSE_NOTIFICATION = 9
+    case PING_REQUEST = 11
+    case PING_RESPONSE = 12
+    case NAV_FOCUS_REQUEST = 13
+    case NAV_FOCUS_NOTIFICATION = 14
+    case BYEBYE_REQUEST = 15
+    case BYEBYE_RESPONSE = 16
+    case AUDIO_FOCUS_RESPONSE = 17
+    case AUDIO_FOCUS_REQUEST = 18
+    case AUDIO_FOCUS_NOTIFICATION = 19
+    case CAR_CONNECTED_DEVICES_REQUEST = 20
+    case CAR_CONNECTED_DEVICES_RESPONSE = 21
+    case USER_SWITCH_REQUEST = 22
+    case USER_SWITCH_RESPONSE = 25
+    case TOUCH_EVENT = 0x8001
+    case KEY_CODE_EVENT = 101
+    case VIDEO_FOCUS_REQUEST = 102
+    case VIDEO_FOCUS_ACK = 103
+    case SENSOR_EVENT = 200
+    case VIDEO_CONFIG = 300
+    case VIDEO_FRAME = 301
+    case AUDIO_CONFIG = 400
+    case AUDIO_FOCUS = 401
+    case AUDIO_FRAME = 402
+}
+
 public extension AapMessage {
     static var userSelectionByebyeRequest: AapMessage {
         AapMessage(

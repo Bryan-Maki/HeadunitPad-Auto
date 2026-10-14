@@ -58,6 +58,24 @@ public enum ResolutionPreset: Int, CaseIterable {
         case .r3840x2160: return ._3840x2160
         }
     }
+
+    public func title(for orientation: ProjectionOrientation) -> String {
+        return title
+    }
+
+    public var codecResolutionValue: Int {
+        switch self {
+        case .auto, .r1280x720: return 2
+        case .r800x480: return 1
+        case .r1920x1080: return 3
+        case .r2560x1440: return 4
+        case .r3840x2160: return 5
+        }
+    }
+
+    public var dimensions: (width: Int, height: Int) {
+        return (width: self.width, height: self.height)
+    }
 }
 
 public enum NegotiatedResolutionPolicy {

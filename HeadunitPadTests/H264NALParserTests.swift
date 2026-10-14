@@ -1,5 +1,6 @@
 import XCTest
 import Foundation
+@testable import HeadunitPad
 
 final class H264NALParserTests: XCTestCase {
     private let sps = Data([0x67, 0x42, 0x00, 0x1F])

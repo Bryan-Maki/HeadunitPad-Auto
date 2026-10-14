@@ -48,8 +48,12 @@ public final class AapServiceDiscoveryResponseMessage {
         let frameRateType: ControlService.MediaSinkService.VideoConfiguration.VideoFrameRateType =
             (fpsLimit == 30) ? ._30 : ._60
 
-        // Enforce H.265 for 1440p / 4K
-        let effectiveCodec: MediaCodecType = (negotiatedRes == ._2560x1440 || negotiatedRes == ._3840x2160)
+        // Use CodecTypeSelectionPolicy & user preference
+        let userPref = ProjectionSettings.videoCodecPreference
+        let allowsHevc = (userPref != .h264)
+        let prefersHevc = (userPref == .hevc)
+        let isHighRes = (negotiatedRes == ._2560x1440 || negotiatedRes == ._3840x2160)
+        let effectiveCodec: MediaCodecType = (prefersHevc || (isHighRes && allowsHevc))
             ? .mediaCodecVideoH265
             : .mediaCodecVideoH264Bp
 

@@ -98,6 +98,36 @@
 		F1B000000000000000000032 /* ReturnRearmPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F000000000000000000032 /* ReturnRearmPolicy.swift */; };
 		F1B000000000000000000033 /* AutoConnectAttemptPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F000000000000000000033 /* AutoConnectAttemptPolicy.swift */; };
 		F1B000000000000000000034 /* Phase2WirelessAndWatchdogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F000000000000000000034 /* Phase2WirelessAndWatchdogTests.swift */; };
+		A3B000000000000000000001 /* CodecTypeSelectionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3F000000000000000000001 /* CodecTypeSelectionPolicy.swift */; };
+		A3B000000000000000000002 /* ParameterSetInspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3F000000000000000000002 /* ParameterSetInspector.swift */; };
+		A3B000000000000000000003 /* ParameterSetTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3F000000000000000000003 /* ParameterSetTracker.swift */; };
+		A3B000000000000000000004 /* CodecConfigScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3F000000000000000000004 /* CodecConfigScanner.swift */; };
+		A3B000000000000000000005 /* CodecInputSizePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3F000000000000000000005 /* CodecInputSizePolicy.swift */; };
+		A3B000000000000000000006 /* DecoderCapabilityReport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3F000000000000000000006 /* DecoderCapabilityReport.swift */; };
+		A3B000000000000000000007 /* DecoderConfigLadder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3F000000000000000000007 /* DecoderConfigLadder.swift */; };
+		A3B000000000000000000008 /* DeviceMemoryProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3F000000000000000000008 /* DeviceMemoryProfile.swift */; };
+		A3B000000000000000000009 /* VideoFallbackPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3F000000000000000000009 /* VideoFallbackPolicy.swift */; };
+		A3B00000000000000000000A /* VideoFragmentAssembler.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3F00000000000000000000A /* VideoFragmentAssembler.swift */; };
+		A3B00000000000000000000B /* VideoKeyframeScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3F00000000000000000000B /* VideoKeyframeScanner.swift */; };
+		A3B00000000000000000000C /* KeyframeRepairTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3F00000000000000000000C /* KeyframeRepairTracker.swift */; };
+		A3B00000000000000000000D /* KeyframeCycleEscalationPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3F00000000000000000000D /* KeyframeCycleEscalationPolicy.swift */; };
+		A3B00000000000000000000E /* WarmRelaunchKeyframePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3F00000000000000000000E /* WarmRelaunchKeyframePolicy.swift */; };
+		A3B00000000000000000000F /* CorruptionConcealmentPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3F00000000000000000000F /* CorruptionConcealmentPolicy.swift */; };
+		A3B000000000000000000010 /* PictureCredibilityPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3F000000000000000000010 /* PictureCredibilityPolicy.swift */; };
+		A3B000000000000000000011 /* VideoRecoveryPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3F000000000000000000011 /* VideoRecoveryPolicy.swift */; };
+		A3B000000000000000000012 /* SurfaceRecoveryState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3F000000000000000000012 /* SurfaceRecoveryState.swift */; };
+		A3B000000000000000000013 /* FocusCycleLever.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3F000000000000000000013 /* FocusCycleLever.swift */; };
+		A3B000000000000000000014 /* VideoBackpressurePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3F000000000000000000014 /* VideoBackpressurePolicy.swift */; };
+		A3B000000000000000000015 /* VideoFeedQueuePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3F000000000000000000015 /* VideoFeedQueuePolicy.swift */; };
+		A3B000000000000000000016 /* VideoFeedThrottlePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3F000000000000000000016 /* VideoFeedThrottlePolicy.swift */; };
+		A3B000000000000000000017 /* FeedLoopPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3F000000000000000000017 /* FeedLoopPolicy.swift */; };
+		A3B000000000000000000018 /* DecodeLatencyMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3F000000000000000000018 /* DecodeLatencyMonitor.swift */; };
+		A3B000000000000000000019 /* DecoderStallCausePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3F000000000000000000019 /* DecoderStallCausePolicy.swift */; };
+		A3B00000000000000000001A /* DecoderExceptionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3F00000000000000000001A /* DecoderExceptionPolicy.swift */; };
+		A3B00000000000000000001B /* DecoderRestartPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3F00000000000000000001B /* DecoderRestartPolicy.swift */; };
+		A3B00000000000000000001C /* DecoderStopPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3F00000000000000000001C /* DecoderStopPolicy.swift */; };
+		A3B00000000000000000001D /* VideoFocusReleasePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3F00000000000000000001D /* VideoFocusReleasePolicy.swift */; };
+		A3B00000000000000000001E /* Phase3VideoAndRecoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3F00000000000000000001E /* Phase3VideoAndRecoveryTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -193,6 +223,36 @@
 		F2F000000000000000000032 /* ReturnRearmPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/AAP/Watchdog/ReturnRearmPolicy.swift; sourceTree = SOURCE_ROOT; };
 		F2F000000000000000000033 /* AutoConnectAttemptPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/AAP/Watchdog/AutoConnectAttemptPolicy.swift; sourceTree = SOURCE_ROOT; };
 		F2F000000000000000000034 /* Phase2WirelessAndWatchdogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPadTests/Phase2WirelessAndWatchdogTests.swift; sourceTree = SOURCE_ROOT; };
+		A3F000000000000000000001 /* CodecTypeSelectionPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Video/Codec/CodecTypeSelectionPolicy.swift; sourceTree = SOURCE_ROOT; };
+		A3F000000000000000000002 /* ParameterSetInspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Video/Codec/ParameterSetInspector.swift; sourceTree = SOURCE_ROOT; };
+		A3F000000000000000000003 /* ParameterSetTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Video/Codec/ParameterSetTracker.swift; sourceTree = SOURCE_ROOT; };
+		A3F000000000000000000004 /* CodecConfigScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Video/Codec/CodecConfigScanner.swift; sourceTree = SOURCE_ROOT; };
+		A3F000000000000000000005 /* CodecInputSizePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Video/Codec/CodecInputSizePolicy.swift; sourceTree = SOURCE_ROOT; };
+		A3F000000000000000000006 /* DecoderCapabilityReport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Video/Codec/DecoderCapabilityReport.swift; sourceTree = SOURCE_ROOT; };
+		A3F000000000000000000007 /* DecoderConfigLadder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Video/Codec/DecoderConfigLadder.swift; sourceTree = SOURCE_ROOT; };
+		A3F000000000000000000008 /* DeviceMemoryProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Video/Codec/DeviceMemoryProfile.swift; sourceTree = SOURCE_ROOT; };
+		A3F000000000000000000009 /* VideoFallbackPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Video/Codec/VideoFallbackPolicy.swift; sourceTree = SOURCE_ROOT; };
+		A3F00000000000000000000A /* VideoFragmentAssembler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Video/Recovery/VideoFragmentAssembler.swift; sourceTree = SOURCE_ROOT; };
+		A3F00000000000000000000B /* VideoKeyframeScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Video/Recovery/VideoKeyframeScanner.swift; sourceTree = SOURCE_ROOT; };
+		A3F00000000000000000000C /* KeyframeRepairTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Video/Recovery/KeyframeRepairTracker.swift; sourceTree = SOURCE_ROOT; };
+		A3F00000000000000000000D /* KeyframeCycleEscalationPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Video/Recovery/KeyframeCycleEscalationPolicy.swift; sourceTree = SOURCE_ROOT; };
+		A3F00000000000000000000E /* WarmRelaunchKeyframePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Video/Recovery/WarmRelaunchKeyframePolicy.swift; sourceTree = SOURCE_ROOT; };
+		A3F00000000000000000000F /* CorruptionConcealmentPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Video/Recovery/CorruptionConcealmentPolicy.swift; sourceTree = SOURCE_ROOT; };
+		A3F000000000000000000010 /* PictureCredibilityPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Video/Recovery/PictureCredibilityPolicy.swift; sourceTree = SOURCE_ROOT; };
+		A3F000000000000000000011 /* VideoRecoveryPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Video/Recovery/VideoRecoveryPolicy.swift; sourceTree = SOURCE_ROOT; };
+		A3F000000000000000000012 /* SurfaceRecoveryState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Video/Recovery/SurfaceRecoveryState.swift; sourceTree = SOURCE_ROOT; };
+		A3F000000000000000000013 /* FocusCycleLever.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Video/Recovery/FocusCycleLever.swift; sourceTree = SOURCE_ROOT; };
+		A3F000000000000000000014 /* VideoBackpressurePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Video/Recovery/VideoBackpressurePolicy.swift; sourceTree = SOURCE_ROOT; };
+		A3F000000000000000000015 /* VideoFeedQueuePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Video/Recovery/VideoFeedQueuePolicy.swift; sourceTree = SOURCE_ROOT; };
+		A3F000000000000000000016 /* VideoFeedThrottlePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Video/Recovery/VideoFeedThrottlePolicy.swift; sourceTree = SOURCE_ROOT; };
+		A3F000000000000000000017 /* FeedLoopPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Video/Recovery/FeedLoopPolicy.swift; sourceTree = SOURCE_ROOT; };
+		A3F000000000000000000018 /* DecodeLatencyMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Video/Recovery/DecodeLatencyMonitor.swift; sourceTree = SOURCE_ROOT; };
+		A3F000000000000000000019 /* DecoderStallCausePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Video/Recovery/DecoderStallCausePolicy.swift; sourceTree = SOURCE_ROOT; };
+		A3F00000000000000000001A /* DecoderExceptionPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Video/Recovery/DecoderExceptionPolicy.swift; sourceTree = SOURCE_ROOT; };
+		A3F00000000000000000001B /* DecoderRestartPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Video/Recovery/DecoderRestartPolicy.swift; sourceTree = SOURCE_ROOT; };
+		A3F00000000000000000001C /* DecoderStopPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Video/Recovery/DecoderStopPolicy.swift; sourceTree = SOURCE_ROOT; };
+		A3F00000000000000000001D /* VideoFocusReleasePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPad/Core/Video/Recovery/VideoFocusReleasePolicy.swift; sourceTree = SOURCE_ROOT; };
+		A3F00000000000000000001E /* Phase3VideoAndRecoveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadunitPadTests/Phase3VideoAndRecoveryTests.swift; sourceTree = SOURCE_ROOT; };
 		A4C8F5B6582F6D160A3B1E70 /* Pods-HeadunitPad.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-HeadunitPad.release.xcconfig"; path = "Target Support Files/Pods-HeadunitPad/Pods-HeadunitPad.release.xcconfig"; sourceTree = "<group>"; };
 		BFD3A5C41BAB9748091B8410 /* Pods_HeadunitPad.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_HeadunitPad.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		F905FD5D0DB5B38B0AFB8A40 /* Pods-HeadunitPad.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-HeadunitPad.debug.xcconfig"; path = "Target Support Files/Pods-HeadunitPad/Pods-HeadunitPad.debug.xcconfig"; sourceTree = "<group>"; };
@@ -521,6 +581,35 @@
 				F1B000000000000000000031 /* AutoResumePlaybackPolicy.swift in Sources */,
 				F1B000000000000000000032 /* ReturnRearmPolicy.swift in Sources */,
 				F1B000000000000000000033 /* AutoConnectAttemptPolicy.swift in Sources */,
+				A3B000000000000000000001 /* CodecTypeSelectionPolicy.swift in Sources */,
+				A3B000000000000000000002 /* ParameterSetInspector.swift in Sources */,
+				A3B000000000000000000003 /* ParameterSetTracker.swift in Sources */,
+				A3B000000000000000000004 /* CodecConfigScanner.swift in Sources */,
+				A3B000000000000000000005 /* CodecInputSizePolicy.swift in Sources */,
+				A3B000000000000000000006 /* DecoderCapabilityReport.swift in Sources */,
+				A3B000000000000000000007 /* DecoderConfigLadder.swift in Sources */,
+				A3B000000000000000000008 /* DeviceMemoryProfile.swift in Sources */,
+				A3B000000000000000000009 /* VideoFallbackPolicy.swift in Sources */,
+				A3B00000000000000000000A /* VideoFragmentAssembler.swift in Sources */,
+				A3B00000000000000000000B /* VideoKeyframeScanner.swift in Sources */,
+				A3B00000000000000000000C /* KeyframeRepairTracker.swift in Sources */,
+				A3B00000000000000000000D /* KeyframeCycleEscalationPolicy.swift in Sources */,
+				A3B00000000000000000000E /* WarmRelaunchKeyframePolicy.swift in Sources */,
+				A3B00000000000000000000F /* CorruptionConcealmentPolicy.swift in Sources */,
+				A3B000000000000000000010 /* PictureCredibilityPolicy.swift in Sources */,
+				A3B000000000000000000011 /* VideoRecoveryPolicy.swift in Sources */,
+				A3B000000000000000000012 /* SurfaceRecoveryState.swift in Sources */,
+				A3B000000000000000000013 /* FocusCycleLever.swift in Sources */,
+				A3B000000000000000000014 /* VideoBackpressurePolicy.swift in Sources */,
+				A3B000000000000000000015 /* VideoFeedQueuePolicy.swift in Sources */,
+				A3B000000000000000000016 /* VideoFeedThrottlePolicy.swift in Sources */,
+				A3B000000000000000000017 /* FeedLoopPolicy.swift in Sources */,
+				A3B000000000000000000018 /* DecodeLatencyMonitor.swift in Sources */,
+				A3B000000000000000000019 /* DecoderStallCausePolicy.swift in Sources */,
+				A3B00000000000000000001A /* DecoderExceptionPolicy.swift in Sources */,
+				A3B00000000000000000001B /* DecoderRestartPolicy.swift in Sources */,
+				A3B00000000000000000001C /* DecoderStopPolicy.swift in Sources */,
+				A3B00000000000000000001D /* VideoFocusReleasePolicy.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -535,6 +624,7 @@
 				D7B000000000000000000001 /* H264NALParser.swift in Sources */,
 				E1B000000000000000000021 /* Phase1ScreenAndFramingTests.swift in Sources */,
 				F1B000000000000000000034 /* Phase2WirelessAndWatchdogTests.swift in Sources */,
+				A3B00000000000000000001E /* Phase3VideoAndRecoveryTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

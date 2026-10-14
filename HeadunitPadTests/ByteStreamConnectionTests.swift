@@ -1,6 +1,7 @@
 import XCTest
 import Foundation
 import Network
+@testable import HeadunitPad
 
 final class ByteStreamConnectionTests: XCTestCase {
     func testUserSelectionByebyeRequestUsesAAPControlEncoding() {

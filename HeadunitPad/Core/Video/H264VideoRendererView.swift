@@ -1,58 +1,88 @@
+//
+//  H264VideoRendererView.swift
+//  HeadunitPad
+//
+//  VideoToolbox hardware-accelerated video renderer supporting both
+//  H.264 (AVC) and H.265 (HEVC), with dynamic parameter-set tracking,
+//  wireless packet-loss concealment, keyframe repair tracking, and margin cropping.
+//
+
 import UIKit
 import AVFoundation
 import CoreMedia
+import VideoToolbox
 
-final class H264VideoRendererView: UIView {
-    private struct RendererDiagnostics {
-        var inputFrames = 0
-        var parsedFrames = 0
-        var spsNALs = 0
-        var ppsNALs = 0
-        var idrFrames = 0
-        var formatDescriptions = 0
-        var formatFailures = 0
-        var missingConfigDrops = 0
-        var awaitingIDRDrops = 0
-        var sampleBuffers = 0
-        var sampleFailures = 0
-        var enqueuedSamples = 0
-        var notReadyDrops = 0
-        var layerFailures = 0
-        var queueDrops = 0
-        var lastNALTypes: [UInt8] = []
+public typealias VideoRendererView = H264VideoRendererView
+
+public class H264VideoRendererView: UIView {
+
+    public struct RendererDiagnostics {
+        public var inputFrames = 0
+        public var parsedFrames = 0
+        public var spsNALs = 0
+        public var ppsNALs = 0
+        public var vpsNALs = 0
+        public var idrFrames = 0
+        public var formatDescriptions = 0
+        public var formatFailures = 0
+        public var missingConfigDrops = 0
+        public var awaitingIDRDrops = 0
+        public var sampleBuffers = 0
+        public var sampleFailures = 0
+        public var enqueuedSamples = 0
+        public var notReadyDrops = 0
+        public var layerFailures = 0
+        public var queueDrops = 0
+        public var lastNALTypes: [Int] = []
+        public var activeCodec: String = "Unknown"
+        public var concealedFrames = 0
+        public var latencyReport: String = "None"
     }
 
-    var onFrameDisplayed: (() -> Void)?
+    public var onFrameDisplayed: (() -> Void)?
+    public var onKeyframeRequested: (() -> Void)?
+    public var onCorruptionDetected: ((String) -> Void)?
 
-    override class var layerClass: AnyClass { AVSampleBufferDisplayLayer.self }
+    override public class var layerClass: AnyClass { AVSampleBufferDisplayLayer.self }
 
     private var displayLayer: AVSampleBufferDisplayLayer {
         return layer as! AVSampleBufferDisplayLayer
     }
 
+    public private(set) var pinnedCodec: VideoCodecType?
+
     private var formatDescription: CMVideoFormatDescription?
+    private var vps: Data?
     private var sps: Data?
     private var pps: Data?
     private var frameIndex: Int64 = 0
     private var notReadyStreak = 0
+
     private let processQueue = DispatchQueue(label: "com.headunitpad.video.process", qos: .userInteractive)
     private let frameQueueLock = NSLock()
     private var pendingFrames: [Data] = []
     private var isProcessingFrame = false
+
     private let maxPendingFrames = 4
-    // Parameter sets arrive once per session, so a backlog of frames the decoder
-    // still needs is allowed to grow well past the normal cap before anything goes.
     private let maxPendingEssentialFrames = 12
+
     private var hasDecodedKeyframe = false
     private let diagnosticsLock = NSLock()
     private var diagnostics = RendererDiagnostics()
 
-    override init(frame: CGRect) {
+    // Recovery, concealment, and latency monitors
+    private let keyframeRepairTracker = KeyframeRepairTracker()
+    private let latencyMonitor = DecodeLatencyMonitor()
+    private var concealmentState: CorruptionConcealmentPolicy.State = .armed
+    private var concealmentWindowOpenedMs: Int64 = 0
+    private var sessionHasRendered: Bool = false
+
+    override public init(frame: CGRect) {
         super.init(frame: frame)
         commonInit()
     }
 
-    required init?(coder: NSCoder) {
+    required public init?(coder: NSCoder) {
         super.init(coder: coder)
         commonInit()
     }
@@ -63,18 +93,18 @@ final class H264VideoRendererView: UIView {
         applyGeometry()
     }
 
-    override func layoutSubviews() {
+    override public func layoutSubviews() {
         super.layoutSubviews()
         applyGeometry()
     }
 
-    func updateGeometry() {
+    public func updateGeometry() {
         DispatchQueue.main.async { [weak self] in
             self?.applyGeometry()
         }
     }
 
-    func applyGeometry() {
+    public func applyGeometry() {
         let screenConfig = HeadUnitScreenConfig.shared
         let fitMode = screenConfig.videoFitMode
         let videoW = screenConfig.getNegotiatedWidth()
@@ -125,22 +155,31 @@ final class H264VideoRendererView: UIView {
         CATransaction.commit()
     }
 
-    func reset() {
+    public func reset() {
         diagnosticsLock.lock()
         diagnostics = RendererDiagnostics()
         diagnosticsLock.unlock()
+
         frameQueueLock.lock()
         pendingFrames.removeAll()
         isProcessingFrame = false
         frameQueueLock.unlock()
 
+        keyframeRepairTracker.reset()
+        latencyMonitor.reset()
+        concealmentState = .armed
+        concealmentWindowOpenedMs = 0
+        sessionHasRendered = false
+
         processQueue.async { [weak self] in
             guard let self = self else { return }
             self.frameIndex = 0
+            self.vps = nil
             self.sps = nil
             self.pps = nil
             self.formatDescription = nil
             self.hasDecodedKeyframe = false
+            self.pinnedCodec = nil
         }
 
         DispatchQueue.main.async { [weak self] in
@@ -150,30 +189,54 @@ final class H264VideoRendererView: UIView {
         }
     }
 
-    func enqueueAnnexBFrame(_ frame: Data) {
+    public func enqueueAnnexBFrame(_ frame: Data) {
         guard !frame.isEmpty else { return }
         updateDiagnostics { $0.inputFrames += 1 }
         enqueueFrameForProcessing(frame)
     }
 
-    func diagnosticLines() -> [String] {
+    public func reportCorruption(reason: String) {
+        onCorruptionDetected?(reason)
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let outcome = CorruptionConcealmentPolicy.next(
+            nowMs: nowMs,
+            state: concealmentState,
+            windowOpenedMs: concealmentWindowOpenedMs,
+            corruptionReported: true,
+            keyframeRepaired: false,
+            sessionHasRendered: sessionHasRendered
+        )
+        if outcome == .open {
+            concealmentState = .concealing
+            concealmentWindowOpenedMs = nowMs
+        }
+        onKeyframeRequested?()
+    }
+
+    public func diagnosticLines() -> [String] {
         diagnosticsLock.lock()
         let snapshot = diagnostics
         diagnosticsLock.unlock()
+
         let nalTypes = snapshot.lastNALTypes.isEmpty
             ? "None"
             : snapshot.lastNALTypes.map(String.init).joined(separator: ",")
+
+        let latencyStr = latencyMonitor.report()?.description ?? snapshot.latencyReport
+
         return [
+            "Renderer active codec: \(snapshot.activeCodec)",
             "Renderer input frames: \(snapshot.inputFrames)",
             "Renderer parsed frames: \(snapshot.parsedFrames)",
-            "Renderer SPS/PPS NALs: \(snapshot.spsNALs)/\(snapshot.ppsNALs)",
-            "Renderer IDR frames: \(snapshot.idrFrames)",
+            "Renderer VPS/SPS/PPS NALs: \(snapshot.vpsNALs)/\(snapshot.spsNALs)/\(snapshot.ppsNALs)",
+            "Renderer IDR/IRAP frames: \(snapshot.idrFrames)",
             "Renderer format descriptions/failures: \(snapshot.formatDescriptions)/\(snapshot.formatFailures)",
             "Renderer drops missing config/awaiting IDR: \(snapshot.missingConfigDrops)/\(snapshot.awaitingIDRDrops)",
             "Renderer sample buffers/failures: \(snapshot.sampleBuffers)/\(snapshot.sampleFailures)",
             "Renderer enqueued/not-ready/layer failures: \(snapshot.enqueuedSamples)/\(snapshot.notReadyDrops)/\(snapshot.layerFailures)",
-            "Renderer queue drops: \(snapshot.queueDrops)",
+            "Renderer queue drops/concealed: \(snapshot.queueDrops)/\(snapshot.concealedFrames)",
             "Renderer last NAL types: \(nalTypes)",
+            "Renderer latency: \(latencyStr)",
             "Renderer display status: \(displayStatusDescription())",
             "Renderer display error: \(displayLayer.error?.localizedDescription ?? "None")",
         ]
@@ -183,7 +246,11 @@ final class H264VideoRendererView: UIView {
         var droppedFrames = 0
 
         frameQueueLock.lock()
-        if pendingFrames.count >= maxPendingFrames {
+        let fps = ProjectionSettings.fpsLimit.rawValue == 1 ? 60 : 30
+        let capacity = VideoFeedQueuePolicy.capacityFor(fpsLimit: fps)
+        let dynamicMax = min(capacity, maxPendingFrames)
+
+        if pendingFrames.count >= dynamicMax {
             if let dropIndex = pendingFrames.firstIndex(where: { !isEssentialFrame($0) }) {
                 pendingFrames.remove(at: dropIndex)
                 droppedFrames = 1
@@ -228,66 +295,151 @@ final class H264VideoRendererView: UIView {
     }
 
     private func processSingleFrame(_ frame: Data) {
+        let startTime = CFAbsoluteTimeGetCurrent()
         let nalUnits = H264NALParser.nalUnits(from: frame)
         guard !nalUnits.isEmpty else { return }
 
-        let nalTypes = nalUnits.compactMap { $0.first.map { $0 & 0x1F } }
-        updateDiagnostics {
-            $0.parsedFrames += 1
-            $0.lastNALTypes = nalTypes
-            $0.spsNALs += nalTypes.filter { $0 == 7 }.count
-            $0.ppsNALs += nalTypes.filter { $0 == 8 }.count
+        // Classify codec from NAL headers or config
+        let isHevcStream = detectHevc(from: nalUnits)
+        let isHevc = (pinnedCodec == .hevc) || isHevcStream
+
+        if pinnedCodec == nil {
+            pinnedCodec = isHevc ? .hevc : .h264
+            updateDiagnostics { $0.activeCodec = isHevc ? "HEVC (H.265)" : "H.264 (AVC)" }
         }
 
-        let hasIDR = nalTypes.contains(5)
-        if hasIDR {
-            updateDiagnostics { $0.idrFrames += 1 }
-        }
+        // Scan parameter sets and keyframe status
+        var extractedVPS: Data?
+        var extractedSPS: Data?
+        var extractedPPS: Data?
+        var nalTypeInts: [Int] = []
 
-        for nal in nalUnits {
-            guard let header = nal.first else { continue }
-            let nalType = header & 0x1F
-            if nalType == 7 { sps = nal }
-            if nalType == 8 { pps = nal }
-        }
-
-        if formatDescription == nil, let sps, let pps {
-            if let desc = createFormatDescription(sps: sps, pps: pps) {
-                formatDescription = desc
-                updateDiagnostics { $0.formatDescriptions += 1 }
-            } else {
-                updateDiagnostics { $0.formatFailures += 1 }
+        if isHevc {
+            for nal in nalUnits {
+                guard let first = nal.first else { continue }
+                let nalType = Int((first & 0x7E) >> 1)
+                nalTypeInts.append(nalType)
+                if nalType == 32 { extractedVPS = nal }
+                if nalType == 33 { extractedSPS = nal }
+                if nalType == 34 { extractedPPS = nal }
+            }
+        } else {
+            for nal in nalUnits {
+                guard let first = nal.first else { continue }
+                let nalType = Int(first & 0x1F)
+                nalTypeInts.append(nalType)
+                if nalType == 7 { extractedSPS = nal }
+                if nalType == 8 { extractedPPS = nal }
             }
         }
 
-        guard let formatDescription else {
+        let isKeyframe = VideoKeyframeScanner.containsKeyframe(data: frame, isHevc: isHevc)
+
+        updateDiagnostics {
+            $0.parsedFrames += 1
+            $0.lastNALTypes = nalTypeInts
+            if isHevc {
+                $0.vpsNALs += nalTypeInts.filter { $0 == 32 }.count
+                $0.spsNALs += nalTypeInts.filter { $0 == 33 }.count
+                $0.ppsNALs += nalTypeInts.filter { $0 == 34 }.count
+            } else {
+                $0.spsNALs += nalTypeInts.filter { $0 == 7 }.count
+                $0.ppsNALs += nalTypeInts.filter { $0 == 8 }.count
+            }
+            if isKeyframe {
+                $0.idrFrames += 1
+            }
+        }
+
+        if let v = extractedVPS { self.vps = v }
+        if let s = extractedSPS { self.sps = s }
+        if let p = extractedPPS { self.pps = p }
+
+        // Build format description when parameter sets are ready
+        if formatDescription == nil {
+            if isHevc, let v = vps, let s = sps, let p = pps {
+                if let desc = createHevcFormatDescription(vps: v, sps: s, pps: p) {
+                    formatDescription = desc
+                    updateDiagnostics { $0.formatDescriptions += 1 }
+                } else {
+                    updateDiagnostics { $0.formatFailures += 1 }
+                }
+            } else if !isHevc, let s = sps, let p = pps {
+                if let desc = createH264FormatDescription(sps: s, pps: p) {
+                    formatDescription = desc
+                    updateDiagnostics { $0.formatDescriptions += 1 }
+                } else {
+                    updateDiagnostics { $0.formatFailures += 1 }
+                }
+            }
+        }
+
+        guard let formatDesc = formatDescription else {
             updateDiagnostics { $0.missingConfigDrops += 1 }
             return
         }
 
-        // Drop predictive frames until first keyframe to avoid startup block artifacts.
+        // Drop predictive frames until first keyframe arrives
         if !hasDecodedKeyframe {
-            guard hasIDR else {
+            guard isKeyframe else {
                 updateDiagnostics { $0.awaitingIDRDrops += 1 }
                 return
             }
             hasDecodedKeyframe = true
         }
 
-        let avccData = makeAVCCSample(from: nalUnits)
-        guard !avccData.isEmpty else { return }
-        guard let sampleBuffer = makeSampleBuffer(data: avccData, formatDescription: formatDescription) else {
+        if isKeyframe {
+            keyframeRepairTracker.onKeyframeFed(ptsUs: frameIndex)
+        }
+
+        // Check corruption concealment policy
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let repairConfirmed = isKeyframe && keyframeRepairTracker.keyframeDecoded
+        let outcome = CorruptionConcealmentPolicy.next(
+            nowMs: nowMs,
+            state: concealmentState,
+            windowOpenedMs: concealmentWindowOpenedMs,
+            corruptionReported: false,
+            keyframeRepaired: repairConfirmed,
+            sessionHasRendered: sessionHasRendered
+        )
+
+        switch outcome {
+        case .closeRepaired, .rearm:
+            concealmentState = .armed
+        case .closeExpired:
+            concealmentState = .disarmed
+        case .conceal:
+            updateDiagnostics { $0.concealedFrames += 1 }
+            return
+        case .open:
+            concealmentState = .concealing
+            concealmentWindowOpenedMs = nowMs
+            updateDiagnostics { $0.concealedFrames += 1 }
+            return
+        case .show:
+            break
+        }
+
+        // Package into AVCC / HVCC 4-byte length prefix sample buffer
+        let lengthSampleData = makeLengthPrefixedSample(from: nalUnits)
+        guard !lengthSampleData.isEmpty else { return }
+
+        guard let sampleBuffer = makeSampleBuffer(data: lengthSampleData, formatDescription: formatDesc) else {
             updateDiagnostics { $0.sampleFailures += 1 }
             return
         }
         updateDiagnostics { $0.sampleBuffers += 1 }
+
+        let currentPts = frameIndex
+        let elapsedUs = Int64((CFAbsoluteTimeGetCurrent() - startTime) * 1_000_000)
+        latencyMonitor.onFrameDecoded(latencyUs: elapsedUs)
 
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
 
             if self.displayLayer.status == .failed {
                 self.updateDiagnostics { $0.layerFailures += 1 }
-                // Full reset helps recover from persistent AVSampleBufferDisplayLayer failures.
                 self.displayLayer.flushAndRemoveImage()
                 self.processQueue.async {
                     self.formatDescription = nil
@@ -318,36 +470,51 @@ final class H264VideoRendererView: UIView {
 
             self.notReadyStreak = 0
             self.displayLayer.enqueue(sampleBuffer)
+            self.sessionHasRendered = true
+            _ = self.keyframeRepairTracker.onFrameRendered(ptsUs: currentPts)
+
             self.updateDiagnostics { $0.enqueuedSamples += 1 }
             self.onFrameDisplayed?()
         }
     }
 
-    /// Frames carrying parameter sets or a keyframe must survive queue pressure.
-    /// The stream sends SPS/PPS once, so dropping that frame costs the decoder its
-    /// only chance to build a format description and every later frame is wasted.
-    private func isEssentialFrame(_ frame: Data) -> Bool {
-        let nalUnits = H264NALParser.nalUnits(from: frame)
+    private func detectHevc(from nalUnits: [Data]) -> Bool {
+        if ProjectionSettings.videoCodecPreference == .h264 { return false }
+        if ProjectionSettings.videoCodecPreference == .hevc { return true }
+
         for nal in nalUnits {
-            guard let header = nal.first else { continue }
-            switch header & 0x1F {
-            case 5, 7, 8:
+            guard let first = nal.first else { continue }
+            let hevcType = (first & 0x7E) >> 1
+            if hevcType == 32 || hevcType == 33 || hevcType == 34 {
                 return true
-            default:
-                continue
             }
         }
         return false
     }
 
-    private func createFormatDescription(sps: Data, pps: Data) -> CMVideoFormatDescription? {
+    private func isEssentialFrame(_ frame: Data) -> Bool {
+        let nalUnits = H264NALParser.nalUnits(from: frame)
+        for nal in nalUnits {
+            guard let first = nal.first else { continue }
+            let avcType = first & 0x1F
+            if avcType == 5 || avcType == 7 || avcType == 8 {
+                return true
+            }
+            let hevcType = (first & 0x7E) >> 1
+            if hevcType == 32 || hevcType == 33 || hevcType == 34 || (16...21).contains(hevcType) {
+                return true
+            }
+        }
+        return false
+    }
+
+    private func createH264FormatDescription(sps: Data, pps: Data) -> CMVideoFormatDescription? {
         return sps.withUnsafeBytes { spsPtr in
-            return pps.withUnsafeBytes { ppsPtr in
+            pps.withUnsafeBytes { ppsPtr in
                 guard let spsBase = spsPtr.baseAddress?.assumingMemoryBound(to: UInt8.self),
                       let ppsBase = ppsPtr.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                     return nil
                 }
-
                 var formatDesc: CMFormatDescription?
                 let parameterSetPointers: [UnsafePointer<UInt8>] = [spsBase, ppsBase]
                 let parameterSetSizes: [Int] = [sps.count, pps.count]
@@ -366,7 +533,36 @@ final class H264VideoRendererView: UIView {
         }
     }
 
-    private func makeAVCCSample(from nalUnits: [Data]) -> Data {
+    private func createHevcFormatDescription(vps: Data, sps: Data, pps: Data) -> CMVideoFormatDescription? {
+        return vps.withUnsafeBytes { vpsPtr in
+            sps.withUnsafeBytes { spsPtr in
+                pps.withUnsafeBytes { ppsPtr in
+                    guard let vpsBase = vpsPtr.baseAddress?.assumingMemoryBound(to: UInt8.self),
+                          let spsBase = spsPtr.baseAddress?.assumingMemoryBound(to: UInt8.self),
+                          let ppsBase = ppsPtr.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
+                        return nil
+                    }
+                    var formatDesc: CMFormatDescription?
+                    let parameterSetPointers: [UnsafePointer<UInt8>] = [vpsBase, spsBase, ppsBase]
+                    let parameterSetSizes: [Int] = [vps.count, sps.count, pps.count]
+
+                    let status = CMVideoFormatDescriptionCreateFromHEVCParameterSets(
+                        allocator: kCFAllocatorDefault,
+                        parameterSetCount: 3,
+                        parameterSetPointers: parameterSetPointers,
+                        parameterSetSizes: parameterSetSizes,
+                        nalUnitHeaderLength: 4,
+                        extensions: nil,
+                        formatDescriptionOut: &formatDesc
+                    )
+                    guard status == noErr else { return nil }
+                    return formatDesc
+                }
+            }
+        }
+    }
+
+    private func makeLengthPrefixedSample(from nalUnits: [Data]) -> Data {
         var out = Data()
         for nal in nalUnits {
             guard !nal.isEmpty else { continue }
@@ -455,5 +651,4 @@ final class H264VideoRendererView: UIView {
         @unknown default: return "Other"
         }
     }
-
 }

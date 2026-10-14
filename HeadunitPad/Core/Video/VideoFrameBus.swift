@@ -1,20 +1,29 @@
+//
+//  VideoFrameBus.swift
+//  HeadunitPad
+//
+//  PubSub bus for decoded video frames. Caches parameter sets (H.264 SPS/PPS
+//  and HEVC VPS/SPS/PPS) as well as the latest keyframe to bootstrap newly connected renderers.
+//
+
 import Foundation
 
-final class VideoFrameBus {
-    typealias Sink = (Data) -> Void
+public final class VideoFrameBus {
+    public typealias Sink = (Data) -> Void
 
-    static let shared = VideoFrameBus()
+    public static let shared = VideoFrameBus()
 
     private let lock = NSLock()
     private var sinks: [UUID: Sink] = [:]
+    private var latestVps: Data?
     private var latestSps: Data?
     private var latestPps: Data?
-    private var latestIdrFrame: Data?
+    private var latestKeyframe: Data?
 
     private init() {}
 
     @discardableResult
-    func subscribe(_ sink: @escaping Sink) -> UUID {
+    public func subscribe(_ sink: @escaping Sink) -> UUID {
         let id = UUID()
         let bootstrap = currentBootstrapFrame()
         lock.lock()
@@ -27,13 +36,13 @@ final class VideoFrameBus {
         return id
     }
 
-    func unsubscribe(_ id: UUID) {
+    public func unsubscribe(_ id: UUID) {
         lock.lock()
         sinks.removeValue(forKey: id)
         lock.unlock()
     }
 
-    func publish(frame: Data) {
+    public func publish(frame: Data) {
         updateCodecCaches(with: frame)
 
         lock.lock()
@@ -45,11 +54,24 @@ final class VideoFrameBus {
         }
     }
 
+    public func reset() {
+        lock.lock()
+        defer { lock.unlock() }
+        latestVps = nil
+        latestSps = nil
+        latestPps = nil
+        latestKeyframe = nil
+    }
+
     private func currentBootstrapFrame() -> Data? {
         lock.lock()
         defer { lock.unlock() }
 
         var bootstrap = Data()
+        if let latestVps {
+            bootstrap.append(contentsOf: [0x00, 0x00, 0x00, 0x01])
+            bootstrap.append(latestVps)
+        }
         if let latestSps {
             bootstrap.append(contentsOf: [0x00, 0x00, 0x00, 0x01])
             bootstrap.append(latestSps)
@@ -59,8 +81,8 @@ final class VideoFrameBus {
             bootstrap.append(latestPps)
         }
 
-        if let latestIdrFrame {
-            bootstrap.append(latestIdrFrame)
+        if let latestKeyframe {
+            bootstrap.append(latestKeyframe)
         }
 
         return bootstrap.isEmpty ? nil : bootstrap
@@ -70,23 +92,33 @@ final class VideoFrameBus {
         let nalUnits = splitAnnexBNALUnits(frame)
         guard !nalUnits.isEmpty else { return }
 
+        var newVps: Data?
         var newSps: Data?
         var newPps: Data?
-        var hasIdr = false
+        var isKeyframe = false
 
         for nal in nalUnits {
             guard let header = nal.first else { continue }
-            let nalType = header & 0x1F
-            if nalType == 7 { newSps = nal }
-            if nalType == 8 { newPps = nal }
-            if nalType == 5 { hasIdr = true }
+            // AVC check
+            let avcType = header & 0x1F
+            if avcType == 7 { newSps = nal }
+            if avcType == 8 { newPps = nal }
+            if avcType == 5 { isKeyframe = true }
+
+            // HEVC check
+            let hevcType = (header & 0x7E) >> 1
+            if hevcType == 32 { newVps = nal }
+            if hevcType == 33 { newSps = nal }
+            if hevcType == 34 { newPps = nal }
+            if (16...21).contains(hevcType) { isKeyframe = true }
         }
 
         lock.lock()
+        if let newVps { latestVps = newVps }
         if let newSps { latestSps = newSps }
         if let newPps { latestPps = newPps }
-        if hasIdr {
-            latestIdrFrame = frame
+        if isKeyframe {
+            latestKeyframe = frame
         }
         lock.unlock()
     }
