@@ -569,7 +569,6 @@ final class Phase5SystemIntegrationTests: XCTestCase {
 
         let connection = MockConnection()
         let transport = AapTransport(connection: connection, handshakeProfile: .network)
-        transport.setState(.running)
 
         // 1. Send Media.Setup on video channel to trigger sendMediaConfig
         let setupMsg = AapMessage(channel: Channel.ID_VID, flags: 0x0b, type: 0x8000, payload: Data())

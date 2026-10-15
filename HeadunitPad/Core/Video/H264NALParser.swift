@@ -8,17 +8,21 @@ enum H264NALParser {
             guard let ptr = rawBuffer.bindMemory(to: UInt8.self).baseAddress else { return [] }
             let count = data.count
 
+            // Check self-describing AVCDecoderConfigurationRecord first
+            // to avoid zero timestamp bytes + avcC version 0x01 mimicking Annex B start code.
+            for offset in candidateOffsets(for: count) {
+                if isAVCDecoderConfigurationRecord(ptr: ptr, count: count, offset: offset) {
+                    let bytes = [UInt8](data)
+                    if let units = parseAVCDecoderConfigurationRecord(bytes, offset: offset) {
+                        return units
+                    }
+                }
+            }
+
             // Fast path for Annex B (99.9% of video streaming frames)
             let annexB = parseAnnexB(data: data, ptr: ptr, count: count)
             if !annexB.isEmpty {
                 return annexB
-            }
-
-            let bytes = [UInt8](data)
-            for offset in candidateOffsets(for: count) {
-                if let units = parseAVCDecoderConfigurationRecord(bytes, offset: offset) {
-                    return units
-                }
             }
 
             for offset in candidateOffsets(for: count) {
@@ -104,6 +108,16 @@ enum H264NALParser {
             let nalType = first & 0x1F
             return nalType == 5
         }
+    }
+
+    private static func isAVCDecoderConfigurationRecord(ptr: UnsafePointer<UInt8>, count: Int, offset: Int) -> Bool {
+        guard offset + 7 <= count,
+              ptr[offset] == 1,
+              ptr[offset + 4] & 0xFC == 0xFC,
+              ptr[offset + 5] & 0xE0 == 0xE0 else {
+            return false
+        }
+        return true
     }
 
     private static func candidateOffsets(for count: Int) -> [Int] {
