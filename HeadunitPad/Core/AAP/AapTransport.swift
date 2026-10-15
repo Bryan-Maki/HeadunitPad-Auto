@@ -343,7 +343,7 @@ class AapTransport {
         DispatchQueue.main.asyncAfter(deadline: .now() + timeout, execute: timer)
     }
 
-    private func setState(_ newState: AapTransportState) {
+    func setState(_ newState: AapTransportState) {
         print("AapTransport: State changed from \(state) to \(newState)")
         state = newState
         if newState == .running {
@@ -1782,7 +1782,7 @@ class AapTransport {
     }
 
 
-private enum ProtoWire {
+enum ProtoWire {
     static func fieldVarint(_ fieldNumber: Int, value: UInt64) -> Data {
         var data = Data()
         data.append(contentsOf: encodeVarint(UInt64(fieldNumber << 3)))

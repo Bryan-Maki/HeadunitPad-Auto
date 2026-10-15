@@ -572,7 +572,7 @@ final class Phase5SystemIntegrationTests: XCTestCase {
         transport.setState(.running)
 
         // 1. Send Media.Setup on video channel to trigger sendMediaConfig
-        let setupMsg = AapMessage(channel: Int(Channel.ID_VID), flags: 0x0b, type: 0x8000, payload: Data())
+        let setupMsg = AapMessage(channel: Channel.ID_VID, flags: 0x0b, type: 0x8000, payload: Data())
         transport.handleMessage(setupMsg)
 
         // Find MediaConfig (0x8003) sent on Channel.ID_VID
@@ -595,7 +595,7 @@ final class Phase5SystemIntegrationTests: XCTestCase {
         // 3. Send FIRST fragment of a video frame (flags = 0x09, type = 0x0000)
         var firstFragPayload = Data(repeating: 0x00, count: 8)
         firstFragPayload.append(Data(repeating: 0x12, count: 200))
-        let firstFragMsg = AapMessage(channel: Int(Channel.ID_VID), flags: 0x09, type: 0x0000, payload: firstFragPayload)
+        let firstFragMsg = AapMessage(channel: Channel.ID_VID, flags: 0x09, type: 0x0000, payload: firstFragPayload)
 
         transport.handleMessage(firstFragMsg)
 
