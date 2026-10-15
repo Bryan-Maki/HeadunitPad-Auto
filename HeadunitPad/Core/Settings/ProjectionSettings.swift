@@ -90,6 +90,10 @@ public enum AudioOutputTarget: Int, CaseIterable {
         case .phone: return "Phone (Original Device)"
         }
     }
+
+    public var isAudioSinkEnabled: Bool {
+        return self == .ipad
+    }
 }
 
 public typealias ProjectionVideoResolution = ResolutionPreset
