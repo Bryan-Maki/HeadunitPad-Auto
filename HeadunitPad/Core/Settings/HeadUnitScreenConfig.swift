@@ -166,7 +166,9 @@ public final class HeadUnitScreenConfig {
                 ) ?? .r1280x720
 
                 self.negotiatedResolutionType = res.protoType(portrait: isPortraitDisplay)
-            } else if negotiatedResolutionType == ._1280x720 || negotiatedResolutionType == ._720x1280 {
+            } else if let currentPreset = ResolutionPreset.from(protoType: negotiatedResolutionType) {
+                self.negotiatedResolutionType = currentPreset.protoType(portrait: isPortraitDisplay)
+            } else {
                 let res = NegotiatedResolutionPolicy.autoLadder(
                     panelW: screenWidthPx,
                     panelH: screenHeightPx,

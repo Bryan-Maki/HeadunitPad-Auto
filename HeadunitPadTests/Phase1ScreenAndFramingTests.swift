@@ -378,7 +378,7 @@ final class Phase1ScreenAndFramingTests: XCTestCase {
 
     func testServiceDiscoveryResponseSerialization() throws {
         let screenConfig = HeadUnitScreenConfig.shared
-        _ = screenConfig.updateDimensions(width: 2048, height: 1536)
+        screenConfig.initScreen(width: 2048, height: 1536, requestedResolution: .r1920x1080)
         screenConfig.videoFitMode = .fillMargin
 
         let msg = AapServiceDiscoveryResponseMessage.make(
@@ -542,7 +542,7 @@ final class Phase1ScreenAndFramingTests: XCTestCase {
         let prevOrientation = ProjectionSettings.orientation
         defer {
             ProjectionSettings.orientation = prevOrientation
-            HeadUnitScreenConfig.shared.initScreen(width: 1920, height: 1080)
+            HeadUnitScreenConfig.shared.initScreen(width: 1920, height: 1080, requestedResolution: .r1920x1080)
         }
 
         ProjectionSettings.orientation = .portrait

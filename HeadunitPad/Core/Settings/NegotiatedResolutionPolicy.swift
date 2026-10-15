@@ -79,6 +79,17 @@ public enum ResolutionPreset: Int, CaseIterable {
         return protoType
     }
 
+    public static func from(protoType: ControlService.MediaSinkService.VideoConfiguration.VideoCodecResolutionType) -> ResolutionPreset? {
+        switch protoType {
+        case ._800x480: return .r800x480
+        case ._1280x720, ._720x1280: return .r1280x720
+        case ._1920x1080, ._1080x1920: return .r1920x1080
+        case ._2560x1440, ._1440x2560: return .r2560x1440
+        case ._3840x2160, ._2160x3840: return .r3840x2160
+        default: return nil
+        }
+    }
+
     public func title(for orientation: ProjectionOrientation) -> String {
         return title
     }
