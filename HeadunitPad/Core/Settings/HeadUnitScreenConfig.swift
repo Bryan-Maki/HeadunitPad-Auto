@@ -351,6 +351,10 @@ public final class HeadUnitScreenConfig {
         }
         let visibleW = max(1, getNegotiatedWidth() - getWidthMargin())
         let visibleH = max(1, getNegotiatedHeight() - getHeightMargin())
+        if ProjectionSettings.isAutoDpi {
+            let autoVal = AnnouncedDensityPolicy.recommendedDpi(activeW: visibleW, activeH: visibleH, panelW: screenWidthPx, panelH: screenHeightPx)
+            return AnnouncedDensityPolicy.Decision(announced: autoVal, requested: 0, reason: .automatic)
+        }
         return AnnouncedDensityPolicy.decide(stored: requestedDpi, visibleW: visibleW, visibleH: visibleH)
     }
 
