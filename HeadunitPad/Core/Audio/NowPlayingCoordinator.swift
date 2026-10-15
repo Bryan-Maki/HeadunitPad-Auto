@@ -30,6 +30,10 @@ final class NowPlayingCoordinator {
 
     func activate() {
         DispatchQueue.main.async {
+            guard ProjectionSettings.isAudioSinkEnabled else {
+                print("NowPlayingCoordinator: skipped activate because audio output target is phone")
+                return
+            }
             guard !self.isActive else {
                 self.updateNowPlayingInfo(metadata: self.metadata, playbackState: self.playbackState)
                 return
@@ -79,7 +83,7 @@ final class NowPlayingCoordinator {
 
         let session = AVAudioSession.sharedInstance()
         do {
-            try session.setCategory(.playback, mode: .default, options: [])
+            try session.setCategory(.playback, mode: .default, options: [.allowBluetoothA2DP, .mixWithOthers])
             try session.setActive(true)
             hasConfiguredAudioSession = true
             print("NowPlayingCoordinator: audio session activated for AVRCP")
@@ -202,8 +206,12 @@ final class NowPlayingCoordinator {
             guard self.isActive else { return }
             let shouldPublish = didChangePlayingState
             if playbackState.isPlaying {
-                self.configureAudioSession()
-                self.startSilentPlayback()
+                if ProjectionSettings.isAudioSinkEnabled {
+                    self.configureAudioSession()
+                    self.startSilentPlayback()
+                } else {
+                    self.pauseSilentPlayback()
+                }
             } else {
                 self.pauseSilentPlayback()
             }

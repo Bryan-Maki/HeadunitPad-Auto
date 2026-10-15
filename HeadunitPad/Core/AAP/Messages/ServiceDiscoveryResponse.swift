@@ -20,7 +20,8 @@ public final class AapServiceDiscoveryResponseMessage {
         vehicleYear: String = "2024",
         vehicleId: String = "iPad-HeadunitPad",
         headUnitMake: String = "HeadunitPad",
-        headUnitModel: String = "HeadunitPad-Auto"
+        headUnitModel: String = "HeadunitPad-Auto",
+        enableAudioSink: Bool = ProjectionSettings.isAudioSinkEnabled
     ) -> AapMessage {
         var services: [ControlService] = []
 
@@ -123,7 +124,7 @@ public final class AapServiceDiscoveryResponseMessage {
         )
         services.append(ControlService(id: UInt32(Channel.ID_AU2), mediaSinkService: audio2Sink))
 
-        if AudioSinkAnnouncementPolicy.announcesMediaAndSpeech(sinkEnabled: true) {
+        if AudioSinkAnnouncementPolicy.announcesMediaAndSpeech(sinkEnabled: enableAudioSink) {
             // Audio1 (Guidance / Speech)
             let audio1Sink = ControlService.MediaSinkService(
                 availableType: announcedAudioCodec,

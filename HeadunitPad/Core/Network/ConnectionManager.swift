@@ -232,6 +232,7 @@ class ConnectionManager {
             teardown: { [weak self] in
                 guard let self = self else { return }
                 NowPlayingCoordinator.shared.deactivate()
+                PCMAudioPlayer.shared.stop()
                 self.microphoneCapture.stop()
                 self.locationCapture.stop()
                 self.connectedDevice = nil
@@ -247,6 +248,17 @@ class ConnectionManager {
                 print("ConnectionManager: disconnect error during \(phase): \(error.localizedDescription)")
             }
         )
+    }
+
+    public func reconnectForSettingsChange() {
+        guard let device = connectedDevice else { return }
+        let ip = device.ip
+        let port = device.port
+        print("ConnectionManager: Reconnecting for settings change to \(ip):\(port)")
+        disconnect()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            self?.connect(to: ip, port: port)
+        }
     }
 
     func send(_ data: Data) {
@@ -486,7 +498,12 @@ extension ConnectionManager: AapTransportDelegate {
         guard transport === aapTransport else { return }
         switch state {
         case .running:
-            NowPlayingCoordinator.shared.activate()
+            if ProjectionSettings.isAudioSinkEnabled {
+                NowPlayingCoordinator.shared.activate()
+            } else {
+                NowPlayingCoordinator.shared.deactivate()
+                PCMAudioPlayer.shared.stop()
+            }
             self.state = .running
             updateStatus("Android Auto is running over wireless")
             consecutiveSilentFailures = 0
@@ -512,6 +529,7 @@ extension ConnectionManager: AapTransportDelegate {
 
         case .error(let msg):
             NowPlayingCoordinator.shared.deactivate()
+            PCMAudioPlayer.shared.stop()
             microphoneCapture.stop()
             locationCapture.stop()
             self.state = .error(msg)
@@ -541,6 +559,7 @@ extension ConnectionManager: AapTransportDelegate {
 
         aapTransport = nil
         NowPlayingCoordinator.shared.deactivate()
+        PCMAudioPlayer.shared.stop()
         microphoneCapture.stop()
         locationCapture.stop()
         connectedDevice = nil

@@ -80,6 +80,18 @@ public enum AudioCodecPreference: Int, CaseIterable {
     }
 }
 
+public enum AudioOutputTarget: Int, CaseIterable {
+    case ipad = 0
+    case phone = 1
+
+    public var title: String {
+        switch self {
+        case .ipad: return "iPad (Speaker / iPad BT)"
+        case .phone: return "Phone (Original Device)"
+        }
+    }
+}
+
 public typealias ProjectionVideoResolution = ResolutionPreset
 public typealias ProjectionResolution = ResolutionPreset
 
@@ -100,6 +112,7 @@ public enum ProjectionSettings {
     private static let autoResumePlaybackKey = "projection-auto-resume-playback"
     private static let videoCodecPreferenceKey = "projection-video-codec-preference"
     private static let audioCodecPreferenceKey = "projection-audio-codec-preference"
+    private static let audioOutputTargetKey = "projection-audio-output-target"
 
     private static let autoDpiKey = "projection-auto-dpi"
 
@@ -266,6 +279,23 @@ public enum ProjectionSettings {
         set {
             defaults.set(newValue.rawValue, forKey: audioCodecPreferenceKey)
         }
+    }
+
+    public static var audioOutputTarget: AudioOutputTarget {
+        get {
+            guard let raw = defaults.object(forKey: audioOutputTargetKey) as? Int,
+                  let target = AudioOutputTarget(rawValue: raw) else {
+                return .ipad
+            }
+            return target
+        }
+        set {
+            defaults.set(newValue.rawValue, forKey: audioOutputTargetKey)
+        }
+    }
+
+    public static var isAudioSinkEnabled: Bool {
+        return audioOutputTarget == .ipad
     }
 
     public static var videoResolution: ResolutionPreset {

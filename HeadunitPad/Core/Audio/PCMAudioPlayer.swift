@@ -10,6 +10,9 @@ import Foundation
 import AVFoundation
 
 final class PCMAudioPlayer {
+    public static let shared = PCMAudioPlayer()
+    private static let audioQueueKey = DispatchSpecificKey<Void>()
+
     private final class StreamContext {
         let sampleRate: Int
         let channels: Int
@@ -45,6 +48,8 @@ final class PCMAudioPlayer {
     private var isSpeechActive = false
 
     public init() {
+        audioQueue.setSpecific(key: Self.audioQueueKey, value: ())
+
         // Register mixer channels
         _ = mixer.registerChannel(channelId: Channel.ID_AUD, sampleRate: 48000, channelCount: 2, isMediaSink: true)
         _ = mixer.registerChannel(channelId: Channel.ID_AU1, sampleRate: 16000, channelCount: 1, isMediaSink: false)
@@ -59,8 +64,8 @@ final class PCMAudioPlayer {
             self?.audioQueue.async {
                 guard let self = self else { return }
                 self.isMicrophoneActive = active
-                self.ensureSessionConfigured()
-                self.restartEngineAndPlayersIfNeeded()
+                self.sessionConfigured = false
+                self.rebuildEngineAndStreams(reason: "micStateChanged")
             }
         }
 
@@ -77,8 +82,9 @@ final class PCMAudioPlayer {
             }
             self?.audioQueue.async {
                 guard let self = self else { return }
-                self.logCurrentAudioRoute(prefix: "PCMAudioPlayer: route changed (\(reason.map { "\($0.rawValue)" } ?? "unknown"))")
-                self.restartEngineAndPlayersIfNeeded()
+                let reasonStr = reason.map { "\($0.rawValue)" } ?? "unknown"
+                self.logCurrentAudioRoute(prefix: "PCMAudioPlayer: route changed (\(reasonStr))")
+                self.rebuildEngineAndStreams(reason: "routeChange-\(reasonStr)")
             }
         }
 
@@ -92,9 +98,7 @@ final class PCMAudioPlayer {
             if type == .ended {
                 self?.audioQueue.async {
                     guard let self = self else { return }
-                    self.sessionConfigured = false
-                    self.ensureSessionConfigured()
-                    self.restartEngineAndPlayersIfNeeded()
+                    self.rebuildEngineAndStreams(reason: "interruptionEnded")
                 }
             }
         }
@@ -106,7 +110,7 @@ final class PCMAudioPlayer {
         ) { [weak self] _ in
             self?.audioQueue.async {
                 guard let self = self else { return }
-                self.restartEngineAndPlayersIfNeeded()
+                self.rebuildEngineAndStreams(reason: "engineConfigChange")
             }
         }
     }
@@ -263,18 +267,20 @@ final class PCMAudioPlayer {
             let targetThresholdFrames = (stream.sampleRate * 3) / 50 // ~60ms
             if prebufferedFrames >= targetThresholdFrames || stream.prebufferQueue.count >= 4 {
                 stream.isPrebuffering = false
-                if !stream.player.isPlaying {
-                    stream.player.play()
+                if !engine.isRunning {
+                    try? engine.start()
                 }
+                stream.player.play()
                 for buf in stream.prebufferQueue {
                     scheduleStreamBuffer(buf, stream: stream, channel: channel)
                 }
                 stream.prebufferQueue.removeAll()
             }
         } else {
-            if !stream.player.isPlaying {
-                stream.player.play()
+            if !engine.isRunning {
+                try? engine.start()
             }
+            stream.player.play()
             scheduleStreamBuffer(buffer, stream: stream, channel: channel)
         }
     }
@@ -293,9 +299,14 @@ final class PCMAudioPlayer {
 
         let frameCount = Int(buffer.frameLength)
         stream.queuedFrames += frameCount
+        weak var weakStream = stream
         stream.player.scheduleBuffer(buffer) { [weak self] in
             self?.audioQueue.async {
-                guard let self = self, let s = self.streams[channel] else { return }
+                guard let self = self,
+                      let s = self.streams[channel],
+                      s === weakStream else {
+                    return
+                }
                 s.queuedFrames = max(0, s.queuedFrames - frameCount)
                 if s.queuedFrames == 0 {
                     s.isPrebuffering = true
@@ -351,16 +362,23 @@ final class PCMAudioPlayer {
     private func ensureSessionConfigured() {
         guard !sessionConfigured else { return }
         let session = AVAudioSession.sharedInstance()
-        try? session.setCategory(
-            .playAndRecord,
-            mode: .default,
-            options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP, .mixWithOthers]
-        )
-        try? session.setPreferredSampleRate(48000)
-        try? session.setPreferredIOBufferDuration(0.02)
-        try? session.setActive(true)
-        sessionConfigured = true
-        logCurrentAudioRoute(prefix: "PCMAudioPlayer: audio session configured")
+        do {
+            if !isMicrophoneActive {
+                try session.setCategory(.playback, mode: .default, options: [.allowBluetoothA2DP, .mixWithOthers])
+                try session.setPreferredSampleRate(48000)
+                try session.setPreferredIOBufferDuration(0.02)
+                try session.setActive(true)
+            } else {
+                try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP, .mixWithOthers])
+                try session.setPreferredSampleRate(16000)
+                try session.setPreferredIOBufferDuration(0.02)
+                try session.setActive(true)
+            }
+            sessionConfigured = true
+            logCurrentAudioRoute(prefix: "PCMAudioPlayer: audio session configured (micActive=\(isMicrophoneActive))")
+        } catch {
+            print("PCMAudioPlayer: ensureSessionConfigured failed: \(error)")
+        }
     }
 
     private func startEngineIfNeeded() -> Bool {
@@ -375,20 +393,68 @@ final class PCMAudioPlayer {
         return true
     }
 
-    private func restartEngineAndPlayersIfNeeded() {
-        ensureSessionConfigured()
-        if !engine.isRunning {
+    func rebuildEngineAndStreams(reason: String) {
+        let block = { [self] in
+            // 1. 停止并清理所有现有 StreamContext 与旧 PlayerNode
+            for stream in self.streams.values {
+                stream.player.stop()
+                if stream.player.engine != nil {
+                    self.engine.detach(stream.player)
+                }
+                stream.prebufferQueue.removeAll()
+                stream.queuedFrames = 0
+                stream.isPrebuffering = true
+                stream.needsFadeIn = true
+            }
+            self.streams.removeAll()
+
+            // 2. 停止并重置 AVAudioEngine 内部拓扑
+            if self.engine.isRunning {
+                self.engine.stop()
+            }
+            self.engine.reset()
+
+            // 3. 强制重新激活当前新路由下的 AVAudioSession
+            self.sessionConfigured = false
+            self.ensureSessionConfigured()
+
+            // 4. 预备并启动引擎（后续到达的下一个 PCM 包会在 ensureStream 中自动创建全新 PlayerNode 并用新路由格式 connect 到 mainMixerNode）
+            self.engine.prepare()
             do {
-                try engine.start()
+                try self.engine.start()
             } catch {
-                print("PCMAudioPlayer: Failed to restart AVAudioEngine after route/config change: \(error)")
-                return
+                print("PCMAudioPlayer: engine.start() deferred until next packet (\(reason)): \(error)")
             }
         }
-        for stream in streams.values {
-            if !stream.player.isPlaying {
-                stream.player.play()
-            }
+
+        if DispatchQueue.getSpecific(key: Self.audioQueueKey) != nil {
+            block()
+        } else {
+            audioQueue.sync(execute: block)
+        }
+    }
+
+    public func stop() {
+        reset()
+    }
+
+    var streamCount: Int {
+        if DispatchQueue.getSpecific(key: Self.audioQueueKey) != nil {
+            return streams.count
+        } else {
+            var count = 0
+            audioQueue.sync { count = self.streams.count }
+            return count
+        }
+    }
+
+    func isPrebuffering(channel: UInt8) -> Bool? {
+        if DispatchQueue.getSpecific(key: Self.audioQueueKey) != nil {
+            return streams[channel]?.isPrebuffering
+        } else {
+            var val: Bool?
+            audioQueue.sync { val = self.streams[channel]?.isPrebuffering }
+            return val
         }
     }
 

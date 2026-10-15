@@ -450,4 +450,51 @@ final class Phase4AudioAndMicTests: XCTestCase {
         XCTAssertTrue(NarrowBandProfilePolicy.useAac(userChoice: false, supports5Ghz: false, wirelessSession: true, capEnabled: true))
         XCTAssertEqual(NarrowBandProfilePolicy.linkCeiling(supports5Ghz: false, wirelessSession: true, capEnabled: true), .p720)
     }
+
+    func testAudioOutputTargetPhoneOmitsMediaAndSpeechSinksButKeepsSystemSink() {
+        XCTAssertTrue(AudioOutputTarget.ipad.isAudioSinkEnabled)
+        XCTAssertFalse(AudioOutputTarget.phone.isAudioSinkEnabled)
+        XCTAssertEqual(AudioOutputTarget.ipad.title, "iPad (Speaker / iPad BT)")
+        XCTAssertEqual(AudioOutputTarget.phone.title, "Phone (Original Device)")
+
+        XCTAssertTrue(AudioSinkAnnouncementPolicy.announcesMediaAndSpeech(sinkEnabled: true))
+        XCTAssertFalse(AudioSinkAnnouncementPolicy.announcesMediaAndSpeech(sinkEnabled: false))
+
+        // When enableAudioSink is false (Phone mode):
+        let phoneMsg = AapServiceDiscoveryResponseMessage.make(enableAudioSink: false)
+        var readerPhone = ProtoReader(data: phoneMsg.payload)
+        guard let phoneProto = try? ServiceDiscoveryResponseProto(from: &readerPhone) else {
+            XCTFail("Failed to parse ServiceDiscoveryResponseProto")
+            return
+        }
+        let phoneChannelIds = phoneProto.services.map { $0.id }
+        XCTAssertTrue(phoneChannelIds.contains(UInt32(Channel.ID_AU2)), "System audio sink must always be announced")
+        XCTAssertFalse(phoneChannelIds.contains(UInt32(Channel.ID_AUD)), "Media sink must NOT be announced when enableAudioSink is false")
+        XCTAssertFalse(phoneChannelIds.contains(UInt32(Channel.ID_AU1)), "Speech sink must NOT be announced when enableAudioSink is false")
+
+        // When enableAudioSink is true (iPad mode):
+        let ipadMsg = AapServiceDiscoveryResponseMessage.make(enableAudioSink: true)
+        var readerIpad = ProtoReader(data: ipadMsg.payload)
+        guard let ipadProto = try? ServiceDiscoveryResponseProto(from: &readerIpad) else {
+            XCTFail("Failed to parse ServiceDiscoveryResponseProto")
+            return
+        }
+        let ipadChannelIds = ipadProto.services.map { $0.id }
+        XCTAssertTrue(ipadChannelIds.contains(UInt32(Channel.ID_AU2)), "System audio sink must be announced")
+        XCTAssertTrue(ipadChannelIds.contains(UInt32(Channel.ID_AUD)), "Media sink must be announced when enableAudioSink is true")
+        XCTAssertTrue(ipadChannelIds.contains(UInt32(Channel.ID_AU1)), "Speech sink must be announced when enableAudioSink is true")
+    }
+
+    func testPCMAudioPlayerRouteRebuildResetsStreamsCleanly() {
+        let player = PCMAudioPlayer.shared
+        player.reset()
+        XCTAssertEqual(player.streamCount, 0)
+        XCTAssertTrue(player.isPrebuffering(channel: Channel.ID_AUD))
+
+        player.rebuildEngineAndStreams(reason: "unit-test-route-change")
+        XCTAssertEqual(player.streamCount, 0)
+
+        player.stop()
+        XCTAssertEqual(player.streamCount, 0)
+    }
 }

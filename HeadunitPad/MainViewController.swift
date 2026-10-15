@@ -15,7 +15,7 @@ class MainViewController: UIViewController {
 
     private let connectionManager = ConnectionManager.shared
     private let videoRenderer = H264VideoRendererView()
-    private let audioPlayer = PCMAudioPlayer()
+    private let audioPlayer = PCMAudioPlayer.shared
     private var videoWatchdogTimer: Timer?
     private var runningSinceTs: TimeInterval = 0
     private var lastVideoFrameTs: TimeInterval = 0
@@ -750,10 +750,11 @@ class MainViewController: UIViewController {
         let autoReconnect = ProjectionSettings.autoReconnect ? "On" : "Off"
         let codec = ProjectionSettings.videoCodecPreference.title
         let audioCodec = ProjectionSettings.audioCodecPreference.title
+        let audioTarget = ProjectionSettings.audioOutputTarget.title
 
         let alert = UIAlertController(
             title: "Settings",
-            message: "Changes apply on next connection.\nMode: \(connectionMode)\nAuto reconnect: \(autoReconnect)\nVideo: \(codec)\nAudio: \(audioCodec)\nOrientation: \(orientation)\nResolution: \(resolution)\nFPS: \(fps)\(fps != effectiveFps ? " (effective: \(effectiveFps))" : "")\nDPI: \(dpi)\(dpi != effectiveDpi ? " (effective: \(effectiveDpi))" : "")\nFit: \(ProjectionSettings.videoFitMode.title)\nPosition: \(ProjectionSettings.driverPosition == .left ? "LHD" : "RHD")\nGPS: \(gpsSource)",
+            message: "Changes apply on next connection.\nMode: \(connectionMode)\nAuto reconnect: \(autoReconnect)\nVideo: \(codec)\nAudio Codec: \(audioCodec)\nAudio Output: \(audioTarget)\nOrientation: \(orientation)\nResolution: \(resolution)\nFPS: \(fps)\(fps != effectiveFps ? " (effective: \(effectiveFps))" : "")\nDPI: \(dpi)\(dpi != effectiveDpi ? " (effective: \(effectiveDpi))" : "")\nFit: \(ProjectionSettings.videoFitMode.title)\nPosition: \(ProjectionSettings.driverPosition == .left ? "LHD" : "RHD")\nGPS: \(gpsSource)",
             preferredStyle: .actionSheet
         )
 
@@ -774,6 +775,10 @@ class MainViewController: UIViewController {
 
         alert.addAction(UIAlertAction(title: "Audio Codec: \(audioCodec)", style: .default) { [weak self] _ in
             self?.presentAudioCodecMenu()
+        })
+
+        alert.addAction(UIAlertAction(title: "Audio Output: \(audioTarget)", style: .default) { [weak self] _ in
+            self?.presentAudioOutputTargetMenu()
         })
 
         alert.addAction(UIAlertAction(title: "Display Fit Mode: \(ProjectionSettings.videoFitMode.title)", style: .default) { [weak self] _ in
@@ -955,6 +960,37 @@ class MainViewController: UIViewController {
             alert.addAction(UIAlertAction(title: title, style: .default) { [weak self] _ in
                 ProjectionSettings.audioCodecPreference = option
                 self?.presentSettingsMenu()
+            })
+        }
+
+        alert.addAction(UIAlertAction(title: "Back", style: .cancel) { [weak self] _ in
+            self?.presentSettingsMenu()
+        })
+
+        configurePopoverSource(for: alert)
+        present(alert, animated: true)
+    }
+
+    private func presentAudioOutputTargetMenu() {
+        let alert = UIAlertController(
+            title: "Audio Output Target",
+            message: "Choose where Android Auto audio (music & navigation guidance) should play.\n\n• iPad: Play audio on iPad speakers or Bluetooth connected to iPad.\n• Phone: Phone original device keeps media/guidance audio (e.g. phone speakers or car Bluetooth connected to phone).",
+            preferredStyle: .actionSheet
+        )
+
+        for target in AudioOutputTarget.allCases {
+            let title = (target == ProjectionSettings.audioOutputTarget) ? "\(target.title) (Current)" : target.title
+            alert.addAction(UIAlertAction(title: title, style: .default) { [weak self] _ in
+                guard let self = self else { return }
+                ProjectionSettings.audioOutputTarget = target
+                if !target.isAudioSinkEnabled {
+                    self.audioPlayer.reset()
+                    NowPlayingCoordinator.shared.deactivate()
+                }
+                if self.connectionManager.state == .running {
+                    self.connectionManager.reconnectForSettingsChange()
+                }
+                self.presentSettingsMenu()
             })
         }
 

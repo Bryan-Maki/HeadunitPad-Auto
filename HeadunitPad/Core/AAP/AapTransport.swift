@@ -1409,7 +1409,8 @@ class AapTransport {
             rightHandDrive: isRhd,
             useGps: useGps,
             useMic: true,
-            requestedDpi: ProjectionSettings.effectiveDpi
+            requestedDpi: ProjectionSettings.effectiveDpi,
+            enableAudioSink: ProjectionSettings.isAudioSinkEnabled
         )
         send(message: message)
         print("AapTransport: Sent typed ServiceDiscoveryResponse (\(message.size) bytes)")
@@ -1749,8 +1750,10 @@ class AapTransport {
         payload += ProtoWire.fieldBytes(1, value: videoService)
         payload += ProtoWire.fieldBytes(1, value: inputService)
         payload += ProtoWire.fieldBytes(1, value: audioServiceSystem)
-        payload += ProtoWire.fieldBytes(1, value: audioServiceMedia)
-        payload += ProtoWire.fieldBytes(1, value: audioServiceSpeech)
+        if AudioSinkAnnouncementPolicy.announcesMediaAndSpeech(sinkEnabled: ProjectionSettings.isAudioSinkEnabled) {
+            payload += ProtoWire.fieldBytes(1, value: audioServiceMedia)
+            payload += ProtoWire.fieldBytes(1, value: audioServiceSpeech)
+        }
         payload += ProtoWire.fieldBytes(1, value: micService)
         payload += ProtoWire.fieldBytes(1, value: navService)
         payload += ProtoWire.fieldBytes(1, value: mediaPlaybackService)
@@ -2174,6 +2177,7 @@ enum ProtoWire {
     }
 
     private func deliverAudioData(_ data: Data, on channel: UInt8, isAac: Bool) {
+        guard ProjectionSettings.isAudioSinkEnabled else { return }
         guard !data.isEmpty else { return }
         if isAac {
             delegate?.aapTransport(self, didReceiveAudioData: data, on: channel, isAac: true)
