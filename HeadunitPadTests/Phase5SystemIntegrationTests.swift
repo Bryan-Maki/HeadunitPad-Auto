@@ -130,7 +130,7 @@ final class Phase5SystemIntegrationTests: XCTestCase {
 
     func testTouchCoordinateMapperWithMargins() {
         // Test 1920x1080 codec container with widthMargin = 480 (active area 1440x1080)
-        // Center of user screen (0.5, 0.5) must map to center of active area (halfMargin + active/2 = 240 + 720 = 960)
+        // Center of user screen (0.5, 0.5) must map to center of active area (1440/2 = 720, 1080/2 = 540)
         let centerCoord = TouchCoordinateMapper.map(
             rawX: 500,
             rawY: 500,
@@ -143,10 +143,10 @@ final class Phase5SystemIntegrationTests: XCTestCase {
             fitMode: .fillMargin
         )
 
-        XCTAssertEqual(centerCoord.x, 960)
+        XCTAssertEqual(centerCoord.x, 720)
         XCTAssertEqual(centerCoord.y, 540)
 
-        // Top-left corner of user screen (0, 0) must map to (240, 0)
+        // Top-left corner of user screen (0, 0) must map to (0, 0)
         let topLeftCoord = TouchCoordinateMapper.map(
             rawX: 0,
             rawY: 0,
@@ -159,10 +159,10 @@ final class Phase5SystemIntegrationTests: XCTestCase {
             fitMode: .fillMargin
         )
 
-        XCTAssertEqual(topLeftCoord.x, 240)
+        XCTAssertEqual(topLeftCoord.x, 0)
         XCTAssertEqual(topLeftCoord.y, 0)
 
-        // Bottom-right corner of user screen (1000, 1000) must map to (240 + 1440 = 1680, 1080)
+        // Bottom-right corner of user screen (1000, 1000) must map to (1440, 1080)
         let bottomRightCoord = TouchCoordinateMapper.map(
             rawX: 1000,
             rawY: 1000,
@@ -175,7 +175,7 @@ final class Phase5SystemIntegrationTests: XCTestCase {
             fitMode: .fillMargin
         )
 
-        XCTAssertEqual(bottomRightCoord.x, 1680)
+        XCTAssertEqual(bottomRightCoord.x, 1440)
         XCTAssertEqual(bottomRightCoord.y, 1080)
     }
 
