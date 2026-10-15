@@ -572,6 +572,7 @@ extension ConnectionManager: AapTransportDelegate {
     }
 }
 
+extension ConnectionManager {
     public func acceptIncomingAapConnection(_ connection: NWConnection, initialData: Data = Data(), remoteHost: String? = nil) {
         let canAccept: Bool
         switch state {
