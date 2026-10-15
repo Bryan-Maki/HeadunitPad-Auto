@@ -35,7 +35,7 @@ public final class DpiPreviewView: UIView {
         }
     }
 
-    public var codecWidthPx: Int = 1920 {
+    public var codecWidthPx: Int = 0 {
         didSet {
             if oldValue != codecWidthPx {
                 setNeedsDisplay()
@@ -43,7 +43,7 @@ public final class DpiPreviewView: UIView {
         }
     }
 
-    public var codecHeightPx: Int = 1080 {
+    public var codecHeightPx: Int = 0 {
         didSet {
             if oldValue != codecHeightPx {
                 setNeedsDisplay()
@@ -51,7 +51,7 @@ public final class DpiPreviewView: UIView {
         }
     }
 
-    public var activeWidthPx: Int = 1440 {
+    public var activeWidthPx: Int = 0 {
         didSet {
             if oldValue != activeWidthPx {
                 setNeedsDisplay()
@@ -59,7 +59,7 @@ public final class DpiPreviewView: UIView {
         }
     }
 
-    public var activeHeightPx: Int = 1080 {
+    public var activeHeightPx: Int = 0 {
         didSet {
             if oldValue != activeHeightPx {
                 setNeedsDisplay()
@@ -67,7 +67,7 @@ public final class DpiPreviewView: UIView {
         }
     }
 
-    public var marginWidthPx: Int = 480 {
+    public var marginWidthPx: Int = 0 {
         didSet {
             if oldValue != marginWidthPx {
                 setNeedsDisplay()

@@ -48,21 +48,38 @@ public enum AnnouncedDensityPolicy {
         let shortPt = min(screenBounds.width, screenBounds.height)
         let diagonalPt = sqrt(longPt * longPt + shortPt * shortPt)
 
-        let targetDpH: Double
-        if diagonalPt <= 1360 {
-            // iPad mini (~8.3"): slightly lower virtual dp height so controls are physically larger
-            targetDpH = 900.0
-        } else if diagonalPt <= 1550 {
-            // Standard iPad 10.2" - 11": balanced virtual canvas
-            targetDpH = 960.0
+        let baseDpi: Int
+        if activeH >= 1400 {
+            // ~1440p / 2K+
+            if diagonalPt <= 1360 {
+                baseDpi = 210 // iPad mini
+            } else if diagonalPt <= 1550 {
+                baseDpi = 220 // 10"-11" iPad
+            } else {
+                baseDpi = 240 // 12.9"-13" iPad Pro
+            }
+        } else if activeH >= 1000 {
+            // ~1080p
+            if diagonalPt <= 1360 {
+                baseDpi = 160 // iPad mini
+            } else if diagonalPt <= 1550 {
+                baseDpi = 180 // 10"-11" iPad
+            } else {
+                baseDpi = 200 // 12.9"-13" iPad Pro
+            }
         } else {
-            // iPad Pro 12.9" - 13": spacious canvas
-            targetDpH = 1020.0
+            // ~720p / 480p
+            if diagonalPt <= 1360 {
+                baseDpi = 120
+            } else if diagonalPt <= 1550 {
+                baseDpi = 130
+            } else {
+                baseDpi = 140
+            }
         }
 
-        let calcDpi = Int((Double(activeH) * 160.0 / targetDpH).rounded())
         let maxAllowed = huigMaxDpi(w: activeW, h: activeH)
-        return min(max(calcDpi, 100), min(maxAllowed, 320))
+        return min(max(baseDpi, 100), min(maxAllowed, 320))
     }
 
     public static func huigMaxDpi(w: Int, h: Int) -> Int {
