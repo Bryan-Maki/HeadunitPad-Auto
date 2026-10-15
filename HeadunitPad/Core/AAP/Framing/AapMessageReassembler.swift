@@ -98,11 +98,12 @@ public final class AapMessageReassembler {
             // Preserve the streamed video path only when FIRST has enough prefix for its
             // downstream parser: type (2), possible timestamp (8), start code (4), and a byte beyond it (1).
             let isVideoChannel = UInt8(channel) == Channel.ID_VID
+            let isAudioChannel = Channel.isAudio(UInt8(channel))
             let isControl = (flags & AapMessageFraming.FLAG_BIT_CONTROL) != 0
-            let video = isVideoChannel && !isControl && (fragment.type == 0 || fragment.type == 1) && fragment.size >= 15
+            let streamed = (isVideoChannel || isAudioChannel) && !isControl && (fragment.type == 0 || fragment.type == 1) && fragment.size >= 15
 
-            let bytes: Data? = video ? nil : Data()
-            runs[channel] = Run(first: fragment, total: declaredTotal, video: video, bytes: bytes)
+            let bytes: Data? = streamed ? nil : Data()
+            runs[channel] = Run(first: fragment, total: declaredTotal, video: streamed, bytes: bytes)
         }
 
         guard let run = runs[channel] else {

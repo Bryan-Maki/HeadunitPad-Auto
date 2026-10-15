@@ -1,32 +1,81 @@
 import UIKit
 
-final class TouchInputView: UIView {
-    var onTouch: (([(id: Int, point: CGPoint)], TouchAction, Int) -> Void)?
+public final class TouchInputView: UIView {
+    public typealias TouchCallback = ([(id: Int, x: Int, y: Int)], TouchAction, Int) -> Void
+
+    public var onTouch: TouchCallback?
+    public var onTouchEvent: TouchCallback? {
+        get { return onTouch }
+        set { onTouch = newValue }
+    }
+
+    public var screenConfig: HeadUnitScreenConfig?
+    public var videoFitMode: VideoFitMode = .fillMargin
+    public var surfaceSize: CGSize = .zero
+    public var codecWidth: Int?
+    public var codecHeight: Int?
+    public var widthMargin: Int?
+    public var heightMargin: Int?
+
     private var touchIdMap: [ObjectIdentifier: Int] = [:]
     private var activePoints: [Int: CGPoint] = [:]
     private var nextTouchId: Int = 0
 
-    override init(frame: CGRect) {
+    override public init(frame: CGRect) {
         super.init(frame: frame)
-        isUserInteractionEnabled = true
-        isMultipleTouchEnabled = true
-        isExclusiveTouch = false
+        commonInit()
     }
 
-    required init?(coder: NSCoder) {
+    required public init?(coder: NSCoder) {
         super.init(coder: coder)
+        commonInit()
+    }
+
+    private func commonInit() {
         isUserInteractionEnabled = true
         isMultipleTouchEnabled = true
         isExclusiveTouch = false
     }
 
-    private func sortedPointers() -> [(id: Int, point: CGPoint)] {
+    public func mapTouchToActiveContent(_ point: CGPoint) -> (x: Int, y: Int) {
+        let currentSize = (bounds.size.width > 0 && bounds.size.height > 0) ? bounds.size : surfaceSize
+        let cfg = screenConfig ?? HeadUnitScreenConfig.shared
+        let mode = videoFitMode
+        let cW = codecWidth ?? cfg.getNegotiatedWidth()
+        let cH = codecHeight ?? cfg.getNegotiatedHeight()
+        let mW = widthMargin ?? cfg.getWidthMargin()
+        let mH = heightMargin ?? cfg.getHeightMargin()
+
+        let coord = TouchCoordinateMapper.map(
+            rawX: Float(point.x),
+            rawY: Float(point.y),
+            inputSurfaceWidth: Float(max(currentSize.width, 1)),
+            inputSurfaceHeight: Float(max(currentSize.height, 1)),
+            negotiatedWidth: cW,
+            negotiatedHeight: cH,
+            marginWidth: Float(mW),
+            marginHeight: Float(mH),
+            fitMode: mode
+        )
+        return (coord.x, coord.y)
+    }
+
+    private func sortedMappedPointers() -> [(id: Int, x: Int, y: Int)] {
         return activePoints
             .map { (id: $0.key, point: $0.value) }
             .sorted { $0.id < $1.id }
+            .map { pointer in
+                let mapped = mapTouchToActiveContent(pointer.point)
+                return (id: pointer.id, x: mapped.x, y: mapped.y)
+            }
     }
 
-    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+    private func sendTouches(action: TouchAction, actionIndex: Int) {
+        let pointers = sortedMappedPointers()
+        onTouch?(pointers, action, actionIndex)
+    }
+
+    override public func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         for touch in touches {
             let key = ObjectIdentifier(touch)
             let assignedId: Int
@@ -39,14 +88,14 @@ final class TouchInputView: UIView {
             }
 
             activePoints[assignedId] = touch.location(in: self)
-            let pointers = sortedPointers()
-            let action: TouchAction = pointers.count == 1 ? .DOWN : .POINTER_DOWN
-            let actionIndex = pointers.firstIndex(where: { $0.id == assignedId }) ?? 0
-            onTouch?(pointers, action, actionIndex)
+            let sorted = activePoints.keys.sorted()
+            let action: TouchAction = activePoints.count == 1 ? .DOWN : .POINTER_DOWN
+            let actionIndex = sorted.firstIndex(of: assignedId) ?? 0
+            sendTouches(action: action, actionIndex: actionIndex)
         }
     }
 
-    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
+    override public func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
         var changed = false
         for touch in touches {
             let key = ObjectIdentifier(touch)
@@ -55,19 +104,19 @@ final class TouchInputView: UIView {
             changed = true
         }
         if changed {
-            onTouch?(sortedPointers(), .MOVE, 0)
+            sendTouches(action: .MOVE, actionIndex: 0)
         }
     }
 
-    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+    override public func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
         for touch in touches {
             let key = ObjectIdentifier(touch)
             guard let id = touchIdMap[key] else { continue }
             activePoints[id] = touch.location(in: self)
-            let pointers = sortedPointers()
-            let action: TouchAction = pointers.count <= 1 ? .UP : .POINTER_UP
-            let actionIndex = pointers.firstIndex(where: { $0.id == id }) ?? 0
-            onTouch?(pointers, action, actionIndex)
+            let sorted = activePoints.keys.sorted()
+            let action: TouchAction = activePoints.count <= 1 ? .UP : .POINTER_UP
+            let actionIndex = sorted.firstIndex(of: id) ?? 0
+            sendTouches(action: action, actionIndex: actionIndex)
             activePoints.removeValue(forKey: id)
             touchIdMap.removeValue(forKey: key)
         }
@@ -77,16 +126,15 @@ final class TouchInputView: UIView {
         }
     }
 
-    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
+    override public func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
         for touch in touches {
             let key = ObjectIdentifier(touch)
             if let id = touchIdMap[key] {
                 activePoints[id] = touch.location(in: self)
             }
         }
-        let pointers = sortedPointers()
-        if !pointers.isEmpty {
-            onTouch?(pointers, .CANCEL, 0)
+        if !activePoints.isEmpty {
+            sendTouches(action: .CANCEL, actionIndex: 0)
         }
         activePoints.removeAll()
         touchIdMap.removeAll()

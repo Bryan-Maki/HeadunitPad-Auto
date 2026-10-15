@@ -118,18 +118,6 @@ class MainViewController: UIViewController {
         return view
     }()
 
-    private lazy var floatingDisconnectButton: UIButton = {
-        var config = UIButton.Configuration.plain()
-        config.image = UIImage(systemName: "xmark.circle.fill")
-        config.baseForegroundColor = UIColor.white.withAlphaComponent(0.4)
-        config.contentInsets = NSDirectionalEdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8)
-
-        let button = UIButton(configuration: config)
-        button.translatesAutoresizingMaskIntoConstraints = false
-        button.addTarget(self, action: #selector(floatingDisconnectButtonTapped), for: .touchUpInside)
-        return button
-    }()
-
     private let directConnectContainer: UIView = {
         let view = UIView()
         view.backgroundColor = UIColor.secondarySystemBackground.withAlphaComponent(0.85)
@@ -227,6 +215,33 @@ class MainViewController: UIViewController {
             self.hasReceivedFirstVideoFrame = true
             self.lastVideoFrameTs = Date().timeIntervalSince1970
         }
+        videoRenderer.onVideoSizeResolved = { [weak self] size in
+            guard let self = self else { return }
+            let w = Int(size.width)
+            let h = Int(size.height)
+            if w > 0 && h > 0 {
+                print("MainViewController: Video size resolved from SPS: \(w)x\(h)")
+                self.touchOverlayView.codecWidth = w
+                self.touchOverlayView.codecHeight = h
+                let screen = self.view.window?.screen ?? UIScreen.main
+                let screenBounds = screen.bounds
+                let landW = max(screenBounds.width, screenBounds.height)
+                let landH = min(screenBounds.width, screenBounds.height)
+                let screenAspect = Double(landW) / Double(landH)
+                let codecAspect = Double(w) / Double(h)
+                if screenAspect < codecAspect {
+                    let activeH = h
+                    let activeW = Int((Double(activeH) * screenAspect).rounded()) & ~1
+                    self.touchOverlayView.widthMargin = max(0, w - activeW)
+                    self.touchOverlayView.heightMargin = 0
+                } else {
+                    let activeW = w
+                    let activeH = Int((Double(activeW) / screenAspect).rounded()) & ~1
+                    self.touchOverlayView.widthMargin = 0
+                    self.touchOverlayView.heightMargin = max(0, h - activeH)
+                }
+            }
+        }
         TrackpadInputBridge.shared.setTouchSender { pointers, action, actionIndex in
             ConnectionManager.shared.sendTouchEvent(pointers: pointers, action: action, actionIndex: actionIndex)
         }
@@ -244,9 +259,11 @@ class MainViewController: UIViewController {
         super.viewDidLayoutSubviews()
         touchOverlayView.frame = videoContainerView.bounds
         touchOverlayView.isUserInteractionEnabled = true
+        touchOverlayView.surfaceSize = touchOverlayView.bounds.size
+        touchOverlayView.screenConfig = HeadUnitScreenConfig.shared
+        touchOverlayView.videoFitMode = HeadUnitScreenConfig.shared.videoFitMode
         if !videoContainerView.isHidden {
             videoContainerView.bringSubviewToFront(touchOverlayView)
-            videoContainerView.bringSubviewToFront(floatingDisconnectButton)
         }
         let screen = view.window?.screen ?? UIScreen.main
         let screenBounds = screen.bounds
@@ -337,7 +354,6 @@ class MainViewController: UIViewController {
 
         videoContainerView.addSubview(videoRenderer)
         videoContainerView.addSubview(touchOverlayView)
-        videoContainerView.addSubview(floatingDisconnectButton)
         videoRenderer.translatesAutoresizingMaskIntoConstraints = false
         touchOverlayView.translatesAutoresizingMaskIntoConstraints = false
 
@@ -370,26 +386,14 @@ class MainViewController: UIViewController {
             touchOverlayView.trailingAnchor.constraint(equalTo: videoContainerView.trailingAnchor),
             touchOverlayView.topAnchor.constraint(equalTo: videoContainerView.topAnchor),
             touchOverlayView.bottomAnchor.constraint(equalTo: videoContainerView.bottomAnchor),
-
-            floatingDisconnectButton.topAnchor.constraint(equalTo: videoContainerView.safeAreaLayoutGuide.topAnchor, constant: 12),
-            floatingDisconnectButton.trailingAnchor.constraint(equalTo: videoContainerView.safeAreaLayoutGuide.trailingAnchor, constant: -12),
-            floatingDisconnectButton.widthAnchor.constraint(equalToConstant: 44),
-            floatingDisconnectButton.heightAnchor.constraint(equalToConstant: 44)
         ])
 
-        touchOverlayView.onTouch = { [weak self] pointers, action, actionIndex in
-            guard let self = self else { return }
-            var mappedPointers: [(id: Int, x: Int, y: Int)] = []
-            for pointer in pointers {
-                let mapped = self.mapTouchPointToAa(pointer.point)
-                mappedPointers.append((id: pointer.id, x: mapped.x, y: mapped.y))
-            }
-
+        touchOverlayView.onTouch = { pointers, action, actionIndex in
             if action == .DOWN || action == .UP || action == .POINTER_DOWN || action == .POINTER_UP || action == .CANCEL {
-                print("MainViewController: Touch action=\(action) pointers=\(mappedPointers.count) actionIndex=\(actionIndex)")
+                print("MainViewController: Touch action=\(action) pointers=\(pointers.count) actionIndex=\(actionIndex)")
             }
 
-            ConnectionManager.shared.sendTouchEvent(pointers: mappedPointers, action: action, actionIndex: actionIndex)
+            ConnectionManager.shared.sendTouchEvent(pointers: pointers, action: action, actionIndex: actionIndex)
         }
 
         let twoFingerDoubleTap = UITapGestureRecognizer(target: self, action: #selector(handleTwoFingerDoubleTap))
@@ -605,7 +609,9 @@ class MainViewController: UIViewController {
             videoContainerView.isHidden = false
             view.bringSubviewToFront(videoContainerView)
             videoContainerView.bringSubviewToFront(touchOverlayView)
-            videoContainerView.bringSubviewToFront(floatingDisconnectButton)
+            touchOverlayView.surfaceSize = touchOverlayView.bounds.size
+            touchOverlayView.screenConfig = HeadUnitScreenConfig.shared
+            touchOverlayView.videoFitMode = HeadUnitScreenConfig.shared.videoFitMode
             activityIndicator.stopAnimating()
             videoRenderer.applyGeometry()
             setNeedsStatusBarAppearanceUpdate()
@@ -1236,10 +1242,6 @@ class MainViewController: UIViewController {
         }
     }
 
-    @objc private func floatingDisconnectButtonTapped() {
-        promptDisconnectConfirmation()
-    }
-
     @objc private func handleTwoFingerDoubleTap() {
         promptDisconnectConfirmation()
     }
@@ -1255,25 +1257,6 @@ class MainViewController: UIViewController {
         })
         alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
         present(alert, animated: true)
-    }
-
-    private func mapTouchPointToAa(_ point: CGPoint) -> (x: Int, y: Int) {
-        let screenConfig = HeadUnitScreenConfig.shared
-        let width = Float(max(touchOverlayView.bounds.width, 1))
-        let height = Float(max(touchOverlayView.bounds.height, 1))
-
-        let coord = TouchCoordinateMapper.map(
-            rawX: Float(point.x),
-            rawY: Float(point.y),
-            inputSurfaceWidth: width,
-            inputSurfaceHeight: height,
-            negotiatedWidth: screenConfig.getNegotiatedWidth(),
-            negotiatedHeight: screenConfig.getNegotiatedHeight(),
-            marginWidth: Float(screenConfig.getWidthMargin()),
-            marginHeight: Float(screenConfig.getHeightMargin()),
-            fitMode: screenConfig.videoFitMode
-        )
-        return (coord.x, coord.y)
     }
 }
 

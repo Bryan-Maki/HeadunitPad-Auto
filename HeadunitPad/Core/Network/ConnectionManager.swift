@@ -543,6 +543,17 @@ extension ConnectionManager: AapTransportDelegate {
 
         scheduleReconnectIfNeeded(reason: "Android Auto disconnected")
     }
+
+    func aapTransportDidRequestExit(_ transport: AapTransport) {
+        guard transport === aapTransport else { return }
+        print("ConnectionManager: AapTransport requested exit (native video focus)")
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.isUserInitiatedDisconnect = true
+            self.autoReconnect.cancel()
+            self.disconnect()
+        }
+    }
 }
 
 extension ConnectionManager: WirelessHelperServerDelegate {

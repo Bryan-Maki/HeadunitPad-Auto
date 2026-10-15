@@ -20,6 +20,7 @@ protocol AapTransportDelegate: AnyObject {
     func aapTransport(_ transport: AapTransport, didRequestLocationUpdates isEnabled: Bool)
     func aapTransport(_ transport: AapTransport, didChangeState state: AapTransportState)
     func aapTransportDidDisconnect(_ transport: AapTransport)
+    func aapTransportDidRequestExit(_ transport: AapTransport)
 }
 
 extension AapTransportDelegate {
@@ -27,6 +28,7 @@ extension AapTransportDelegate {
         aapTransport(transport, didReceiveAudioData: data, on: channel)
     }
     func aapTransport(_ transport: AapTransport, didReceiveAudioCodecConfig data: Data, on channel: UInt8) {}
+    func aapTransportDidRequestExit(_ transport: AapTransport) {}
 }
 
 struct AapMediaMetadata {
@@ -107,6 +109,7 @@ class AapTransport {
     private var lastInboundMessageMs: Int64 = 0
     private var mediaSessionIds: [UInt8: UInt64] = [:]
     private var sinkCodecs: [UInt8: AudioSinkCodec] = [:]
+    private var audioAssemblyBuffers: [UInt8: Data] = [:]
     private var videoAssemblyBuffer = Data()
     private var videoAssemblyMessageType: UInt16 = 0
     private var videoFirstFragmentAtMs: UInt64 = 0
@@ -278,6 +281,7 @@ class AapTransport {
             Channel.ID_MIC: 0
         ]
         sinkCodecs.removeAll()
+        audioAssemblyBuffers.removeAll()
         focusCyclesUsedThisSession = 0
         lastFocusCycleAtMs = 0
         lastWireCorruptionAtMs = 0
@@ -1077,7 +1081,7 @@ class AapTransport {
         }
     }
 
-    private func handleMessage(_ message: AapMessage) {
+    func handleMessage(_ message: AapMessage) {
         let channelId = message.channelUInt8
         recordAapTrace(direction: "RX", channel: channelId, flags: message.flags, type: message.typeUInt16, payloadSize: message.payload.count)
         noteInboundMessage(channel: Int(channelId), bytes: message.payload.count)
@@ -1316,16 +1320,28 @@ class AapTransport {
         case AapMessageType.NAV_FOCUS_REQUEST.rawValue:
             sendNavFocusNotification(on: chan)
 
+        case 0x0018: // Control.ControlMsgType.messageVideoFocusRequest (24)
+            let requestedMode = ProtoWire.extractFirstVarint(from: message.payload, fieldNumber: 2) ?? 1
+            if requestedMode == 2 || requestedMode == 3 {
+                print("AapTransport: Native exit requested on control channel (mode=\(requestedMode))")
+                sendVideoFocusNotification(on: Channel.ID_VID, gain: false, unsolicited: false, reason: "control-video-focus-exit")
+                delegate?.aapTransportDidRequestExit(self)
+            } else if requestedMode == 1 || requestedMode == 4 {
+                sendVideoFocusNotification(on: Channel.ID_VID, gain: true, unsolicited: false, reason: "control-video-focus-request")
+            }
+
         case AapMessageType.BYEBYE_REQUEST.rawValue:
             let reason = ProtoWire.extractFirstVarint(from: message.payload, fieldNumber: 1)
             gracefulDisconnectLock.lock()
             peerDisconnectDiagnostic = reason.map { "ByeBye reason \($0)" } ?? "ByeBye without reason"
             gracefulDisconnectLock.unlock()
             sendByebyeResponse(on: chan)
+            delegate?.aapTransportDidRequestExit(self)
 
         case AapMessageType.BYEBYE_RESPONSE.rawValue:
             print("AapTransport: Received byebye response")
             finishGracefulDisconnect(reason: "response")
+            delegate?.aapTransportDidRequestExit(self)
 
         case AapMessageType.CHANNEL_OPEN_RESPONSE.rawValue:
             print("AapTransport: Channel open response received")
@@ -1472,10 +1488,10 @@ class AapTransport {
         print("AapTransport: Sent driving status unrestricted")
     }
 
-    private func sendVideoFocusNotification(on channel: UInt8, gain: Bool = true, reason: String) {
-        let message = AapVideoFocusEventMessage.make(gain: gain, unsolicited: true)
+    private func sendVideoFocusNotification(on channel: UInt8, gain: Bool = true, unsolicited: Bool = true, reason: String) {
+        let message = AapVideoFocusEventMessage.make(gain: gain, unsolicited: unsolicited)
         send(message: message)
-        print("AapTransport: Sent video focus notification gain=\(gain) reason=\(reason)")
+        print("AapTransport: Sent video focus notification gain=\(gain) unsolicited=\(unsolicited) reason=\(reason)")
     }
 
     public func performVideoFocusCycle(reason: String) {
@@ -1901,8 +1917,12 @@ private enum ProtoWire {
 
         case 0x8007: // Media.MsgType.MEDIA_MESSAGE_VIDEO_FOCUS_REQUEST
             let requestedMode = ProtoWire.extractFirstVarint(from: message.payload, fieldNumber: 2) ?? 1
-            if requestedMode != 2 {
-                sendVideoFocusNotification(on: message.channelUInt8, gain: true, reason: "video-focus-request")
+            if requestedMode == 2 || requestedMode == 3 {
+                print("AapTransport: Native exit requested via VIDEO_FOCUS_REQUEST (mode=\(requestedMode))")
+                sendVideoFocusNotification(on: Channel.ID_VID, gain: false, unsolicited: false, reason: "video-focus-exit")
+                delegate?.aapTransportDidRequestExit(self)
+            } else if requestedMode == 1 || requestedMode == 4 {
+                sendVideoFocusNotification(on: message.channelUInt8, gain: true, unsolicited: false, reason: "video-focus-request")
             }
 
         case 0, 1: // MEDIA_MESSAGE_DATA (0x0000) / MEDIA_MESSAGE_CODEC_CONFIG (0x0001)
@@ -2081,23 +2101,60 @@ private enum ProtoWire {
             setMediaSessionId(fromStartPayload: message.payload, on: message.channelUInt8)
 
         case 0x8002: // Media.MsgType.MEDIA_MESSAGE_STOP
+            audioAssemblyBuffers.removeValue(forKey: message.channelUInt8)
             break
 
-        case 0: // 0x0000 MEDIA_WITH_TIMESTAMP_INDICATION (8-byte timestamp + audio payload)
-            sendMediaAck(on: message.channelUInt8)
-            if message.payload.count > 8 {
-                let audioData = message.payload.subdata(in: 8..<message.payload.count)
-                let isAac = sinkCodecs[message.channelUInt8]?.isAac ?? (ProjectionSettings.audioCodecPreference == .aac)
-                delegate?.aapTransport(self, didReceiveAudioData: audioData, on: message.channelUInt8, isAac: isAac)
-            }
+        case 0, 1: // 0x0000 MEDIA_WITH_TIMESTAMP_INDICATION / 0x0001 MEDIA_INDICATION / MEDIA_MESSAGE_CODEC_CONFIG
+            let isFirst = (message.flags & AapMessageFraming.FLAG_BIT_FIRST) != 0
+            let isLast = (message.flags & AapMessageFraming.FLAG_BIT_LAST) != 0
+            let channel = message.channelUInt8
+            let isAac = sinkCodecs[channel]?.isAac ?? (ProjectionSettings.audioCodecPreference == .aac)
 
-        case 1: // 0x0001 MEDIA_INDICATION / MEDIA_MESSAGE_CODEC_CONFIG (no 8-byte timestamp)
-            sendMediaAck(on: message.channelUInt8)
-            let isAac = sinkCodecs[message.channelUInt8]?.isAac ?? (ProjectionSettings.audioCodecPreference == .aac)
-            if isAac && message.payload.count <= 16 {
-                delegate?.aapTransport(self, didReceiveAudioCodecConfig: message.payload, on: message.channelUInt8)
-            } else if !message.payload.isEmpty {
-                delegate?.aapTransport(self, didReceiveAudioData: message.payload, on: message.channelUInt8, isAac: isAac)
+            if isFirst && isLast {
+                // Complete single packet
+                if message.type == 0 {
+                    sendMediaAck(on: channel)
+                    if message.payload.count > 8 {
+                        let audioData = message.payload.subdata(in: 8..<message.payload.count)
+                        deliverAudioData(audioData, on: channel, isAac: isAac)
+                    }
+                } else {
+                    sendMediaAck(on: channel)
+                    if isAac && message.payload.count <= 16 {
+                        delegate?.aapTransport(self, didReceiveAudioCodecConfig: message.payload, on: channel)
+                    } else if !isAac && message.payload.count <= 8 {
+                        // PCM codec config <= 8 bytes: do not treat as PCM audio samples
+                    } else if !message.payload.isEmpty {
+                        deliverAudioData(message.payload, on: channel, isAac: isAac)
+                    }
+                }
+            } else if isFirst && !isLast {
+                // First fragment (0x09)
+                let fragmentPayload: Data
+                if message.type == 0 {
+                    fragmentPayload = (message.payload.count > 8) ? message.payload.subdata(in: 8..<message.payload.count) : Data()
+                } else {
+                    fragmentPayload = message.payload
+                }
+                audioAssemblyBuffers[channel] = fragmentPayload
+                // Do not send ACK, do not play yet
+            } else if !isFirst && !isLast {
+                // Middle fragment (0x08): do not strip anything
+                audioAssemblyBuffers[channel]?.append(message.payload)
+            } else if !isFirst && isLast {
+                // Last fragment (0x0a): append without stripping, finish assembly
+                var buffer = audioAssemblyBuffers.removeValue(forKey: channel) ?? Data()
+                buffer.append(message.payload)
+
+                sendMediaAck(on: channel)
+
+                if isAac && message.type == 1 && buffer.count <= 16 {
+                    delegate?.aapTransport(self, didReceiveAudioCodecConfig: buffer, on: channel)
+                } else if !isAac && message.type == 1 && buffer.count <= 8 {
+                    // In PCM mode, codec config <= 8 bytes is not PCM audio
+                } else if !buffer.isEmpty {
+                    deliverAudioData(buffer, on: channel, isAac: isAac)
+                }
             }
 
         case Int(AapMessageType.AUDIO_FRAME.rawValue):
@@ -2106,11 +2163,25 @@ private enum ProtoWire {
             if message.payload.count > 8 {
                 let audioData = message.payload.subdata(in: 8..<message.payload.count)
                 let isAac = sinkCodecs[message.channelUInt8]?.isAac ?? false
-                delegate?.aapTransport(self, didReceiveAudioData: audioData, on: message.channelUInt8, isAac: isAac)
+                deliverAudioData(audioData, on: message.channelUInt8, isAac: isAac)
             }
 
         default:
             print("AapTransport: Unhandled audio message type=\(message.type) on channel \(Channel.name(for: message.channelUInt8))")
+        }
+    }
+
+    private func deliverAudioData(_ data: Data, on channel: UInt8, isAac: Bool) {
+        guard !data.isEmpty else { return }
+        if isAac {
+            delegate?.aapTransport(self, didReceiveAudioData: data, on: channel, isAac: true)
+        } else {
+            let chCount = (channel == Channel.ID_AUD) ? 2 : 1
+            let frameBytes = chCount * 2
+            let alignedCount = (data.count / frameBytes) * frameBytes
+            guard alignedCount > 0 else { return }
+            let alignedData = (alignedCount == data.count) ? data : data.prefix(alignedCount)
+            delegate?.aapTransport(self, didReceiveAudioData: alignedData, on: channel, isAac: false)
         }
     }
 
@@ -2244,8 +2315,8 @@ private enum ProtoWire {
     }
 
     private func sendMediaConfig(on channel: UInt8) {
-        // Media.Config { status=READY(2), max_unacked=8, configuration_indices=[0] }
-        let maxUnacked: UInt64 = Channel.isAudio(channel) ? 8 : 12
+        // Media.Config { status=READY(2), max_unacked=16 for audio, 8 for video, configuration_indices=[0] }
+        let maxUnacked: UInt64 = (channel == Channel.ID_VID) ? 8 : (Channel.isAudio(channel) ? 16 : 8)
         let payload = ProtoWire.fieldVarint(1, value: 2)
             + ProtoWire.fieldVarint(2, value: maxUnacked)
             + ProtoWire.fieldVarint(3, value: 0)

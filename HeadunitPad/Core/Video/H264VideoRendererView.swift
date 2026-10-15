@@ -42,6 +42,7 @@ public class H264VideoRendererView: UIView {
     public var onFrameDisplayed: (() -> Void)?
     public var onKeyframeRequested: (() -> Void)?
     public var onCorruptionDetected: ((String) -> Void)?
+    public var onVideoSizeResolved: ((CGSize) -> Void)?
 
     public let displayLayer = AVSampleBufferDisplayLayer()
 
@@ -428,6 +429,16 @@ public class H264VideoRendererView: UIView {
                     updateDiagnostics { $0.formatDescriptions += 1 }
                 } else {
                     updateDiagnostics { $0.formatFailures += 1 }
+                }
+            }
+        }
+
+        if let formatDesc = formatDescription, paramSetsChanged {
+            let dims = CMVideoFormatDescriptionGetDimensions(formatDesc)
+            if dims.width > 0 && dims.height > 0 {
+                let resolved = CGSize(width: Int(dims.width), height: Int(dims.height))
+                DispatchQueue.main.async { [weak self] in
+                    self?.onVideoSizeResolved?(resolved)
                 }
             }
         }

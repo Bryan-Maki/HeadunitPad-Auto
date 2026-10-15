@@ -10,15 +10,26 @@ import Foundation
 import AVFoundation
 
 final class PCMAudioPlayer {
-    private struct Stream {
+    private final class StreamContext {
         let sampleRate: Int
         let channels: Int
         let format: AVAudioFormat
         let player: AVAudioPlayerNode
+        var queuedFrames: Int = 0
+        var prebufferQueue: [AVAudioPCMBuffer] = []
+        var isPrebuffering: Bool = true
+        var needsFadeIn: Bool = true
+
+        init(sampleRate: Int, channels: Int, format: AVAudioFormat, player: AVAudioPlayerNode) {
+            self.sampleRate = sampleRate
+            self.channels = channels
+            self.format = format
+            self.player = player
+        }
     }
 
     private let engine = AVAudioEngine()
-    private var streams: [UInt8: Stream] = [:]
+    private var streams: [UInt8: StreamContext] = [:]
     private var sessionConfigured = false
     private let audioQueue = DispatchQueue(label: "com.headunitpad.audio.player", qos: .userInitiated)
     private var isMicrophoneActive = false
@@ -119,7 +130,13 @@ final class PCMAudioPlayer {
     public func reset() {
         audioQueue.async { [weak self] in
             guard let self = self else { return }
-            self.streams.values.forEach { $0.player.stop() }
+            self.streams.values.forEach {
+                $0.player.stop()
+                $0.prebufferQueue.removeAll()
+                $0.queuedFrames = 0
+                $0.isPrebuffering = true
+                $0.needsFadeIn = true
+            }
             self.streams.removeAll()
             self.engine.stop()
             self.engine.reset()
@@ -213,7 +230,8 @@ final class PCMAudioPlayer {
                 let frameBase = frame * channels
                 for ch in 0..<channels {
                     let sample = Int16(littleEndian: int16Ptr[frameBase + ch])
-                    floatChannelData[ch][frame] = Float32(sample) / 32768.0
+                    let floatVal = Float32(sample) / 32768.0
+                    floatChannelData[ch][frame] = max(-1.0, min(1.0, floatVal))
                 }
             }
         }
@@ -239,10 +257,52 @@ final class PCMAudioPlayer {
             noteSpeechActivity()
         }
 
-        if !stream.player.isPlaying {
-            stream.player.play()
+        if stream.isPrebuffering {
+            stream.prebufferQueue.append(buffer)
+            let prebufferedFrames = stream.prebufferQueue.reduce(0) { $0 + Int($1.frameLength) }
+            let targetThresholdFrames = (stream.sampleRate * 3) / 50 // ~60ms
+            if prebufferedFrames >= targetThresholdFrames || stream.prebufferQueue.count >= 4 {
+                stream.isPrebuffering = false
+                if !stream.player.isPlaying {
+                    stream.player.play()
+                }
+                for buf in stream.prebufferQueue {
+                    scheduleStreamBuffer(buf, stream: stream, channel: channel)
+                }
+                stream.prebufferQueue.removeAll()
+            }
+        } else {
+            if !stream.player.isPlaying {
+                stream.player.play()
+            }
+            scheduleStreamBuffer(buffer, stream: stream, channel: channel)
         }
-        stream.player.scheduleBuffer(buffer, completionHandler: nil)
+    }
+
+    private func scheduleStreamBuffer(_ buffer: AVAudioPCMBuffer, stream: StreamContext, channel: UInt8) {
+        if stream.needsFadeIn, let floatChannelData = buffer.floatChannelData {
+            let rampFrames = min(32, Int(buffer.frameLength))
+            for frame in 0..<rampFrames {
+                let gain = Float32(frame) / Float32(rampFrames)
+                for ch in 0..<stream.channels {
+                    floatChannelData[ch][frame] *= gain
+                }
+            }
+            stream.needsFadeIn = false
+        }
+
+        let frameCount = Int(buffer.frameLength)
+        stream.queuedFrames += frameCount
+        stream.player.scheduleBuffer(buffer) { [weak self] in
+            self?.audioQueue.async {
+                guard let self = self, let s = self.streams[channel] else { return }
+                s.queuedFrames = max(0, s.queuedFrames - frameCount)
+                if s.queuedFrames == 0 {
+                    s.isPrebuffering = true
+                    s.needsFadeIn = true
+                }
+            }
+        }
     }
 
     private func streamFormatParameters(for channel: UInt8) -> (sampleRate: Int, channels: Int) {
@@ -297,6 +357,7 @@ final class PCMAudioPlayer {
             options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP, .mixWithOthers]
         )
         try? session.setPreferredSampleRate(48000)
+        try? session.setPreferredIOBufferDuration(0.02)
         try? session.setActive(true)
         sessionConfigured = true
         logCurrentAudioRoute(prefix: "PCMAudioPlayer: audio session configured")
@@ -331,7 +392,7 @@ final class PCMAudioPlayer {
         }
     }
 
-    private func ensureStream(for channel: UInt8, sampleRate: Int, channels: Int) -> Stream? {
+    private func ensureStream(for channel: UInt8, sampleRate: Int, channels: Int) -> StreamContext? {
         if let existing = streams[channel],
            existing.sampleRate == sampleRate,
            existing.channels == channels {
@@ -353,7 +414,7 @@ final class PCMAudioPlayer {
         }
         playerNode.play()
 
-        let stream = Stream(
+        let stream = StreamContext(
             sampleRate: sampleRate,
             channels: channels,
             format: floatFormat,

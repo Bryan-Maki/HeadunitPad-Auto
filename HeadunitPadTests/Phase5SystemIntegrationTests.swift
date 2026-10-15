@@ -298,4 +298,141 @@ final class Phase5SystemIntegrationTests: XCTestCase {
         XCTAssertEqual(floatChannels[0][1], Float(32767.0 / 32768.0), accuracy: 0.0001)
         XCTAssertEqual(floatChannels[1][1], -1.0, accuracy: 0.0001)
     }
+
+    // MARK: - 7. Real-Device Touch Single-Pass Mapping, Audio Fragment Reassembly & Native Exit
+
+    func testSinglePassTouchMappingMatchesActiveVideoRegion() {
+        let touchView = TouchInputView(frame: CGRect(x: 0, y: 0, width: 1180, height: 820))
+        touchView.surfaceSize = CGSize(width: 1180, height: 820)
+        touchView.codecWidth = 1920
+        touchView.codecHeight = 1080
+        touchView.widthMargin = 480
+        touchView.heightMargin = 0
+        touchView.videoFitMode = .fillMargin
+
+        // Center tap (590, 410)
+        let center = touchView.mapTouchToActiveContent(CGPoint(x: 590, y: 410))
+        // widthMargin/2 = 240. Active width = 1440. Center = 240 + 720 = 960.
+        // heightMargin/2 = 0. Active height = 1080. Center = 540.
+        XCTAssertEqual(center.x, 960)
+        XCTAssertEqual(center.y, 540)
+
+        // Top-left tap (0, 0)
+        let topLeft = touchView.mapTouchToActiveContent(CGPoint(x: 0, y: 0))
+        XCTAssertEqual(topLeft.x, 240)
+        XCTAssertEqual(topLeft.y, 0)
+
+        // Bottom-right tap (1180, 820)
+        let bottomRight = touchView.mapTouchToActiveContent(CGPoint(x: 1180, y: 820))
+        XCTAssertEqual(bottomRight.x, 1680)
+        XCTAssertEqual(bottomRight.y, 1080)
+    }
+
+    func testFragmentedAudioPacketReassemblyDoesNotStripMidStreamBytes() {
+        final class TestAudioDelegate: AapTransportDelegate {
+            var deliveredAudio: [Data] = []
+            func aapTransport(_ transport: AapTransport, didReceiveVideoData data: Data) {}
+            func aapTransport(_ transport: AapTransport, didReceiveAudioData data: Data, on channel: UInt8) {
+                deliveredAudio.append(data)
+            }
+            func aapTransport(_ transport: AapTransport, didReceiveAudioData data: Data, on channel: UInt8, isAac: Bool) {
+                deliveredAudio.append(data)
+            }
+            func aapTransport(_ transport: AapTransport, didReceiveAudioCodecConfig data: Data, on channel: UInt8) {}
+            func aapTransport(_ transport: AapTransport, didReceiveMediaMetadata metadata: AapMediaMetadata) {}
+            func aapTransport(_ transport: AapTransport, didReceivePlaybackStatus status: AapPlaybackStatus) {}
+            func aapTransport(_ transport: AapTransport, didRequestMicrophoneCapture isOpen: Bool) {}
+            func aapTransport(_ transport: AapTransport, didRequestLocationUpdates isEnabled: Bool) {}
+            func aapTransport(_ transport: AapTransport, didChangeState state: AapTransportState) {}
+            func aapTransportDidDisconnect(_ transport: AapTransport) {}
+            func aapTransportDidRequestExit(_ transport: AapTransport) {}
+        }
+
+        final class DummyConnection: ByteStreamConnection {
+            weak var delegate: ByteStreamConnectionDelegate?
+            var isConnected: Bool = true
+            func send(_ data: Data, completion: ((Error?) -> Void)?) { completion?(nil) }
+            func disconnect() { isConnected = false }
+        }
+
+        let connection = DummyConnection()
+        let transport = AapTransport(connection: connection, handshakeProfile: .network)
+        let delegate = TestAudioDelegate()
+        transport.delegate = delegate
+
+        let channel = Channel.ID_AUD // 3 (stereo PCM)
+
+        // Fragment 1 (FIRST, flags = 0x09): 8 bytes timestamp + 100 bytes PCM (0xAA)
+        var p1 = Data(repeating: 0x00, count: 8) // 8-byte timestamp
+        p1.append(Data(repeating: 0xAA, count: 100))
+        let msg1 = AapMessage(channel: channel, flags: 0x09, type: 0, payload: p1)
+
+        // Fragment 2 (MIDDLE, flags = 0x08): 100 bytes PCM (0xBB), NO timestamp
+        let p2 = Data(repeating: 0xBB, count: 100)
+        let msg2 = AapMessage(channel: channel, flags: 0x08, type: 0, payload: p2)
+
+        // Fragment 3 (LAST, flags = 0x0a): 100 bytes PCM (0xCC), NO timestamp
+        let p3 = Data(repeating: 0xCC, count: 100)
+        let msg3 = AapMessage(channel: channel, flags: 0x0a, type: 0, payload: p3)
+
+        transport.handleMessage(msg1)
+        XCTAssertEqual(delegate.deliveredAudio.count, 0, "First fragment should be buffered awaiting complete assembly")
+
+        transport.handleMessage(msg2)
+        XCTAssertEqual(delegate.deliveredAudio.count, 0, "Middle fragment should be appended to assembly buffer")
+
+        transport.handleMessage(msg3)
+        XCTAssertEqual(delegate.deliveredAudio.count, 1, "Last fragment should trigger delivery of complete audio payload")
+
+        guard let assembled = delegate.deliveredAudio.first else {
+            XCTFail("Expected assembled audio data")
+            return
+        }
+
+        // Expected count: 100 + 100 + 100 = 300 bytes (aligned to 4-byte stereo Int16 frames)
+        XCTAssertEqual(assembled.count, 300)
+        XCTAssertEqual(assembled.prefix(100), Data(repeating: 0xAA, count: 100))
+        XCTAssertEqual(assembled.subdata(in: 100..<200), Data(repeating: 0xBB, count: 100))
+        XCTAssertEqual(assembled.suffix(100), Data(repeating: 0xCC, count: 100))
+    }
+
+    func testNativeVideoFocusRequestTriggersExitToHomeScreen() {
+        final class TestExitDelegate: AapTransportDelegate {
+            var exitRequested = false
+            func aapTransport(_ transport: AapTransport, didReceiveVideoData data: Data) {}
+            func aapTransport(_ transport: AapTransport, didReceiveAudioData data: Data, on channel: UInt8) {}
+            func aapTransport(_ transport: AapTransport, didReceiveAudioData data: Data, on channel: UInt8, isAac: Bool) {}
+            func aapTransport(_ transport: AapTransport, didReceiveAudioCodecConfig data: Data, on channel: UInt8) {}
+            func aapTransport(_ transport: AapTransport, didReceiveMediaMetadata metadata: AapMediaMetadata) {}
+            func aapTransport(_ transport: AapTransport, didReceivePlaybackStatus status: AapPlaybackStatus) {}
+            func aapTransport(_ transport: AapTransport, didRequestMicrophoneCapture isOpen: Bool) {}
+            func aapTransport(_ transport: AapTransport, didRequestLocationUpdates isEnabled: Bool) {}
+            func aapTransport(_ transport: AapTransport, didChangeState state: AapTransportState) {}
+            func aapTransportDidDisconnect(_ transport: AapTransport) {}
+            func aapTransportDidRequestExit(_ transport: AapTransport) {
+                exitRequested = true
+            }
+        }
+
+        final class DummyConnection: ByteStreamConnection {
+            weak var delegate: ByteStreamConnectionDelegate?
+            var isConnected: Bool = true
+            func send(_ data: Data, completion: ((Error?) -> Void)?) { completion?(nil) }
+            func disconnect() { isConnected = false }
+        }
+
+        let connection = DummyConnection()
+        let transport = AapTransport(connection: connection, handshakeProfile: .network)
+        let delegate = TestExitDelegate()
+        transport.delegate = delegate
+
+        // Send VideoFocusRequest (0x8007) with mode = 2 (VIDEO_FOCUS_NATIVE)
+        // field 2 (mode) = 2 (0x10, 0x02)
+        var payload = Data()
+        payload.append(contentsOf: [0x10, 0x02])
+        let msg = AapMessage(channel: Channel.ID_VID, flags: 0, type: 0x8007, payload: payload)
+
+        transport.handleMessage(msg)
+        XCTAssertTrue(delegate.exitRequested, "Native video focus request (mode=2) must trigger aapTransportDidRequestExit")
+    }
 }
