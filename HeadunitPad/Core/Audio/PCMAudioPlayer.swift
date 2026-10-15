@@ -429,14 +429,6 @@ final class PCMAudioPlayer {
             // 3. 强制重新激活当前新路由下的 AVAudioSession
             self.sessionConfigured = false
             self.ensureSessionConfigured()
-
-            // 4. 预备并启动引擎（后续到达的下一个 PCM 包会在 ensureStream 中自动创建全新 PlayerNode 并用新路由格式 connect 到 mainMixerNode）
-            self.engine.prepare()
-            do {
-                try self.engine.start()
-            } catch {
-                print("PCMAudioPlayer: engine.start() deferred until next packet (\(reason)): \(error)")
-            }
         }
 
         if DispatchQueue.getSpecific(key: Self.audioQueueKey) != nil {
