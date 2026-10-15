@@ -460,11 +460,13 @@ final class Phase5SystemIntegrationTests: XCTestCase {
             fpsLimit: 60,
             rightHandDrive: false
         )
-        // Find video channel
-        let videoServices = message.services.filter { $0.id == UInt32(Channel.ID_VID) }
-        XCTAssertFalse(videoServices.isEmpty)
-        guard let videoService = videoServices.first else { return }
-        let videoConfig = videoService.mediaSinkService.videoConfigs.first
+        var reader = ProtoReader(data: message.payload)
+        guard let proto = try? ServiceDiscoveryResponseProto(from: &reader) else {
+            XCTFail("Expected ServiceDiscoveryResponseProto")
+            return
+        }
+        let videoService = proto.services.first(where: { $0.id == UInt32(Channel.ID_VID) })
+        let videoConfig = videoService?.mediaSinkService?.videoConfigs.first
         XCTAssertEqual(videoConfig?.density, 220, "Video configuration density must equal custom DPI (220)")
 
         // Clean up
