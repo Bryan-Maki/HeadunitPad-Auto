@@ -91,7 +91,7 @@ class TcpHandler: ByteStreamConnection, @unchecked Sendable {
             DispatchQueue.main.async {
                 self.delegate?.byteStreamConnectionDidConnect(self)
                 if !initialData.isEmpty {
-                    self.delegate?.byteStreamConnection(self, didReceiveData: initialData)
+                    self.delegate?.byteStreamConnection(self, didReceive: initialData)
                 }
             }
             startReceiving()
