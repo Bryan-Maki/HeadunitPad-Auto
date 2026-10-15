@@ -36,9 +36,7 @@ public final class HeadUnitScreenConfig {
 
     public init() {
         self.videoFitMode = ProjectionSettings.videoFitMode
-        if !ProjectionSettings.isAutoDpi && ProjectionSettings.dpi > 0 {
-            self.customDpi = ProjectionSettings.dpi
-        }
+        self.customDpi = nil
     }
 
     public enum IPadModelFamily: String, CaseIterable {
@@ -198,6 +196,11 @@ public final class HeadUnitScreenConfig {
         updateNegotiatedResolutionType(w: width, h: height)
     }
 
+    public func clearCustomNegotiatedResolution() {
+        customNegotiatedWidth = nil
+        customNegotiatedHeight = nil
+    }
+
     private func updateNegotiatedResolutionType(w: Int, h: Int) {
         let allRes: [ControlService.MediaSinkService.VideoConfiguration.VideoCodecResolutionType] = [
             ._800x480, ._1280x720, ._1920x1080, ._2560x1440, ._3840x2160,
@@ -330,32 +333,31 @@ public final class HeadUnitScreenConfig {
 
     public var announcedDensity: Int {
         if let custom = customDpi, custom > 0 {
-            return min(max(custom, 100), 400)
+            return AnnouncedDensityPolicy.clamp(custom)
         }
         if !ProjectionSettings.isAutoDpi && ProjectionSettings.dpi > 0 {
-            return min(max(ProjectionSettings.dpi, 100), 400)
+            return AnnouncedDensityPolicy.clamp(ProjectionSettings.dpi)
         }
-        let visibleW = max(1, getNegotiatedWidth() - getWidthMargin())
-        let visibleH = max(1, getNegotiatedHeight() - getHeightMargin())
+        let (activeW, activeH) = activeSize()
+        let visibleW = max(1, activeW - getWidthMargin())
+        let visibleH = max(1, activeH - getHeightMargin())
         return AnnouncedDensityPolicy.recommendedDpi(activeW: visibleW, activeH: visibleH, panelW: screenWidthPx, panelH: screenHeightPx)
     }
 
     public func densityDecision(requestedDpi: Int = 160) -> AnnouncedDensityPolicy.Decision {
         if let custom = customDpi, custom > 0 {
-            let clamped = min(max(custom, 100), 400)
+            let clamped = AnnouncedDensityPolicy.clamp(custom)
             return AnnouncedDensityPolicy.Decision(announced: clamped, requested: clamped, reason: .asStored)
         }
         if !ProjectionSettings.isAutoDpi && ProjectionSettings.dpi > 0 {
-            let clamped = min(max(ProjectionSettings.dpi, 100), 400)
+            let clamped = AnnouncedDensityPolicy.clamp(ProjectionSettings.dpi)
             return AnnouncedDensityPolicy.Decision(announced: clamped, requested: clamped, reason: .asStored)
         }
-        let visibleW = max(1, getNegotiatedWidth() - getWidthMargin())
-        let visibleH = max(1, getNegotiatedHeight() - getHeightMargin())
-        if ProjectionSettings.isAutoDpi {
-            let autoVal = AnnouncedDensityPolicy.recommendedDpi(activeW: visibleW, activeH: visibleH, panelW: screenWidthPx, panelH: screenHeightPx)
-            return AnnouncedDensityPolicy.Decision(announced: autoVal, requested: 0, reason: .automatic)
-        }
-        return AnnouncedDensityPolicy.decide(stored: requestedDpi, visibleW: visibleW, visibleH: visibleH)
+        let (activeW, activeH) = activeSize()
+        let visibleW = max(1, activeW - getWidthMargin())
+        let visibleH = max(1, activeH - getHeightMargin())
+        let autoVal = AnnouncedDensityPolicy.recommendedDpi(activeW: visibleW, activeH: visibleH, panelW: screenWidthPx, panelH: screenHeightPx)
+        return AnnouncedDensityPolicy.Decision(announced: autoVal, requested: 0, reason: .automatic)
     }
 
     public func recordAnnouncedMargins(widthMargin: Int, heightMargin: Int) {

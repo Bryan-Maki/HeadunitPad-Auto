@@ -62,20 +62,18 @@ public struct TouchCoordinateMapper: Sendable {
 
         let uiW = max(1.0, Float(negotiatedWidth) - marginWidth)
         let uiH = max(1.0, Float(negotiatedHeight) - marginHeight)
-        let halfMarginW = marginWidth / 2.0
-        let halfMarginH = marginHeight / 2.0
 
         let videoX: Float
         let videoY: Float
 
         switch fitMode {
         case .stretch:
-            videoX = (px / surfaceW) * Float(negotiatedWidth)
-            videoY = (rawY / surfaceH) * Float(negotiatedHeight)
+            videoX = (px / surfaceW) * uiW
+            videoY = (rawY / surfaceH) * uiH
 
         case .fill, .fillMargin:
-            videoX = halfMarginW + (px / surfaceW) * uiW
-            videoY = halfMarginH + (rawY / surfaceH) * uiH
+            videoX = (px / surfaceW) * uiW
+            videoY = (rawY / surfaceH) * uiH
 
         case .contain:
             let uiRatio = uiW / uiH
@@ -98,8 +96,8 @@ public struct TouchCoordinateMapper: Sendable {
             let localX = px - uiLeft
             let localY = rawY - uiTop
 
-            videoX = halfMarginW + (localX / displayedUiW) * uiW
-            videoY = halfMarginH + (localY / displayedUiH) * uiH
+            videoX = (localX / displayedUiW) * uiW
+            videoY = (localY / displayedUiH) * uiH
 
         case .cover:
             let uiRatio = uiW / uiH
@@ -122,12 +120,15 @@ public struct TouchCoordinateMapper: Sendable {
             let localX = px - uiLeft
             let localY = rawY - uiTop
 
-            videoX = halfMarginW + (localX / displayedUiW) * uiW
-            videoY = halfMarginH + (localY / displayedUiH) * uiH
+            videoX = (localX / displayedUiW) * uiW
+            videoY = (localY / displayedUiH) * uiH
         }
 
-        let clampedX = min(max(Int(videoX.rounded()), 0), negotiatedWidth)
-        let clampedY = min(max(Int(videoY.rounded()), 0), negotiatedHeight)
+        let maxUiX = max(0, negotiatedWidth - Int(marginWidth))
+        let maxUiY = max(0, negotiatedHeight - Int(marginHeight))
+
+        let clampedX = min(max(Int(videoX.rounded()), 0), maxUiX)
+        let clampedY = min(max(Int(videoY.rounded()), 0), maxUiY)
 
         return TouchCoordinate(x: clampedX, y: clampedY)
     }

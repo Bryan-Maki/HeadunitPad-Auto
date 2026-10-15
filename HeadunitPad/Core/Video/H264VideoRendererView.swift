@@ -222,6 +222,7 @@ public class H264VideoRendererView: UIView {
             self.formatDescription = nil
             self.hasDecodedKeyframe = false
             self.pinnedCodec = nil
+            self.lastNotifiedVideoSize = .zero
         }
 
         DispatchQueue.main.async { [weak self] in

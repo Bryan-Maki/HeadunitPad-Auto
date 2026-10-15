@@ -51,7 +51,12 @@ public final class WppTcpServer {
     }
 
     public func start(port: UInt16 = WppTcpServer.defaultPort) {
-        guard !isListening else { return }
+        if let existing = listener {
+            existing.cancel()
+            listener = nil
+        }
+        isListening = false
+        listeningPort = nil
 
         do {
             let tcpOptions = NWProtocolTCP.Options()

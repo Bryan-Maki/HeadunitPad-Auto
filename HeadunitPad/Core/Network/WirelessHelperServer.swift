@@ -24,8 +24,12 @@ final class WirelessHelperServer {
     public static let serviceType = "_aawireless._tcp"
     public private(set) var listeningPort: UInt16 = 5000
 
-    func start(port: UInt16 = WirelessHelperServer.defaultPort) {
-        guard !isRunning else { return }
+    func start(port: UInt16 = WirelessHelperServer.defaultPort, enableBonjour: Bool = true) {
+        if let existing = listener {
+            existing.cancel()
+            listener = nil
+        }
+        self.isRunning = false
         self.listeningPort = port
 
         do {
@@ -38,7 +42,9 @@ final class WirelessHelperServer {
 
             guard let nwPort = NWEndpoint.Port(rawValue: port) else { return }
             let listener = try NWListener(using: parameters, on: nwPort)
-            listener.service = NWListener.Service(name: "HeadunitPad", type: Self.serviceType)
+            if enableBonjour {
+                listener.service = NWListener.Service(name: "HeadunitPad", type: Self.serviceType)
+            }
 
             listener.stateUpdateHandler = { [weak self] state in
                 guard let self = self else { return }

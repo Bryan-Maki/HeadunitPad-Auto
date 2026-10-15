@@ -274,8 +274,8 @@ final class Phase1ScreenAndFramingTests: XCTestCase {
         let videoSize = CGSize(width: 1920, height: 1080)
 
         // In fillMargin: widthMargin = 480, heightMargin = 0
-        // Effective video UI active width is 1440
-        // left offset is margin/2 = 240
+        // Effective video UI active width is 1440 (range 0...1440)
+        // No halfMargin offset is added to active UI coordinates
 
         // 1. Touch at left edge (0, 384)
         let leftTouch = CGPoint(x: 0, y: 384)
@@ -287,7 +287,7 @@ final class Phase1ScreenAndFramingTests: XCTestCase {
             marginW: 480,
             marginH: 0
         )
-        XCTAssertEqual(pLeft.x, 240)
+        XCTAssertEqual(pLeft.x, 0)
         XCTAssertEqual(pLeft.y, 540)
 
         // 2. Touch at center (512, 384)
@@ -300,7 +300,7 @@ final class Phase1ScreenAndFramingTests: XCTestCase {
             marginW: 480,
             marginH: 0
         )
-        XCTAssertEqual(pCenter.x, 960)
+        XCTAssertEqual(pCenter.x, 720)
         XCTAssertEqual(pCenter.y, 540)
 
         // 3. Touch at right edge (1024, 384)
@@ -313,7 +313,7 @@ final class Phase1ScreenAndFramingTests: XCTestCase {
             marginW: 480,
             marginH: 0
         )
-        XCTAssertEqual(pRight.x, 1680)
+        XCTAssertEqual(pRight.x, 1440)
         XCTAssertEqual(pRight.y, 540)
     }
 

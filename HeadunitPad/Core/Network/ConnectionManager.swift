@@ -162,21 +162,18 @@ class ConnectionManager {
         // Awake iOS 14+ local network permission
         Discovery.triggerLocalNetworkPermission()
 
-        wppServer.start(port: 5288)
-        wirelessHelperServer.start(port: 5000)
-        legacyAapServer.start(port: 5277)
-        BluetoothWakeManager.shared.start()
-        discovery.startScan(ports: [Discovery.headunitPort, Discovery.wppPort])
+        wirelessHelperServer.start(port: 5288, enableBonjour: true)
+        legacyAapServer.start(port: 5000, enableBonjour: false)
+        discovery.startScan(ports: [Discovery.headunitPort])
     }
 
     func stopDiscovery() {
         print("ConnectionManager: stopDiscovery called")
         autoReconnect.cancel()
         discovery.stopScan()
-        wppServer.stop()
         wirelessHelperServer.stop()
         legacyAapServer.stop()
-        BluetoothWakeManager.shared.stop()
+        wppServer.stop()
         if state == .discovering || state == .waitingForWirelessHelper {
             state = .disconnected
             updateStatus("Ready to connect")
@@ -236,7 +233,6 @@ class ConnectionManager {
                 self.wirelessHelperServer.stop()
                 self.legacyAapServer.stop()
                 self.wppServer.stop()
-                BluetoothWakeManager.shared.stop()
                 self.connectedDevice = nil
                 self.state = .disconnected
                 self.updateStatus("Ready to connect")
@@ -307,8 +303,8 @@ class ConnectionManager {
             "Auto reconnect: \(ProjectionSettings.autoReconnect ? "On" : "Off")",
             "Auto resume playback: \(ProjectionSettings.autoResumePlayback ? "On" : "Off")",
             "Local IP: \(NetworkAddresses.currentWifiIPv4Address() ?? "Unknown")",
-            "Wireless helper: \(wirelessHelperServer.isRunning ? "Listening" : "Stopped") (5288)",
-            "WPP server: \(wppServer.isRunning ? "Listening" : "Stopped") (5299)",
+            "Wireless helper (AAP): \(wirelessHelperServer.isRunning ? "Listening" : "Stopped") (5288)",
+            "Secondary AAP server: \(legacyAapServer.isRunning ? "Listening" : "Stopped") (5000)",
             "Consecutive silent failures: \(consecutiveSilentFailures)",
             "Consecutive starved sessions: \(consecutiveStarvedSessions)",
             "Audio output: \(currentAudioOutputDescription())",
@@ -592,7 +588,6 @@ extension ConnectionManager {
         wppServer.stop()
         wirelessHelperServer.stop()
         legacyAapServer.stop()
-        BluetoothWakeManager.shared.stop()
 
         state = .connecting
         let host = remoteHost ?? "Client"

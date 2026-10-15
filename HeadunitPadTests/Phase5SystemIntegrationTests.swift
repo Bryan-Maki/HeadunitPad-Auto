@@ -312,19 +312,19 @@ final class Phase5SystemIntegrationTests: XCTestCase {
 
         // Center tap (590, 410)
         let center = touchView.mapTouchToActiveContent(CGPoint(x: 590, y: 410))
-        // widthMargin/2 = 240. Active width = 1440. Center = 240 + 720 = 960.
-        // heightMargin/2 = 0. Active height = 1080. Center = 540.
-        XCTAssertEqual(center.x, 960)
+        // Active width = 1440. Center = 720.
+        // Active height = 1080. Center = 540.
+        XCTAssertEqual(center.x, 720)
         XCTAssertEqual(center.y, 540)
 
         // Top-left tap (0, 0)
         let topLeft = touchView.mapTouchToActiveContent(CGPoint(x: 0, y: 0))
-        XCTAssertEqual(topLeft.x, 240)
+        XCTAssertEqual(topLeft.x, 0)
         XCTAssertEqual(topLeft.y, 0)
 
         // Bottom-right tap (1180, 820)
         let bottomRight = touchView.mapTouchToActiveContent(CGPoint(x: 1180, y: 820))
-        XCTAssertEqual(bottomRight.x, 1680)
+        XCTAssertEqual(bottomRight.x, 1440)
         XCTAssertEqual(bottomRight.y, 1080)
     }
 
@@ -442,19 +442,22 @@ final class Phase5SystemIntegrationTests: XCTestCase {
         let config = HeadUnitScreenConfig.shared
         config.initScreen(width: 2360, height: 1640, scale: 2.0, fitMode: .fillMargin, requestedResolution: .r1920x1080)
 
-        // Without custom DPI, iPad Air default recommended DPI in 1080p is 180
+        // 1. Without custom DPI, iPad Air default recommended DPI in 1080p is 180
         config.customDpi = nil
         ProjectionSettings.isAutoDpi = true
         let defaultDecision = config.densityDecision(requestedDpi: 160)
         XCTAssertEqual(defaultDecision.announced, 180)
+        XCTAssertEqual(config.announcedDensity, 180)
 
-        // With custom DPI set to 220
-        config.customDpi = 220
+        // 2. With ProjectionSettings.dpi = 220 and isAutoDpi = false (independent of customDpi init)
+        config.customDpi = nil
+        ProjectionSettings.isAutoDpi = false
+        ProjectionSettings.dpi = 220
+        XCTAssertEqual(config.announcedDensity, 220, "announcedDensity must equal 220 when isAutoDpi is false")
         let customDecision = config.densityDecision(requestedDpi: 160)
         XCTAssertEqual(customDecision.announced, 220)
-        XCTAssertEqual(config.announcedDensity, 220)
 
-        // Verify in ServiceDiscoveryResponse videoConfig density
+        // 3. Verify in ServiceDiscoveryResponse videoConfig density
         let message = AapServiceDiscoveryResponseMessage.make(
             screenConfig: config,
             fpsLimit: 60,
@@ -469,9 +472,13 @@ final class Phase5SystemIntegrationTests: XCTestCase {
         let videoConfig = videoService?.mediaSinkService?.videoConfigs.first
         XCTAssertEqual(videoConfig?.density, 220, "Video configuration density must equal custom DPI (220)")
 
+        // 4. Test explicit config.customDpi override
+        config.customDpi = 240
+        XCTAssertEqual(config.announcedDensity, 240)
+
         // Clean up
         config.customDpi = nil
-        ProjectionSettings.isAutoDpi = true
+        ProjectionSettings.resetDpiToDefault()
     }
 
     func testVideoRendererAndTouchOverlayShareIdenticalMargins() {
@@ -511,12 +518,22 @@ final class Phase5SystemIntegrationTests: XCTestCase {
         XCTAssertEqual(renderer.codecWidth, touchView.codecWidth)
         XCTAssertEqual(renderer.codecHeight, touchView.codecHeight)
 
-        // Center tap (590, 410) on 1180x820 screen
-        // Active content is (1920 - 366) = 1554 wide, centered at 183 px left margin
-        // Center of 1554 is 777. 183 + 777 = 960 (exact horizontal center of 1920x1080)
+        // 1. Left edge tap (0, 410) on 1180x820 screen -> x = 0 (not 183)
+        let mappedLeft = touchView.mapTouchToActiveContent(CGPoint(x: 0, y: 410))
+        XCTAssertEqual(mappedLeft.x, 0, "Left screen tap must map to 0 without halfMargin offset")
+        XCTAssertEqual(mappedLeft.y, 540)
+
+        // 2. Center tap (590, 410) on 1180x820 screen
+        // Active content is (1920 - 366) = 1554 wide.
+        // Center of 1554 is 777 (not 960).
         let mappedCenter = touchView.mapTouchToActiveContent(CGPoint(x: 590, y: 410))
-        XCTAssertEqual(mappedCenter.x, 960, "Center screen tap must map precisely to active horizontal center 960")
+        XCTAssertEqual(mappedCenter.x, 777, "Center screen tap must map precisely to active horizontal center 777")
         XCTAssertEqual(mappedCenter.y, 540, "Center screen tap must map precisely to active vertical center 540")
+
+        // 3. Right edge tap (1180, 410) on 1180x820 screen -> x = 1554 (not 1737)
+        let mappedRight = touchView.mapTouchToActiveContent(CGPoint(x: 1180, y: 410))
+        XCTAssertTrue((1553...1554).contains(mappedRight.x), "Right screen tap must map to active width in [1553, 1554]")
+        XCTAssertEqual(mappedRight.y, 540)
     }
 
     func testWppHandshakeSessionSendsImmediateWifiStartRequestAndAcceptsIncomingAap() {

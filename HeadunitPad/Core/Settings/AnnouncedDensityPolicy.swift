@@ -14,6 +14,10 @@ public enum AnnouncedDensityPolicy {
     public static let widescreenMinWidthDp = 1240
     public static let fallbackDpi = 160
 
+    public static func clamp(_ dpi: Int) -> Int {
+        return min(max(dpi, 100), 400)
+    }
+
     public enum Reason: Equatable {
         case asStored
         case automatic

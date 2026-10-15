@@ -166,7 +166,7 @@ public final class Discovery {
             }
         }
 
-        print("Discovery: Priority 1 - probing immediate suspects on 5277 and 5288: \(prioritySuspects)")
+        print("Discovery: Priority 1 - probing immediate suspects on 5277: \(prioritySuspects)")
         let priorityGroup = DispatchGroup()
         var foundPriority = false
 
@@ -180,22 +180,6 @@ public final class Discovery {
                     print("Discovery: Priority suspect \(suspect):\(Discovery.headunitPort) connected!")
                     self?.storePreparedConnection(conn, ip: suspect, port: Discovery.headunitPort)
                     self?.reportFoundService(ip: suspect, port: Discovery.headunitPort)
-                }
-            }
-
-            priorityGroup.enter()
-            probePort(ip: suspect, port: Discovery.wppPort, timeout: 0.5) { [weak self] success, conn in
-                defer { priorityGroup.leave() }
-                if success, let conn = conn {
-                    foundPriority = true
-                    print("Discovery: Phone WPP suspect \(suspect):\(Discovery.wppPort) connected! Sending WifiStartRequest...")
-                    let session = WppHandshakeSession()
-                    let frames = session.start(localIp: myIp, aapPort: 5000)
-                    for frame in frames {
-                        conn.send(content: frame, completion: .contentProcessed { _ in })
-                    }
-                    self?.storePreparedConnection(conn, ip: suspect, port: Discovery.wppPort)
-                    self?.reportFoundService(ip: suspect, port: Discovery.wppPort)
                 }
             }
         }

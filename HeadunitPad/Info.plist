@@ -48,10 +48,6 @@
 	<string>HeadunitPad needs location access when using iPad GPS for Android Auto navigation.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>HeadunitPad needs location access when using iPad GPS for Android Auto navigation.</string>
-	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>HeadunitPad uses Bluetooth to discover and awaken Android Auto wireless projection.</string>
-	<key>NSBluetoothPeripheralUsageDescription</key>
-	<string>HeadunitPad advertises Android Auto service UUID over Bluetooth for wireless pairing.</string>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_aap._tcp</string>

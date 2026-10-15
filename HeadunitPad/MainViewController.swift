@@ -168,18 +168,6 @@ class MainViewController: UIViewController {
         return button
     }()
 
-    private lazy var qrSetupButton: UIButton = {
-        var config = UIButton.Configuration.tinted()
-        config.title = "QR Setup & Pairing"
-        config.image = UIImage(systemName: "qrcode")
-        config.imagePadding = 6
-        config.cornerStyle = .medium
-        let button = UIButton(configuration: config)
-        button.translatesAutoresizingMaskIntoConstraints = false
-        button.addTarget(self, action: #selector(qrSetupButtonTapped), for: .touchUpInside)
-        return button
-    }()
-
     private let orDividerLabel: UILabel = {
         let label = UILabel()
         label.text = "— or —"
@@ -377,7 +365,6 @@ class MainViewController: UIViewController {
         directConnectContainer.addSubview(directIpLabel)
         directConnectContainer.addSubview(directIpTextField)
         directConnectContainer.addSubview(directConnectButton)
-        directConnectContainer.addSubview(qrSetupButton)
 
         homeContentView.addSubview(titleLabel)
         homeContentView.addSubview(subtitleLabel)
@@ -467,13 +454,8 @@ class MainViewController: UIViewController {
             directConnectButton.topAnchor.constraint(equalTo: directIpTextField.bottomAnchor, constant: 12),
             directConnectButton.leadingAnchor.constraint(equalTo: directConnectContainer.leadingAnchor, constant: 16),
             directConnectButton.trailingAnchor.constraint(equalTo: directConnectContainer.trailingAnchor, constant: -16),
+            directConnectButton.bottomAnchor.constraint(equalTo: directConnectContainer.bottomAnchor, constant: -16),
             directConnectButton.heightAnchor.constraint(equalToConstant: 44),
-
-            qrSetupButton.topAnchor.constraint(equalTo: directConnectButton.bottomAnchor, constant: 10),
-            qrSetupButton.leadingAnchor.constraint(equalTo: directConnectContainer.leadingAnchor, constant: 16),
-            qrSetupButton.trailingAnchor.constraint(equalTo: directConnectContainer.trailingAnchor, constant: -16),
-            qrSetupButton.bottomAnchor.constraint(equalTo: directConnectContainer.bottomAnchor, constant: -14),
-            qrSetupButton.heightAnchor.constraint(equalToConstant: 44),
 
             // Or Divider
             orDividerLabel.centerXAnchor.constraint(equalTo: homeContentView.centerXAnchor),
@@ -521,6 +503,7 @@ class MainViewController: UIViewController {
             videoContainerView.isHidden = true
             homeScrollView.isHidden = false
             view.bringSubviewToFront(homeScrollView)
+            connectionManager.screenConfig.clearCustomNegotiatedResolution()
             videoRenderer.reset()
             audioPlayer.reset()
             settingsButton.isHidden = false
@@ -746,6 +729,8 @@ class MainViewController: UIViewController {
     }
 
     @objc private func disconnectButtonTapped() {
+        connectionManager.screenConfig.clearCustomNegotiatedResolution()
+        videoRenderer.reset()
         connectionManager.disconnect()
     }
 
@@ -815,7 +800,7 @@ class MainViewController: UIViewController {
             self?.presentFpsMenu()
         })
 
-        let dpiTitle = ProjectionSettings.isAutoDpi ? "DPI: Auto (\(ProjectionSettings.effectiveDpi))" : "DPI: \(ProjectionSettings.dpi)"
+        let dpiTitle = ProjectionSettings.isAutoDpi ? "DPI: Auto (\(ProjectionSettings.effectiveDpi))" : "DPI: Custom (\(ProjectionSettings.dpi))"
         alert.addAction(UIAlertAction(title: dpiTitle, style: .default) { [weak self] _ in
             self?.presentDpiMenu()
         })
@@ -889,6 +874,9 @@ class MainViewController: UIViewController {
             let title = option == ProjectionSettings.videoResolution ? "\(optionTitle) (Current)" : optionTitle
             alert.addAction(UIAlertAction(title: title, style: .default) { [weak self] _ in
                 ProjectionSettings.videoResolution = option
+                self?.connectionManager.screenConfig.clearCustomNegotiatedResolution()
+                self?.connectionManager.screenConfig.recalculateMargins()
+                self?.syncVideoAndTouchGeometry()
                 self?.presentSettingsMenu()
             })
         }
@@ -998,13 +986,16 @@ class MainViewController: UIViewController {
                 return
             }
 
+            ProjectionSettings.isAutoDpi = false
             ProjectionSettings.dpi = value
+            self?.connectionManager.screenConfig.customDpi = value
             self?.presentSettingsMenu()
         })
 
         let rec = ProjectionSettings.recommendedDpiForCurrentDevice()
         alert.addAction(UIAlertAction(title: "Auto Match iPad (\(rec))", style: .default) { [weak self] _ in
             ProjectionSettings.resetDpiToDefault()
+            self?.connectionManager.screenConfig.customDpi = nil
             self?.presentSettingsMenu()
         })
 
@@ -1113,7 +1104,7 @@ class MainViewController: UIViewController {
 
         let dpiLabel = UILabel()
         dpiLabel.translatesAutoresizingMaskIntoConstraints = false
-        let initialPrefix = ProjectionSettings.isAutoDpi ? "Auto " : ""
+        let initialPrefix = ProjectionSettings.isAutoDpi ? "Auto " : "Custom "
         dpiLabel.text = "DPI: \(initialPrefix)(\(ProjectionSettings.effectiveDpi))  (\(previewView.virtualWidthDp)×\(previewView.virtualHeightDp) dp)"
         dpiLabel.font = .monospacedDigitSystemFont(ofSize: 17, weight: .bold)
         dpiLabel.textAlignment = .center
@@ -1129,17 +1120,20 @@ class MainViewController: UIViewController {
         presetStack.distribution = .fillEqually
         presetStack.translatesAutoresizingMaskIntoConstraints = false
 
-        let updateDpiBlock: (Int, Bool) -> Void = { [weak slider, weak previewView, weak dpiLabel] val, isAuto in
+        let updateDpiBlock: (Int, Bool) -> Void = { [weak self, weak slider, weak previewView, weak dpiLabel] val, isAuto in
             guard let slider, let previewView, let dpiLabel else { return }
             let clamped = min(max(val, ProjectionSettings.minDpi), ProjectionSettings.maxDpi)
             slider.value = Float(clamped)
             previewView.dpi = clamped
-            let prefix = isAuto ? "Auto " : ""
+            let prefix = isAuto ? "Auto " : "Custom "
             dpiLabel.text = "DPI: \(prefix)(\(clamped))  (\(previewView.virtualWidthDp)×\(previewView.virtualHeightDp) dp)"
             if isAuto {
                 ProjectionSettings.resetDpiToDefault()
+                self?.connectionManager.screenConfig.customDpi = nil
             } else {
+                ProjectionSettings.isAutoDpi = false
                 ProjectionSettings.dpi = clamped
+                self?.connectionManager.screenConfig.customDpi = clamped
             }
             previewView.setNeedsDisplay()
         }
@@ -1254,11 +1248,6 @@ class MainViewController: UIViewController {
         }
     }
 
-    @objc private func qrSetupButtonTapped() {
-        let ip = NetworkAddresses.stationIpv4() ?? NetworkAddresses.currentHotspotGatewayIpv4() ?? "192.168.43.1"
-        let qrVc = ProjectionSetupQrViewController(ssid: "HeadunitPad-AP", passphrase: "None", ipAddress: ip, port: 5000)
-        present(qrVc, animated: true)
-    }
 }
 
 // MARK: - ConnectionManagerDelegate
