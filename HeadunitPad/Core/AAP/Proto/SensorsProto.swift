@@ -284,3 +284,6 @@ public struct SensorResponse: ProtoCodable, Equatable {
         self.status = status
     }
 }
+
+public typealias SensorEventIndicationProto = SensorBatch
+public typealias NightData = SensorBatch.NightData

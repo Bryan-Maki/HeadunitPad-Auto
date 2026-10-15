@@ -776,7 +776,7 @@ class AapTransport {
     public func sendNightModeEvent(isNight: Bool) {
         processingQueue.async { [weak self] in
             guard let self = self else { return }
-            let batch = SensorEventIndicationProto(nightMode: [NightData(isNightMode: isNight)])
+            let batch = SensorBatch(nightMode: [SensorBatch.NightData(isNightMode: isNight)])
             var writer = ProtoWriter()
             batch.encode(to: &writer)
             let msg = AapMessage(
@@ -1390,7 +1390,8 @@ class AapTransport {
         // Sensors.SensorsMsgType.SENSOR_STARTREQUEST = 0x8001
         if message.type == 0x8001 {
             var reqSensorType: Int?
-            if let sensorType = ProtoWire.extractFirstVarint(from: message.payload, fieldNumber: 1) {
+            if let sensorTypeRaw = ProtoWire.extractFirstVarint(from: message.payload, fieldNumber: 1) {
+                let sensorType = Int(sensorTypeRaw)
                 reqSensorType = sensorType
                 startedSensors.insert(sensorType)
 
