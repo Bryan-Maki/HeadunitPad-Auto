@@ -669,7 +669,7 @@ final class Phase5SystemIntegrationTests: XCTestCase {
         let transport = AapTransport(connection: connection, handshakeProfile: .network)
 
         // 1. Channel open request on sensor channel (Channel.ID_SEN = 1)
-        let openMsg = AapMessage(channel: Channel.ID_SEN, flags: 0x03, type: Int(AapMessageType.CHANNEL_OPEN_REQUEST.rawValue), payload: Data([0x08, 0x01]))
+        let openMsg = AapMessage(channel: Channel.ID_SEN, flags: 0x03, type: AapMessageType.CHANNEL_OPEN_REQUEST.rawValue, payload: Data([0x08, 0x01]))
         transport.handleMessage(openMsg)
 
         // 2. Sensor 10 start request (NIGHT)
