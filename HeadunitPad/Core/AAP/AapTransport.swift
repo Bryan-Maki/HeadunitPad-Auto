@@ -2413,7 +2413,7 @@ extension AapTransport: ByteStreamConnectionDelegate {
     }
 }
 
-enum TouchAction: UInt8 {
+public enum TouchAction: UInt8 {
     case DOWN = 0
     case UP = 1
     case MOVE = 2
