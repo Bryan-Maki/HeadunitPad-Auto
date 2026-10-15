@@ -101,7 +101,8 @@ final class Phase5SystemIntegrationTests: XCTestCase {
         XCTAssertEqual(message.channel, Int(Channel.ID_CTR))
         XCTAssertEqual(message.type, Int(ControlMsgType.messageServiceDiscoveryResponse.rawValue))
 
-        guard let proto = message.proto as? ServiceDiscoveryResponseProto else {
+        var reader = ProtoReader(data: message.payload)
+        guard let proto = try? ServiceDiscoveryResponseProto(from: &reader) else {
             XCTFail("Expected ServiceDiscoveryResponseProto")
             return
         }
