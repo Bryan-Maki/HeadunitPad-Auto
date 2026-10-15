@@ -25,6 +25,7 @@ enum H264NALParser {
                 return annexB
             }
 
+            let bytes = [UInt8](data)
             for offset in candidateOffsets(for: count) {
                 for lengthSize in [4, 2] {
                     if let units = parseLengthPrefixed(bytes, offset: offset, lengthSize: lengthSize) {
@@ -34,7 +35,7 @@ enum H264NALParser {
             }
 
             for offset in candidateOffsets(for: count) where offset < count {
-                let nalType = bytes[offset] & 0x1F
+                let nalType = ptr[offset] & 0x1F
                 if (1...12).contains(nalType) {
                     return [data.subdata(in: offset..<count)]
                 }
