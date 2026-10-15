@@ -7,6 +7,8 @@
 
 import Foundation
 
+public typealias MediaCodecResolutionType = ControlService.MediaSinkService.VideoConfiguration.VideoCodecResolutionType
+
 public enum ResolutionPreset: Int, CaseIterable {
     case auto = 0
     case r800x480 = 1
@@ -63,6 +65,18 @@ public enum ResolutionPreset: Int, CaseIterable {
         case .r2560x1440: return ._2560x1440
         case .r3840x2160: return ._3840x2160
         }
+    }
+
+    public func protoType(portrait: Bool) -> ControlService.MediaSinkService.VideoConfiguration.VideoCodecResolutionType {
+        if portrait {
+            switch self {
+            case .auto, .r800x480, .r1280x720: return ._720x1280
+            case .r1920x1080: return ._1080x1920
+            case .r2560x1440: return ._1440x2560
+            case .r3840x2160: return ._2160x3840
+            }
+        }
+        return protoType
     }
 
     public func title(for orientation: ProjectionOrientation) -> String {

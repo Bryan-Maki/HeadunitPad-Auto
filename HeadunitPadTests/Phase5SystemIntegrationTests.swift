@@ -635,4 +635,92 @@ final class Phase5SystemIntegrationTests: XCTestCase {
         server.stop()
         XCTAssertFalse(server.isRunning)
     }
+
+    // MARK: - 10. Night Mode & WPP Overhaul Tests
+
+    func testNightModeSensorStartRequestSendsImmediateNightEventAndLiveUpdate() {
+        let prevNight = ProjectionSettings.nightMode
+        defer { ProjectionSettings.nightMode = prevNight }
+
+        XCTAssertEqual(NightModeSetting.allCases.count, 3)
+
+        ProjectionSettings.nightMode = .night
+        XCTAssertTrue(ProjectionSettings.effectiveIsNightMode())
+
+        ProjectionSettings.nightMode = .day
+        XCTAssertFalse(ProjectionSettings.effectiveIsNightMode())
+
+        ProjectionSettings.nightMode = .auto
+        XCTAssertTrue(ProjectionSettings.effectiveIsNightMode(userInterfaceStyle: .dark))
+        XCTAssertFalse(ProjectionSettings.effectiveIsNightMode(userInterfaceStyle: .light))
+
+        final class MockConnection: ByteStreamConnection {
+            weak var delegate: ByteStreamConnectionDelegate?
+            var isConnected: Bool = true
+            var sentPackets: [Data] = []
+            func send(_ data: Data, completion: ((Error?) -> Void)?) {
+                sentPackets.append(data)
+                completion?(nil)
+            }
+            func disconnect() { isConnected = false }
+        }
+
+        let connection = MockConnection()
+        let transport = AapTransport(connection: connection, handshakeProfile: .network)
+
+        // 1. Channel open request on sensor channel (Channel.ID_SEN = 1)
+        let openMsg = AapMessage(channel: Channel.ID_SEN, flags: 0x03, type: Int(AapMessageType.CHANNEL_OPEN_REQUEST.rawValue), payload: Data([0x08, 0x01]))
+        transport.handleMessage(openMsg)
+
+        // 2. Sensor 10 start request (NIGHT)
+        let sensor10Req = AapMessage(channel: Channel.ID_SEN, flags: 0x03, type: 0x8001, payload: Data([0x08, 0x0a]))
+        transport.handleMessage(sensor10Req)
+
+        let exp = expectation(description: "Wait for processingQueue async night mode event")
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.1) {
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 1.0)
+
+        // Verify sentPackets contains Sensor Start Response (0x8002) and NightMode Indication (0x8003)
+        let hasStartResponse = connection.sentPackets.contains { packet in
+            guard packet.count >= 6 else { return false }
+            let chan = packet[0]
+            let type = (Int(packet[4]) << 8) | Int(packet[5])
+            return chan == Channel.ID_SEN && type == 0x8002
+        }
+        XCTAssertTrue(hasStartResponse, "Must send Sensor Start Response (0x8002) for sensor 10")
+
+        let hasNightEvent = connection.sentPackets.contains { packet in
+            guard packet.count >= 6 else { return false }
+            let chan = packet[0]
+            let type = (Int(packet[4]) << 8) | Int(packet[5])
+            return chan == Channel.ID_SEN && type == 0x8003
+        }
+        XCTAssertTrue(hasNightEvent, "Must send NightMode SensorEventIndication (0x8003) upon sensor 10 start")
+    }
+
+    func testWppTcpServerDefaultPortIs5299AndPointsTo5288() {
+        XCTAssertEqual(WppTcpServer.defaultPort, 5299)
+        let server = WppTcpServer()
+        XCTAssertEqual(server.projectionPort, 5288)
+    }
+
+    func testWppHandshakeSessionTcpSessionUpTransitionsToHolding() {
+        let session = WppHandshakeSession(credentialsKnown: true)
+        let actions1 = session.on(event: .socketReady)
+        XCTAssertEqual(session.stage, .awaitVersion)
+        XCTAssertEqual(actions1, [.sendVersionRequest])
+
+        // When AAP inbound connection is accepted, tcpSessionUp arrives
+        let actions2 = session.on(event: .tcpSessionUp)
+        XCTAssertEqual(session.stage, .holding)
+        XCTAssertTrue(actions2.contains(.completeSuccess))
+
+        // In holding stage, pings are handled to keep connection alive
+        let pingPayload = Data([0xaa, 0xbb, 0xcc])
+        let actions3 = session.on(event: .messageReceived(type: WppMessageType.pingRequest, status: nil, rawPayload: pingPayload))
+        XCTAssertEqual(session.stage, .holding)
+        XCTAssertEqual(actions3, [.sendPingResponse(pingPayload)])
+    }
 }

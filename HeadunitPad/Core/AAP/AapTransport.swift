@@ -348,6 +348,7 @@ class AapTransport {
         state = newState
         if newState == .running {
             didReachRunning = true
+            sendNightModeEvent(isNight: ProjectionSettings.effectiveIsNightMode())
         }
 
         if newState != .waitingForVersion && newState != .tlsHandshaking {
@@ -770,6 +771,22 @@ class AapTransport {
             payload: sensorBatch
         )
         send(message: message)
+    }
+
+    public func sendNightModeEvent(isNight: Bool) {
+        processingQueue.async { [weak self] in
+            guard let self = self else { return }
+            let batch = SensorEventIndicationProto(nightMode: [NightData(isNightMode: isNight)])
+            var writer = ProtoWriter()
+            batch.encode(to: &writer)
+            let msg = AapMessage(
+                channel: Channel.ID_SEN,
+                flags: AapFlags.NORMAL_MESSAGE,
+                type: 0x8003,
+                payload: writer.data
+            )
+            self.sendOnProcessingQueue(message: msg)
+        }
     }
 
     private func appendBigEndianTimestampMs(to data: inout Data) {
@@ -1364,15 +1381,18 @@ class AapTransport {
     }
 
     private func handleSensorMessage(_ message: AapMessage) {
+        if message.type == Int(AapMessageType.CHANNEL_OPEN_REQUEST.rawValue) {
+            sendChannelOpenResponse(on: message.channelUInt8)
+            sendNightModeEvent(isNight: ProjectionSettings.effectiveIsNightMode())
+            return
+        }
+
         // Sensors.SensorsMsgType.SENSOR_STARTREQUEST = 0x8001
         if message.type == 0x8001 {
+            var reqSensorType: Int?
             if let sensorType = ProtoWire.extractFirstVarint(from: message.payload, fieldNumber: 1) {
-                if sensorType == 10 {
-                    // Compatibility mode: do not enable NIGHT sensor on iPad host.
-                    print("AapTransport: Ignoring NIGHT sensor start request for compatibility")
-                } else {
-                    startedSensors.insert(sensorType)
-                }
+                reqSensorType = sensorType
+                startedSensors.insert(sensorType)
 
                 if sensorType == 1 {
                     let shouldUseIpadGps = ProjectionSettings.gpsSource == .ipad
@@ -1380,6 +1400,9 @@ class AapTransport {
                 }
             }
             sendSensorStartResponse(on: message.channelUInt8)
+            if reqSensorType == 10 {
+                sendNightModeEvent(isNight: ProjectionSettings.effectiveIsNightMode())
+            }
             return
         }
 

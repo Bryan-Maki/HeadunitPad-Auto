@@ -86,6 +86,34 @@ public final class HeadUnitScreenConfig {
         return Self.detectModelFamily(panelW: screenWidthPx, panelH: screenHeightPx)
     }
 
+    public var isPortraitDisplay: Bool {
+        return screenHeightPx > screenWidthPx
+    }
+
+    public func getCodecResolution() -> ControlService.MediaSinkService.VideoConfiguration.VideoCodecResolutionType {
+        return negotiatedResolutionType
+    }
+
+    public static func currentIpadDimensions() -> (width: Int, height: Int) {
+        let screen = UIScreen.main
+        let bounds = screen.bounds
+        let scale = screen.nativeScale
+        switch ProjectionSettings.orientation {
+        case .landscape:
+            let landW = Int((max(bounds.width, bounds.height) * scale).rounded())
+            let landH = Int((min(bounds.width, bounds.height) * scale).rounded())
+            return (landW, landH)
+        case .portrait:
+            let portW = Int((min(bounds.width, bounds.height) * scale).rounded())
+            let portH = Int((max(bounds.width, bounds.height) * scale).rounded())
+            return (portW, portH)
+        case .system:
+            let w = Int((bounds.width * scale).rounded())
+            let h = Int((bounds.height * scale).rounded())
+            return (w, h)
+        }
+    }
+
     public static func currentIpadLandscapeDimensions() -> (width: Int, height: Int) {
         let screen = UIScreen.main
         let bounds = screen.bounds
@@ -104,8 +132,17 @@ public final class HeadUnitScreenConfig {
     ) {
         self.videoFitMode = fitMode
         self.density = scale
-        self.screenWidthPx = max(width, height)
-        self.screenHeightPx = min(width, height)
+        switch ProjectionSettings.orientation {
+        case .landscape:
+            self.screenWidthPx = max(width, height)
+            self.screenHeightPx = min(width, height)
+        case .portrait:
+            self.screenWidthPx = min(width, height)
+            self.screenHeightPx = max(width, height)
+        case .system:
+            self.screenWidthPx = width
+            self.screenHeightPx = height
+        }
         self.isInitialized = true
 
         recalculate(requestedResolution: requestedResolution)
@@ -128,8 +165,8 @@ public final class HeadUnitScreenConfig {
                     canHevcHighRes: canHevc
                 ) ?? .r1280x720
 
-                self.negotiatedResolutionType = res.protoType
-            } else if negotiatedResolutionType == ._1280x720 {
+                self.negotiatedResolutionType = res.protoType(portrait: isPortraitDisplay)
+            } else if negotiatedResolutionType == ._1280x720 || negotiatedResolutionType == ._720x1280 {
                 let res = NegotiatedResolutionPolicy.autoLadder(
                     panelW: screenWidthPx,
                     panelH: screenHeightPx,
@@ -137,7 +174,7 @@ public final class HeadUnitScreenConfig {
                     hevcSupported: true,
                     canHevcHighRes: canHevc
                 )
-                self.negotiatedResolutionType = res.protoType
+                self.negotiatedResolutionType = res.protoType(portrait: isPortraitDisplay)
             }
         }
 
@@ -399,13 +436,24 @@ public final class HeadUnitScreenConfig {
 
     public func updateDimensions(width: Int, height: Int) -> Bool {
         guard width > 0 && height > 0 else { return false }
-        let landW = max(width, height)
-        let landH = min(width, height)
-        if self.screenWidthPx == landW && self.screenHeightPx == landH {
+        let targetW: Int
+        let targetH: Int
+        switch ProjectionSettings.orientation {
+        case .landscape:
+            targetW = max(width, height)
+            targetH = min(width, height)
+        case .portrait:
+            targetW = min(width, height)
+            targetH = max(width, height)
+        case .system:
+            targetW = width
+            targetH = height
+        }
+        if self.screenWidthPx == targetW && self.screenHeightPx == targetH {
             return false
         }
-        self.screenWidthPx = landW
-        self.screenHeightPx = landH
+        self.screenWidthPx = targetW
+        self.screenHeightPx = targetH
         recalculate(requestedResolution: ProjectionSettings.resolution)
         checkAndNotifyMarginDivergence()
         return true

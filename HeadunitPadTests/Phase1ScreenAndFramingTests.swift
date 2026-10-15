@@ -537,4 +537,36 @@ final class Phase1ScreenAndFramingTests: XCTestCase {
         )
         XCTAssertEqual(pro12Dpi1440, 240)
     }
+
+    func testPortraitOrientationSelectsPortraitCodecResolutionAndMargins() {
+        let prevOrientation = ProjectionSettings.orientation
+        defer {
+            ProjectionSettings.orientation = prevOrientation
+            HeadUnitScreenConfig.shared.initScreen(width: 1920, height: 1080)
+        }
+
+        ProjectionSettings.orientation = .portrait
+
+        XCTAssertEqual(ResolutionPreset.r1920x1080.protoType(portrait: true), ._1080x1920)
+        XCTAssertEqual(ResolutionPreset.r1280x720.protoType(portrait: true), ._720x1280)
+        XCTAssertEqual(ResolutionPreset.r2560x1440.protoType(portrait: true), ._1440x2560)
+        XCTAssertEqual(ResolutionPreset.r3840x2160.protoType(portrait: true), ._2160x3840)
+
+        let config = HeadUnitScreenConfig.shared
+        config.initScreen(width: 1640, height: 2360, requestedResolution: .r1920x1080)
+
+        XCTAssertTrue(config.isPortraitDisplay, "Portrait dimensions should report isPortraitDisplay == true")
+        XCTAssertEqual(config.screenWidthPx, 1640)
+        XCTAssertEqual(config.screenHeightPx, 2360)
+        XCTAssertEqual(config.negotiatedResolutionType, ._1080x1920)
+        XCTAssertEqual(config.getCodecResolution(), ._1080x1920)
+
+        let active = config.activeSize()
+        XCTAssertEqual(active.width, 1080)
+        XCTAssertEqual(active.height, 1920)
+
+        let (marginW, marginH) = config.getMargins()
+        XCTAssertGreaterThanOrEqual(marginW, 0)
+        XCTAssertGreaterThanOrEqual(marginH, 0)
+    }
 }

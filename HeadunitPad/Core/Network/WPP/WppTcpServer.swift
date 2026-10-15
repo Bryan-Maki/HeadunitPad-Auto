@@ -15,7 +15,7 @@ public protocol WppTcpServerDelegate: AnyObject {
 }
 
 public final class WppTcpServer {
-    public static let defaultPort: UInt16 = 5288
+    public static let defaultPort: UInt16 = 5299
 
     public weak var delegate: WppTcpServerDelegate?
     public var onRawAapConnectionDetected: ((NWConnection, Data) -> Void)?
@@ -27,7 +27,7 @@ public final class WppTcpServer {
     public private(set) var listeningPort: Int? = nil
 
     public var carInfo: WppCarInfo
-    public var projectionPort: Int = 5000
+    public var projectionPort: Int = 5288
     public var ssid: String = "HeadunitPad-AP"
     public var passkey: String = "12345678"
     public var bssid: String? = nil
@@ -39,6 +39,9 @@ public final class WppTcpServer {
         let session: WppHandshakeSession
         var buffer = Data()
         var timeoutWorkItem: DispatchWorkItem?
+        var isTlsActive: Bool = false
+        var tlsHandler: OpenSslTlsHandler?
+        var probeWorkItem: DispatchWorkItem?
 
         init(connection: NWConnection, session: WppHandshakeSession) {
             self.connection = connection
@@ -119,6 +122,7 @@ public final class WppTcpServer {
         listeningPort = nil
 
         for (_, client) in activeSessions {
+            client.probeWorkItem?.cancel()
             client.timeoutWorkItem?.cancel()
             client.connection.cancel()
         }
@@ -138,11 +142,20 @@ public final class WppTcpServer {
             switch state {
             case .ready:
                 print("WppTcpServer: Client connected: \(conn.endpoint)")
-                self.processActions(handshakeSession.on(event: .socketReady), for: client)
+                let probe = DispatchWorkItem { [weak self, weak client] in
+                    guard let self = self, let client = client else { return }
+                    if !client.isTlsActive && client.buffer.isEmpty {
+                        print("WppTcpServer: 150ms probe timer expired without plaintext WPP, initiating TLS client-mode wrapping")
+                        self.startTlsHandshake(for: client)
+                    }
+                }
+                client.probeWorkItem = probe
+                self.queue.asyncAfter(deadline: .now() + 0.15, execute: probe)
                 self.readNextChunk(client)
 
             case .failed, .cancelled:
                 print("WppTcpServer: Client disconnected: \(conn.endpoint)")
+                client.probeWorkItem?.cancel()
                 self.processActions(handshakeSession.on(event: .peerClosed), for: client)
                 self.activeSessions.removeValue(forKey: ObjectIdentifier(conn))
 
@@ -159,24 +172,49 @@ public final class WppTcpServer {
             guard let self = self, let client = client else { return }
 
             if let data = content, !data.isEmpty {
-                client.buffer.append(data)
-
-                if self.isRawAapPacket(client.buffer) {
-                    let initialData = client.buffer
-                    let conn = client.connection
-                    self.activeSessions.removeValue(forKey: ObjectIdentifier(conn))
-                    conn.stateUpdateHandler = nil
-                    print("WppTcpServer: Detected raw AAP connection on port 5288, delegating to ConnectionManager")
-                    DispatchQueue.main.async { [weak self] in
-                        self?.onRawAapConnectionDetected?(conn, initialData)
+                if !client.isTlsActive {
+                    if client.buffer.isEmpty && data[0] == 0x16 {
+                        client.probeWorkItem?.cancel()
+                        print("WppTcpServer: Detected TLS handshake header 0x16, starting TLS handshake")
+                        self.startTlsHandshake(for: client, initialTlsData: data)
+                        return
                     }
-                    return
-                }
 
-                self.drainFrames(client)
+                    if self.isRawAapPacket(data) {
+                        client.probeWorkItem?.cancel()
+                        let initialData = data
+                        let conn = client.connection
+                        self.activeSessions.removeValue(forKey: ObjectIdentifier(conn))
+                        conn.stateUpdateHandler = nil
+                        print("WppTcpServer: Detected raw AAP connection on port \(self.listeningPort ?? 5299), delegating to ConnectionManager")
+                        DispatchQueue.main.async { [weak self] in
+                            self?.onRawAapConnectionDetected?(conn, initialData)
+                        }
+                        return
+                    }
+
+                    client.probeWorkItem?.cancel()
+                    client.buffer.append(data)
+                    if client.session.stage == .new {
+                        self.processActions(client.session.on(event: .socketReady), for: client)
+                    }
+                    self.drainFrames(client)
+                } else {
+                    guard let tls = client.tlsHandler else { return }
+                    if !tls.isHandshakeComplete {
+                        self.continueTlsHandshake(for: client, with: data)
+                        return
+                    } else {
+                        if let decrypted = tls.decrypt(data: data), !decrypted.isEmpty {
+                            client.buffer.append(decrypted)
+                            self.drainFrames(client)
+                        }
+                    }
+                }
             }
 
             if isComplete || error != nil {
+                client.probeWorkItem?.cancel()
                 self.processActions(client.session.on(event: .peerClosed), for: client)
                 self.activeSessions.removeValue(forKey: ObjectIdentifier(client.connection))
                 return
@@ -304,7 +342,69 @@ public final class WppTcpServer {
         }
     }
 
+    public func notifyTcpSessionUp() {
+        queue.async { [weak self] in
+            guard let self = self else { return }
+            for (_, client) in self.activeSessions {
+                self.processActions(client.session.on(event: .tcpSessionUp), for: client)
+            }
+        }
+    }
+
+    private func startTlsHandshake(for client: ClientSession, initialTlsData: Data? = nil) {
+        client.isTlsActive = true
+        let tls = OpenSslTlsHandler()
+        guard tls.setup() else {
+            print("WppTcpServer: Failed to setup TLS handler")
+            return
+        }
+        _ = tls.loadDefaultBundleCertificate()
+        client.tlsHandler = tls
+
+        do {
+            let step = try tls.startHandshakeSession()
+            if !step.outgoingData.isEmpty {
+                sendRawData(step.outgoingData, to: client)
+            }
+            if let initial = initialTlsData, !initial.isEmpty {
+                continueTlsHandshake(for: client, with: initial)
+            } else {
+                readNextChunk(client)
+            }
+        } catch {
+            print("WppTcpServer: startTlsHandshake failed: \(error)")
+        }
+    }
+
+    private func continueTlsHandshake(for client: ClientSession, with data: Data) {
+        guard let tls = client.tlsHandler else { return }
+        do {
+            let step = try tls.continueHandshake(with: data)
+            if !step.outgoingData.isEmpty {
+                sendRawData(step.outgoingData, to: client)
+            }
+            if step.isComplete {
+                print("WppTcpServer: TLS handshake complete, triggering WPP socketReady")
+                tls.postHandshakeReset()
+                self.processActions(client.session.on(event: .socketReady), for: client)
+            }
+            readNextChunk(client)
+        } catch {
+            print("WppTcpServer: continueTlsHandshake error: \(error)")
+        }
+    }
+
     private func sendData(_ data: Data, to client: ClientSession) {
+        if client.isTlsActive, let tls = client.tlsHandler, tls.isHandshakeComplete {
+            if let encrypted = tls.encrypt(data: data) {
+                sendRawData(encrypted, to: client)
+            }
+        } else {
+            sendRawData(data, to: client)
+        }
+    }
+
+    private func sendRawData(_ data: Data, to client: ClientSession) {
         client.connection.send(content: data, completion: .contentProcessed { error in
             if let error = error {
                 print("WppTcpServer: send error: \(error)")

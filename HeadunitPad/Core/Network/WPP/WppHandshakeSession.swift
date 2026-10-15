@@ -199,7 +199,7 @@ public final class WppHandshakeSession {
             }
 
         case .tcpSessionUp:
-            if stage == .settling || stage == .awaitInfoRequest {
+            if stage == .settling || stage == .awaitInfoRequest || stage == .holding || stage == .awaitVersion {
                 stage = .holding
                 actions.append(.completeSuccess)
             }

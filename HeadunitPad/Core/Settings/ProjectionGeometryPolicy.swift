@@ -205,7 +205,19 @@ public enum ProjectionGeometryPolicy {
             let x = bounds.minX + (bounds.width - w) / 2.0
             let y = bounds.minY + (bounds.height - h) / 2.0
             return CGRect(x: x, y: y, width: w, height: h)
-        case .fill, .fillMargin, .stretch:
+        case .fill, .fillMargin:
+            let boundsLandscape = bounds.width > bounds.height
+            let activeLandscape = activeW > activeH
+            if boundsLandscape != activeLandscape {
+                let scale = min(bounds.width / CGFloat(activeW), bounds.height / CGFloat(activeH))
+                let w = CGFloat(activeW) * scale
+                let h = CGFloat(activeH) * scale
+                let x = bounds.minX + (bounds.width - w) / 2.0
+                let y = bounds.minY + (bounds.height - h) / 2.0
+                return CGRect(x: x, y: y, width: w, height: h)
+            }
+            return bounds
+        case .stretch:
             return bounds
         }
     }

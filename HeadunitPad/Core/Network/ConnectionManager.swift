@@ -113,6 +113,7 @@ class ConnectionManager {
         wirelessHelperServer.delegate = self
         legacyAapServer.delegate = self
         wppServer.delegate = self
+        wppServer.start(port: 5299)
         wppServer.onRawAapConnectionDetected = { [weak self] connection, initialData in
             let host = Self.hostString(from: connection.endpoint)
             self?.acceptIncomingAapConnection(connection, initialData: initialData, remoteHost: host)
@@ -164,6 +165,7 @@ class ConnectionManager {
 
         wirelessHelperServer.start(port: 5288, enableBonjour: true)
         legacyAapServer.start(port: 5000, enableBonjour: false)
+        wppServer.start(port: 5299)
         discovery.startScan(ports: [Discovery.headunitPort])
     }
 
@@ -259,6 +261,11 @@ class ConnectionManager {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
             self?.connect(to: ip, port: port)
         }
+    }
+
+    public func updateNightMode(userInterfaceStyle: UIUserInterfaceStyle? = nil) {
+        let isNight = ProjectionSettings.effectiveIsNightMode(userInterfaceStyle: userInterfaceStyle)
+        aapTransport?.sendNightModeEvent(isNight: isNight)
     }
 
     func send(_ data: Data) {
@@ -634,6 +641,7 @@ extension ConnectionManager {
 
 extension ConnectionManager: WirelessHelperServerDelegate {
     func wirelessHelperServer(_ server: WirelessHelperServer, didAccept connection: NWConnection, remoteHost: String?, initialData: Data) {
+        wppServer.notifyTcpSessionUp()
         acceptIncomingAapConnection(connection, initialData: initialData, remoteHost: remoteHost)
     }
 
@@ -651,7 +659,7 @@ extension ConnectionManager: WppTcpServerDelegate {
     func wppTcpServer(_ server: WppTcpServer, didCompleteHandshakeFor clientIp: String) {
         print("ConnectionManager: WPP Handshake completed successfully with \(clientIp)")
         updateStatus("WPP Handshake completed with \(clientIp). Awaiting phone connection...")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) { [weak self] in
             guard let self = self else { return }
             if self.state == .discovering || self.state == .waitingForWirelessHelper {
                 print("ConnectionManager: No inbound AAP connection received after WPP, attempting fallback connect to \(clientIp):5277")

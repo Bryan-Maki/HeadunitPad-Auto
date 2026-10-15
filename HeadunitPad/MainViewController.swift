@@ -266,12 +266,22 @@ class MainViewController: UIViewController {
         touchOverlayView.frame = videoContainerView.bounds
         touchOverlayView.isUserInteractionEnabled = true
         let screen = view.window?.screen ?? UIScreen.main
-        let screenBounds = screen.bounds
         let nativeScale = screen.nativeScale
-        let landW = Int((max(screenBounds.width, screenBounds.height) * nativeScale).rounded())
-        let landH = Int((min(screenBounds.width, screenBounds.height) * nativeScale).rounded())
-        if landW > 0 && landH > 0 {
-            _ = HeadUnitScreenConfig.shared.updateDimensions(width: landW, height: landH)
+        let w: Int
+        let h: Int
+        switch ProjectionSettings.orientation {
+        case .landscape:
+            w = Int((max(view.bounds.width, view.bounds.height) * nativeScale).rounded())
+            h = Int((min(view.bounds.width, view.bounds.height) * nativeScale).rounded())
+        case .portrait:
+            w = Int((min(view.bounds.width, view.bounds.height) * nativeScale).rounded())
+            h = Int((max(view.bounds.width, view.bounds.height) * nativeScale).rounded())
+        case .system:
+            w = Int((view.bounds.width * nativeScale).rounded())
+            h = Int((view.bounds.height * nativeScale).rounded())
+        }
+        if w > 0 && h > 0 {
+            _ = HeadUnitScreenConfig.shared.updateDimensions(width: w, height: h)
         }
         syncVideoAndTouchGeometry()
         if !videoContainerView.isHidden {
@@ -281,14 +291,34 @@ class MainViewController: UIViewController {
 
     override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
         super.viewWillTransition(to: size, with: coordinator)
+        let oldIsPortrait = HeadUnitScreenConfig.shared.isPortraitDisplay
         coordinator.animate(alongsideTransition: { [weak self] _ in
             guard let self = self else { return }
             let screen = self.view.window?.screen ?? UIScreen.main
             let nativeScale = screen.nativeScale
-            let landW = Int((max(size.width, size.height) * nativeScale).rounded())
-            let landH = Int((min(size.width, size.height) * nativeScale).rounded())
-            _ = HeadUnitScreenConfig.shared.updateDimensions(width: landW, height: landH)
+            let w: Int
+            let h: Int
+            switch ProjectionSettings.orientation {
+            case .landscape:
+                w = Int((max(size.width, size.height) * nativeScale).rounded())
+                h = Int((min(size.width, size.height) * nativeScale).rounded())
+            case .portrait:
+                w = Int((min(size.width, size.height) * nativeScale).rounded())
+                h = Int((max(size.width, size.height) * nativeScale).rounded())
+            case .system:
+                w = Int((size.width * nativeScale).rounded())
+                h = Int((size.height * nativeScale).rounded())
+            }
+            if w > 0 && h > 0 {
+                _ = HeadUnitScreenConfig.shared.updateDimensions(width: w, height: h)
+            }
             self.syncVideoAndTouchGeometry()
+        }, completion: { [weak self] _ in
+            guard let self = self else { return }
+            if HeadUnitScreenConfig.shared.isPortraitDisplay != oldIsPortrait {
+                HeadUnitScreenConfig.shared.clearCustomNegotiatedResolution()
+                self.connectionManager.reconnectForSettingsChange()
+            }
         })
     }
 
@@ -298,7 +328,7 @@ class MainViewController: UIViewController {
     }
 
     override var shouldAutorotate: Bool {
-        return false
+        return ProjectionSettings.orientation == .system
     }
 
     override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
@@ -307,6 +337,8 @@ class MainViewController: UIViewController {
             return .landscape
         case .portrait:
             return .portrait
+        case .system:
+            return .all
         }
     }
 
@@ -316,6 +348,8 @@ class MainViewController: UIViewController {
             return .landscapeRight
         case .portrait:
             return .portrait
+        case .system:
+            return .unknown
         }
     }
 
@@ -331,9 +365,16 @@ class MainViewController: UIViewController {
                 print("MainViewController: Failed to apply orientation lock: \(error)")
             }
         } else {
-            let orientation: UIInterfaceOrientation = ProjectionSettings.orientation == .portrait ? .portrait : .landscapeRight
-            UIDevice.current.setValue(orientation.rawValue, forKey: "orientation")
-            UIViewController.attemptRotationToDeviceOrientation()
+            let orientation: UIInterfaceOrientation
+            switch ProjectionSettings.orientation {
+            case .landscape: orientation = .landscapeRight
+            case .portrait: orientation = .portrait
+            case .system: orientation = .unknown
+            }
+            if orientation != .unknown {
+                UIDevice.current.setValue(orientation.rawValue, forKey: "orientation")
+                UIViewController.attemptRotationToDeviceOrientation()
+            }
         }
     }
 
@@ -698,6 +739,8 @@ class MainViewController: UIViewController {
             return
         }
 
+        connectionManager.updateNightMode(userInterfaceStyle: traitCollection.userInterfaceStyle)
+
         let now = Date().timeIntervalSince1970
         if !hasReceivedFirstVideoFrame {
             if now - runningSinceTs > 3.0, now - lastVideoRecoveryTs > 1.5 {
@@ -706,6 +749,15 @@ class MainViewController: UIViewController {
                 connectionManager.requestVideoRecovery()
             }
             return
+        }
+    }
+
+    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        if #available(iOS 13.0, *) {
+            if previousTraitCollection?.userInterfaceStyle != traitCollection.userInterfaceStyle {
+                connectionManager.updateNightMode(userInterfaceStyle: traitCollection.userInterfaceStyle)
+            }
         }
     }
 
@@ -795,6 +847,10 @@ class MainViewController: UIViewController {
 
         alert.addAction(UIAlertAction(title: "Orientation", style: .default) { [weak self] _ in
             self?.presentOrientationMenu()
+        })
+
+        alert.addAction(UIAlertAction(title: "Night Mode: \(ProjectionSettings.nightMode.title)", style: .default) { [weak self] _ in
+            self?.presentNightModeMenu()
         })
 
         alert.addAction(UIAlertAction(title: "Resolution: \(ProjectionSettings.videoResolution.title(for: ProjectionSettings.orientation))", style: .default) { [weak self] _ in
@@ -897,12 +953,56 @@ class MainViewController: UIViewController {
     private func presentOrientationMenu() {
         let alert = UIAlertController(title: "Orientation", message: nil, preferredStyle: .actionSheet)
 
-        for option in [ProjectionOrientation.landscape, .portrait] {
+        for option in ProjectionOrientation.allCases {
             let title = option == ProjectionSettings.orientation ? "\(option.title) (Current)" : option.title
             alert.addAction(UIAlertAction(title: title, style: .default) { [weak self] _ in
+                guard let self = self else { return }
+                let oldIsPortrait = HeadUnitScreenConfig.shared.isPortraitDisplay
                 ProjectionSettings.orientation = option
-                self?.applyOrientationLock()
-                self?.presentSettingsMenu()
+                self.applyOrientationLock()
+                let screen = self.view.window?.screen ?? UIScreen.main
+                let nativeScale = screen.nativeScale
+                let w: Int
+                let h: Int
+                switch option {
+                case .landscape:
+                    w = Int((max(self.view.bounds.width, self.view.bounds.height) * nativeScale).rounded())
+                    h = Int((min(self.view.bounds.width, self.view.bounds.height) * nativeScale).rounded())
+                case .portrait:
+                    w = Int((min(self.view.bounds.width, self.view.bounds.height) * nativeScale).rounded())
+                    h = Int((max(self.view.bounds.width, self.view.bounds.height) * nativeScale).rounded())
+                case .system:
+                    w = Int((self.view.bounds.width * nativeScale).rounded())
+                    h = Int((self.view.bounds.height * nativeScale).rounded())
+                }
+                _ = HeadUnitScreenConfig.shared.updateDimensions(width: w, height: h)
+                self.syncVideoAndTouchGeometry()
+                if HeadUnitScreenConfig.shared.isPortraitDisplay != oldIsPortrait {
+                    HeadUnitScreenConfig.shared.clearCustomNegotiatedResolution()
+                    self.connectionManager.reconnectForSettingsChange()
+                }
+                self.presentSettingsMenu()
+            })
+        }
+
+        alert.addAction(UIAlertAction(title: "Back", style: .cancel) { [weak self] _ in
+            self?.presentSettingsMenu()
+        })
+
+        configurePopoverSource(for: alert)
+        present(alert, animated: true)
+    }
+
+    private func presentNightModeMenu() {
+        let alert = UIAlertController(title: "Night Mode", message: nil, preferredStyle: .actionSheet)
+
+        for option in NightModeSetting.allCases {
+            let title = option == ProjectionSettings.nightMode ? "\(option.title) (Current)" : option.title
+            alert.addAction(UIAlertAction(title: title, style: .default) { [weak self] _ in
+                guard let self = self else { return }
+                ProjectionSettings.nightMode = option
+                self.connectionManager.updateNightMode(userInterfaceStyle: self.traitCollection.userInterfaceStyle)
+                self.presentSettingsMenu()
             })
         }
 

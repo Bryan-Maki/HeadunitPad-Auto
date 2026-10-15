@@ -89,12 +89,38 @@ class OpenSslTlsHandler {
         return certPath != nil && keyPath != nil
     }
 
+    @discardableResult
+    func loadDefaultBundleCertificate() -> Bool {
+        if hasClientIdentity() { return true }
+        let bundles = [Bundle.main, Bundle(for: OpenSslTlsHandler.self)]
+        let candidateSubdirs: [String?] = [
+            "HeadunitPad/Resources/Raw",
+            "Resources/Raw",
+            "Raw",
+            nil
+        ]
+        var foundCert: String?
+        var foundKey: String?
+        for b in bundles {
+            for dir in candidateSubdirs {
+                if foundCert == nil, let p = b.path(forResource: "cert", ofType: nil, inDirectory: dir), FileManager.default.fileExists(atPath: p) {
+                    foundCert = p
+                }
+                if foundKey == nil, let p = b.path(forResource: "privkey", ofType: nil, inDirectory: dir), FileManager.default.fileExists(atPath: p) {
+                    foundKey = p
+                }
+            }
+        }
+        guard let cert = foundCert, let key = foundKey else { return false }
+        return loadCertificate(certPath: cert, keyPath: key)
+    }
+
     func startHandshakeSession() throws -> OpenSslHandshakeStep {
         guard sslContext != nil else {
             throw OpenSslTlsError.contextCreationFailed
         }
-        guard certPath != nil, keyPath != nil else {
-            throw OpenSslTlsError.handshakeFailed("Client certificate/key not loaded")
+        if certPath == nil || keyPath == nil {
+            _ = loadDefaultBundleCertificate()
         }
 
         releaseSessionOnly()

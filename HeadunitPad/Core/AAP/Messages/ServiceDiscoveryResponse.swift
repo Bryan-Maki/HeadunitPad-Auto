@@ -26,7 +26,7 @@ public final class AapServiceDiscoveryResponseMessage {
         var services: [ControlService] = []
 
         if screenConfig.screenWidthPx <= 0 || screenConfig.screenHeightPx <= 0 {
-            let dims = HeadUnitScreenConfig.currentIpadLandscapeDimensions()
+            let dims = HeadUnitScreenConfig.currentIpadDimensions()
             if dims.width > 0 && dims.height > 0 {
                 screenConfig.initScreen(
                     width: dims.width,

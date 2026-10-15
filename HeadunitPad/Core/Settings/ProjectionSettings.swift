@@ -37,11 +37,27 @@ public enum ProjectionGpsSource: Int, CaseIterable {
 public enum ProjectionOrientation: Int, CaseIterable {
     case landscape = 0
     case portrait = 1
+    case system = 2
 
     public var title: String {
         switch self {
         case .landscape: return "Landscape"
         case .portrait: return "Portrait"
+        case .system: return "Auto (Follow System)"
+        }
+    }
+}
+
+public enum NightModeSetting: Int, CaseIterable {
+    case auto = 0
+    case day = 1
+    case night = 2
+
+    public var title: String {
+        switch self {
+        case .auto: return "Auto (Follow iPad / Sunset)"
+        case .day: return "Always Day"
+        case .night: return "Always Night"
         }
     }
 }
@@ -117,6 +133,7 @@ public enum ProjectionSettings {
     private static let videoCodecPreferenceKey = "projection-video-codec-preference"
     private static let audioCodecPreferenceKey = "projection-audio-codec-preference"
     private static let audioOutputTargetKey = "projection-audio-output-target"
+    private static let nightModeKey = "projection-night-mode"
 
     private static let autoDpiKey = "projection-auto-dpi"
 
@@ -228,6 +245,35 @@ public enum ProjectionSettings {
         }
         set {
             defaults.set(newValue.rawValue, forKey: orientationKey)
+        }
+    }
+
+    public static var nightMode: NightModeSetting {
+        get {
+            let val = defaults.integer(forKey: nightModeKey)
+            return NightModeSetting(rawValue: val) ?? .auto
+        }
+        set {
+            defaults.set(newValue.rawValue, forKey: nightModeKey)
+        }
+    }
+
+    public static func effectiveIsNightMode(userInterfaceStyle: UIUserInterfaceStyle? = nil) -> Bool {
+        switch nightMode {
+        case .day:
+            return false
+        case .night:
+            return true
+        case .auto:
+            let style = userInterfaceStyle ?? UITraitCollection.current.userInterfaceStyle
+            if style == .dark {
+                return true
+            }
+            let hour = Calendar.current.component(.hour, from: Date())
+            if hour >= 19 || hour < 7 {
+                return true
+            }
+            return false
         }
     }
 

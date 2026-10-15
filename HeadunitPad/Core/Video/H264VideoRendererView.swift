@@ -196,16 +196,25 @@ public class H264VideoRendererView: UIView {
             fitMode: fitMode
         )
 
+        let boundsLandscape = viewBounds.width > viewBounds.height
+        let activeLandscape = activeW > activeH
+        let isMismatched = boundsLandscape != activeLandscape
+
         if marginW > 0 || marginH > 0 {
-            let overscanFrame = ProjectionGeometryPolicy.overscanLayerFrame(
-                activeRect: activeRect,
-                codecW: codecW,
-                codecH: codecH,
-                activeW: activeW,
-                activeH: activeH
-            )
-            displayLayer.videoGravity = .resize
-            displayLayer.frame = overscanFrame
+            if isMismatched && (fitMode == .fill || fitMode == .fillMargin) {
+                displayLayer.videoGravity = .resizeAspect
+                displayLayer.frame = activeRect
+            } else {
+                let overscanFrame = ProjectionGeometryPolicy.overscanLayerFrame(
+                    activeRect: activeRect,
+                    codecW: codecW,
+                    codecH: codecH,
+                    activeW: activeW,
+                    activeH: activeH
+                )
+                displayLayer.videoGravity = .resize
+                displayLayer.frame = overscanFrame
+            }
         } else {
             switch fitMode {
             case .contain, .fit:
@@ -214,7 +223,14 @@ public class H264VideoRendererView: UIView {
             case .cover:
                 displayLayer.videoGravity = .resizeAspectFill
                 displayLayer.frame = activeRect
-            case .fill, .fillMargin, .stretch:
+            case .fill, .fillMargin:
+                if isMismatched {
+                    displayLayer.videoGravity = .resizeAspect
+                } else {
+                    displayLayer.videoGravity = .resize
+                }
+                displayLayer.frame = activeRect
+            case .stretch:
                 displayLayer.videoGravity = .resize
                 displayLayer.frame = activeRect
             }
