@@ -80,9 +80,9 @@ final class Phase5SystemIntegrationTests: XCTestCase {
         let proDpi1080 = AnnouncedDensityPolicy.recommendedDpi(activeW: 1440, activeH: 1080, panelW: 2732, panelH: 2048)
         XCTAssertEqual(proDpi1080, 200)
 
-        // iPad Pro 12.9" / 13" in 1440p -> 260 DPI
+        // iPad Pro 12.9" / 13" in 1440p -> 240 DPI
         let proDpi1440 = AnnouncedDensityPolicy.recommendedDpi(activeW: 1920, activeH: 1440, panelW: 2752, panelH: 2064)
-        XCTAssertEqual(proDpi1440, 260)
+        XCTAssertEqual(proDpi1440, 240)
     }
 
     // MARK: - 3. ServiceDiscoveryResponse Pipelined Depth & Margins

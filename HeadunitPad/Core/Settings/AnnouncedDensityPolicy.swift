@@ -58,7 +58,7 @@ public enum AnnouncedDensityPolicy {
             case .ipadMini: baseDpi = 210
             case .ipadStandard102: baseDpi = 220
             case .ipadAirAndStandard109, .ipadPro11: baseDpi = 240
-            case .ipadPro129AndAir13, .ipadPro13M4: baseDpi = 260
+            case .ipadPro129AndAir13, .ipadPro13M4: baseDpi = 240
             case .genericIpad:
                 let longPt = max(screenBounds.width, screenBounds.height)
                 let shortPt = min(screenBounds.width, screenBounds.height)

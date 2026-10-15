@@ -176,6 +176,7 @@ public final class AudioMixer {
         var boosted = false
 
         for state in states {
+            for i in 0..<AudioMixer.shortsPerCycle { channelBuffer[i] = 0 }
             let active = state.buffer.render(
                 out: &channelBuffer,
                 nowMs: nowMs,
@@ -193,6 +194,8 @@ public final class AudioMixer {
             if active && gain > 1.0 {
                 boosted = true
             }
+
+            guard active && gain > 0 else { continue }
 
             let isDuckedMedia = duckMediaForSpeech && state.isMediaSink
             for i in 0..<AudioMixer.shortsPerCycle {
