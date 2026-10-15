@@ -96,6 +96,8 @@ public enum ProjectionSettings {
     private static let videoCodecPreferenceKey = "projection-video-codec-preference"
     private static let audioCodecPreferenceKey = "projection-audio-codec-preference"
 
+    private static let autoDpiKey = "projection-auto-dpi"
+
     public static let defaultDpi = 160
     public static let minDpi = 100
     public static let maxDpi = 320
@@ -104,8 +106,11 @@ public enum ProjectionSettings {
 
     public static var resolution: ResolutionPreset {
         get {
+            if defaults.object(forKey: resolutionKey) == nil {
+                return .auto
+            }
             let val = defaults.integer(forKey: resolutionKey)
-            return ResolutionPreset(rawValue: val) ?? .r1280x720
+            return ResolutionPreset(rawValue: val) ?? .auto
         }
         set {
             defaults.set(newValue.rawValue, forKey: resolutionKey)
@@ -284,7 +289,33 @@ public enum ProjectionSettings {
         return fpsLimit
     }
 
+    public static var isAutoDpi: Bool {
+        get {
+            if defaults.object(forKey: autoDpiKey) == nil {
+                return true
+            }
+            return defaults.bool(forKey: autoDpiKey)
+        }
+        set {
+            defaults.set(newValue, forKey: autoDpiKey)
+        }
+    }
+
+    public static func recommendedDpiForCurrentDevice() -> Int {
+        let config = HeadUnitScreenConfig.shared
+        let codecW = config.getNegotiatedWidth()
+        let codecH = config.getNegotiatedHeight()
+        let marginW = config.getWidthMargin()
+        let marginH = config.getHeightMargin()
+        let activeW = max(1, codecW - marginW)
+        let activeH = max(1, codecH - marginH)
+        return AnnouncedDensityPolicy.recommendedDpi(activeW: activeW, activeH: activeH)
+    }
+
     public static var effectiveDpi: Int {
+        if isAutoDpi {
+            return recommendedDpiForCurrentDevice()
+        }
         return dpi
     }
 
@@ -301,11 +332,12 @@ public enum ProjectionSettings {
     }
 
     public static func resetDpiToDefault() {
+        isAutoDpi = true
         dpi = defaultDpi
     }
 
     public static func availableResolutions(for orientation: ProjectionOrientation) -> [ResolutionPreset] {
-        return [.r800x480, .r1280x720, .r1920x1080, .r2560x1440, .r3840x2160]
+        return [.auto, .r1280x720, .r1920x1080, .r2560x1440, .r3840x2160]
     }
 
     public static func supportsCellularIpad() -> Bool {

@@ -23,7 +23,7 @@ public enum ResolutionPreset: Int, CaseIterable {
 
     public var title: String {
         switch self {
-        case .auto: return "Auto"
+        case .auto: return "Auto (Native iPad)"
         case .r800x480: return "480p (800x480)"
         case .r1280x720: return "720p (1280x720)"
         case .r1920x1080: return "1080p (1920x1080)"

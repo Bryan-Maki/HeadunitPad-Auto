@@ -412,4 +412,129 @@ final class Phase1ScreenAndFramingTests: XCTestCase {
         XCTAssertEqual(inputService?.inputSourceService?.touchscreen?.width, 1920)
         XCTAssertEqual(inputService?.inputSourceService?.touchscreen?.height, 1080)
     }
+
+    // MARK: - 6. All-Model iPad Dynamic Margin & Geometry Overscan Tests
+
+    func testIpadAirAndProDynamicMargins() {
+        let config = HeadUnitScreenConfig.shared
+
+        // iPad Air 10.9" / iPad 10 (2360 x 1640)
+        _ = config.updateDimensions(width: 2360, height: 1640)
+        config.videoFitMode = .fillMargin
+        config.negotiatedResolutionType = ._1920x1080
+        config.recalculate()
+
+        // 1080 * 2360 / 1640 = 1554.146 -> rounded to even = 1554
+        // widthMargin = 1920 - 1554 = 366 (even!)
+        XCTAssertEqual(config.getWidthMargin(), 366)
+        XCTAssertEqual(config.getHeightMargin(), 0)
+        XCTAssertEqual(config.getLeftMargin(), 183)
+        XCTAssertEqual(config.getRightMargin(), 183)
+        XCTAssertEqual(config.getLeftMargin() + config.getRightMargin(), config.getWidthMargin())
+
+        // iPad Pro 11" (2388 x 1668)
+        _ = config.updateDimensions(width: 2388, height: 1668)
+        config.videoFitMode = .fillMargin
+        config.negotiatedResolutionType = ._1920x1080
+        config.recalculate()
+
+        // 1080 * 2388 / 1668 = 1546.187 -> rounded to even = 1546
+        // widthMargin = 1920 - 1546 = 374 (even!)
+        XCTAssertEqual(config.getWidthMargin(), 374)
+        XCTAssertEqual(config.getHeightMargin(), 0)
+        XCTAssertEqual(config.getLeftMargin(), 187)
+        XCTAssertEqual(config.getRightMargin(), 187)
+    }
+
+    func testIpadMiniDynamicMargins() {
+        let config = HeadUnitScreenConfig.shared
+
+        // iPad mini 6 / 7 (2266 x 1488)
+        _ = config.updateDimensions(width: 2266, height: 1488)
+        config.videoFitMode = .fillMargin
+        config.negotiatedResolutionType = ._1920x1080
+        config.recalculate()
+
+        // 1080 * 2266 / 1488 = 1644.677 -> rounded to even = 1644
+        // widthMargin = 1920 - 1644 = 276 (even!)
+        XCTAssertEqual(config.getWidthMargin(), 276)
+        XCTAssertEqual(config.getHeightMargin(), 0)
+        XCTAssertEqual(config.getLeftMargin(), 138)
+        XCTAssertEqual(config.getRightMargin(), 138)
+    }
+
+    func testProjectionGeometryOverscanCalculations() {
+        let bounds = CGRect(x: 0, y: 0, width: 1024, height: 768)
+        let activeW = 1440
+        let activeH = 1080
+        let codecW = 1920
+        let codecH = 1080
+
+        // In fillMargin, active rect should fully fill the iPad screen (1024x768)
+        let activeRect = ProjectionGeometryPolicy.activeDisplayRect(
+            bounds: bounds,
+            activeW: activeW,
+            activeH: activeH,
+            fitMode: .fillMargin
+        )
+        XCTAssertEqual(activeRect, bounds)
+
+        // Overscan layer frame must scale by (1920/1440) on X axis and center horizontally
+        let layerFrame = ProjectionGeometryPolicy.overscanLayerFrame(
+            activeRect: activeRect,
+            codecW: codecW,
+            codecH: codecH,
+            activeW: activeW,
+            activeH: activeH
+        )
+
+        let expectedW = bounds.width * (CGFloat(codecW) / CGFloat(activeW))
+        let expectedH = bounds.height * (CGFloat(codecH) / CGFloat(activeH))
+        XCTAssertEqual(layerFrame.width, expectedW, accuracy: 0.001)
+        XCTAssertEqual(layerFrame.height, expectedH, accuracy: 0.001)
+
+        // The margin bars must sit outside the view bounds equally on left and right
+        XCTAssertLessThan(layerFrame.minX, 0)
+        XCTAssertGreaterThan(layerFrame.maxX, bounds.width)
+        XCTAssertEqual(abs(layerFrame.minX), layerFrame.maxX - bounds.width, accuracy: 0.001)
+        XCTAssertEqual(layerFrame.midX, bounds.midX, accuracy: 0.001)
+        XCTAssertEqual(layerFrame.midY, bounds.midY, accuracy: 0.001)
+    }
+
+    func testAnnouncedDensityPolicyRecommendations() {
+        // iPad mini 6 (bounds ~ 744 x 1133 pt) at 1080p
+        let miniBounds = CGRect(x: 0, y: 0, width: 1133, height: 744)
+        let miniDpi = AnnouncedDensityPolicy.recommendedDpi(
+            screenBounds: miniBounds,
+            activeW: 1644,
+            activeH: 1080
+        )
+        XCTAssertEqual(miniDpi, 160)
+
+        // iPad Pro 11" (bounds ~ 834 x 1194 pt) at 1080p
+        let pro11Bounds = CGRect(x: 0, y: 0, width: 1194, height: 834)
+        let pro11Dpi = AnnouncedDensityPolicy.recommendedDpi(
+            screenBounds: pro11Bounds,
+            activeW: 1546,
+            activeH: 1080
+        )
+        XCTAssertEqual(pro11Dpi, 180)
+
+        // iPad Pro 12.9" (bounds ~ 1024 x 1366 pt) at 1080p
+        let pro12Bounds = CGRect(x: 0, y: 0, width: 1366, height: 1024)
+        let pro12Dpi = AnnouncedDensityPolicy.recommendedDpi(
+            screenBounds: pro12Bounds,
+            activeW: 1440,
+            activeH: 1080
+        )
+        XCTAssertEqual(pro12Dpi, 200)
+
+        // iPad Pro 12.9" at 1440p
+        let pro12Dpi1440 = AnnouncedDensityPolicy.recommendedDpi(
+            screenBounds: pro12Bounds,
+            activeW: 1920,
+            activeH: 1440
+        )
+        XCTAssertEqual(pro12Dpi1440, 240)
+    }
 }

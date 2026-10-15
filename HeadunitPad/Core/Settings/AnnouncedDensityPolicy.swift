@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import UIKit
 
 public enum AnnouncedDensityPolicy {
     public static let huigMinWidthDp = 748
@@ -31,6 +32,37 @@ public enum AnnouncedDensityPolicy {
             self.requested = requested
             self.reason = reason
         }
+    }
+
+    /// Recommends comfortable DPI for Android Auto based on iPad physical dimensions and active resolution.
+    /// In 1080p: ~160-180 DPI
+    /// In 1440p: ~210-240 DPI
+    /// In 720p: ~120-140 DPI
+    public static func recommendedDpi(
+        screenBounds: CGRect = UIScreen.main.bounds,
+        activeW: Int,
+        activeH: Int
+    ) -> Int {
+        guard activeW > 0, activeH > 0 else { return fallbackDpi }
+        let longPt = max(screenBounds.width, screenBounds.height)
+        let shortPt = min(screenBounds.width, screenBounds.height)
+        let diagonalPt = sqrt(longPt * longPt + shortPt * shortPt)
+
+        let targetDpH: Double
+        if diagonalPt <= 1360 {
+            // iPad mini (~8.3"): slightly lower virtual dp height so controls are physically larger
+            targetDpH = 900.0
+        } else if diagonalPt <= 1550 {
+            // Standard iPad 10.2" - 11": balanced virtual canvas
+            targetDpH = 960.0
+        } else {
+            // iPad Pro 12.9" - 13": spacious canvas
+            targetDpH = 1020.0
+        }
+
+        let calcDpi = Int((Double(activeH) * 160.0 / targetDpH).rounded())
+        let maxAllowed = huigMaxDpi(w: activeW, h: activeH)
+        return min(max(calcDpi, 100), min(maxAllowed, 320))
     }
 
     public static func huigMaxDpi(w: Int, h: Int) -> Int {
@@ -64,7 +96,8 @@ public enum AnnouncedDensityPolicy {
             return Decision(announced: dpi, requested: stored, reason: .portrait)
         }
         if stored <= 0 {
-            return Decision(announced: fallbackDpi, requested: 0, reason: .automatic)
+            let autoVal = recommendedDpi(activeW: visibleW, activeH: visibleH)
+            return Decision(announced: autoVal, requested: 0, reason: .automatic)
         }
         let maxAllowed = huigMaxDpi(w: visibleW, h: visibleH)
         if stored <= maxAllowed {

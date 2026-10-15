@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import CoreGraphics
 
 public enum ProjectionGeometryPolicy {
     public struct Fit: Equatable {
@@ -178,4 +179,55 @@ public enum ProjectionGeometryPolicy {
         let deviation = abs(Float(derived - squarePixelsE4)) / Float(squarePixelsE4)
         return deviation > 0.03 ? derived : squarePixelsE4
     }
+
+    /// Computes the target active content display rectangle in view bounds according to fit mode.
+    public static func activeDisplayRect(
+        bounds: CGRect,
+        activeW: Int,
+        activeH: Int,
+        fitMode: VideoFitMode
+    ) -> CGRect {
+        guard bounds.width > 0, bounds.height > 0, activeW > 0, activeH > 0 else {
+            return bounds
+        }
+        switch fitMode {
+        case .contain, .fit:
+            let scale = min(bounds.width / CGFloat(activeW), bounds.height / CGFloat(activeH))
+            let w = CGFloat(activeW) * scale
+            let h = CGFloat(activeH) * scale
+            let x = bounds.minX + (bounds.width - w) / 2.0
+            let y = bounds.minY + (bounds.height - h) / 2.0
+            return CGRect(x: x, y: y, width: w, height: h)
+        case .cover:
+            let scale = max(bounds.width / CGFloat(activeW), bounds.height / CGFloat(activeH))
+            let w = CGFloat(activeW) * scale
+            let h = CGFloat(activeH) * scale
+            let x = bounds.minX + (bounds.width - w) / 2.0
+            let y = bounds.minY + (bounds.height - h) / 2.0
+            return CGRect(x: x, y: y, width: w, height: h)
+        case .fill, .fillMargin, .stretch:
+            return bounds
+        }
+    }
+
+    /// Computes the Overscan layer frame for the full codec buffer (e.g. 1920x1080)
+    /// such that the central active content (activeW x activeH) perfectly aligns with activeRect,
+    /// pushing the left/right/top/bottom margins beyond the layer bounds to be cropped.
+    public static func overscanLayerFrame(
+        activeRect: CGRect,
+        codecW: Int,
+        codecH: Int,
+        activeW: Int,
+        activeH: Int
+    ) -> CGRect {
+        guard activeW > 0, activeH > 0 else { return activeRect }
+        let scaleX = CGFloat(codecW) / CGFloat(activeW)
+        let scaleY = CGFloat(codecH) / CGFloat(activeH)
+        let layerW = activeRect.width * scaleX
+        let layerH = activeRect.height * scaleY
+        let layerX = activeRect.minX - (layerW - activeRect.width) / 2.0
+        let layerY = activeRect.minY - (layerH - activeRect.height) / 2.0
+        return CGRect(x: layerX, y: layerY, width: layerW, height: layerH)
+    }
 }
+

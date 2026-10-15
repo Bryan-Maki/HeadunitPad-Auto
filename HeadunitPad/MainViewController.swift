@@ -213,11 +213,13 @@ class MainViewController: UIViewController {
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        let scale = UIScreen.main.scale
-        let panelW = Int(view.bounds.width * scale)
-        let panelH = Int(view.bounds.height * scale)
-        if panelW > 0 && panelH > 0 {
-            _ = HeadUnitScreenConfig.shared.updateDimensions(width: panelW, height: panelH)
+        let screen = view.window?.screen ?? UIScreen.main
+        let screenBounds = screen.bounds
+        let nativeScale = screen.nativeScale
+        let landW = Int((max(screenBounds.width, screenBounds.height) * nativeScale).rounded())
+        let landH = Int((min(screenBounds.width, screenBounds.height) * nativeScale).rounded())
+        if landW > 0 && landH > 0 {
+            _ = HeadUnitScreenConfig.shared.updateDimensions(width: landW, height: landH)
         }
     }
 
@@ -225,10 +227,11 @@ class MainViewController: UIViewController {
         super.viewWillTransition(to: size, with: coordinator)
         coordinator.animate(alongsideTransition: { [weak self] _ in
             guard let self = self else { return }
-            let scale = UIScreen.main.scale
-            let panelW = Int(size.width * scale)
-            let panelH = Int(size.height * scale)
-            _ = HeadUnitScreenConfig.shared.updateDimensions(width: panelW, height: panelH)
+            let screen = self.view.window?.screen ?? UIScreen.main
+            let nativeScale = screen.nativeScale
+            let landW = Int((max(size.width, size.height) * nativeScale).rounded())
+            let landH = Int((min(size.width, size.height) * nativeScale).rounded())
+            _ = HeadUnitScreenConfig.shared.updateDimensions(width: landW, height: landH)
         })
     }
 
@@ -681,15 +684,16 @@ class MainViewController: UIViewController {
             self?.presentOrientationMenu()
         })
 
-        alert.addAction(UIAlertAction(title: "Resolution", style: .default) { [weak self] _ in
+        alert.addAction(UIAlertAction(title: "Resolution: \(ProjectionSettings.videoResolution.title(for: ProjectionSettings.orientation))", style: .default) { [weak self] _ in
             self?.presentResolutionMenu()
         })
 
-        alert.addAction(UIAlertAction(title: "FPS", style: .default) { [weak self] _ in
+        alert.addAction(UIAlertAction(title: "FPS: \(ProjectionSettings.fpsLimit.title)", style: .default) { [weak self] _ in
             self?.presentFpsMenu()
         })
 
-        alert.addAction(UIAlertAction(title: "DPI", style: .default) { [weak self] _ in
+        let dpiTitle = ProjectionSettings.isAutoDpi ? "DPI: Auto (\(ProjectionSettings.effectiveDpi))" : "DPI: \(ProjectionSettings.dpi)"
+        alert.addAction(UIAlertAction(title: dpiTitle, style: .default) { [weak self] _ in
             self?.presentDpiMenu()
         })
 
@@ -860,17 +864,17 @@ class MainViewController: UIViewController {
     private func presentDpiMenu() {
         let alert = UIAlertController(
             title: "DPI",
-            message: "Enter custom DPI (\(ProjectionSettings.minDpi)-\(ProjectionSettings.maxDpi)).",
+            message: "Enter custom DPI (\(ProjectionSettings.minDpi)-\(ProjectionSettings.maxDpi)) or choose Auto Match iPad.",
             preferredStyle: .alert
         )
 
         alert.addTextField { textField in
             textField.keyboardType = .numberPad
-            textField.placeholder = "\(ProjectionSettings.defaultDpi)"
-            textField.text = "\(ProjectionSettings.dpi)"
+            textField.placeholder = "\(ProjectionSettings.recommendedDpiForCurrentDevice())"
+            textField.text = "\(ProjectionSettings.effectiveDpi)"
         }
 
-        alert.addAction(UIAlertAction(title: "Save", style: .default) { [weak self, weak alert] _ in
+        alert.addAction(UIAlertAction(title: "Save Custom", style: .default) { [weak self, weak alert] _ in
             guard let raw = alert?.textFields?.first?.text,
                   let value = Int(raw) else {
                 self?.presentSettingsMenu()
@@ -881,7 +885,8 @@ class MainViewController: UIViewController {
             self?.presentSettingsMenu()
         })
 
-        alert.addAction(UIAlertAction(title: "Reset Default", style: .destructive) { [weak self] _ in
+        let rec = ProjectionSettings.recommendedDpiForCurrentDevice()
+        alert.addAction(UIAlertAction(title: "Auto Match iPad (\(rec))", style: .default) { [weak self] _ in
             ProjectionSettings.resetDpiToDefault()
             self?.presentSettingsMenu()
         })
@@ -971,9 +976,15 @@ class MainViewController: UIViewController {
         let previewView = DpiPreviewView()
         previewView.translatesAutoresizingMaskIntoConstraints = false
         previewView.dpi = ProjectionSettings.effectiveDpi
-        let effectiveRes = ProjectionSettings.effectiveResolution
-        previewView.panelWidthPx = effectiveRes.width
-        previewView.panelHeightPx = effectiveRes.height
+        let screenConfig = HeadUnitScreenConfig.shared
+        previewView.panelWidthPx = screenConfig.screenWidthPx
+        previewView.panelHeightPx = screenConfig.screenHeightPx
+        previewView.codecWidthPx = screenConfig.codecWidthPx
+        previewView.codecHeightPx = screenConfig.codecHeightPx
+        previewView.activeWidthPx = screenConfig.activeWidthPx
+        previewView.activeHeightPx = screenConfig.activeHeightPx
+        previewView.marginWidthPx = screenConfig.widthMargin
+        previewView.marginHeightPx = screenConfig.heightMargin
         previewView.isRightHandDrive = ProjectionSettings.driverPosition == .right
         previewView.fitMode = ProjectionSettings.videoFitMode
 
@@ -985,7 +996,8 @@ class MainViewController: UIViewController {
 
         let dpiLabel = UILabel()
         dpiLabel.translatesAutoresizingMaskIntoConstraints = false
-        dpiLabel.text = "DPI: \(ProjectionSettings.effectiveDpi)  (\(previewView.virtualWidthDp)×\(previewView.virtualHeightDp) dp)"
+        let initialPrefix = ProjectionSettings.isAutoDpi ? "Auto " : ""
+        dpiLabel.text = "DPI: \(initialPrefix)(\(ProjectionSettings.effectiveDpi))  (\(previewView.virtualWidthDp)×\(previewView.virtualHeightDp) dp)"
         dpiLabel.font = .monospacedDigitSystemFont(ofSize: 17, weight: .bold)
         dpiLabel.textAlignment = .center
 
@@ -1000,15 +1012,31 @@ class MainViewController: UIViewController {
         presetStack.distribution = .fillEqually
         presetStack.translatesAutoresizingMaskIntoConstraints = false
 
-        let updateDpiBlock: (Int) -> Void = { [weak slider, weak previewView, weak dpiLabel] val in
+        let updateDpiBlock: (Int, Bool) -> Void = { [weak slider, weak previewView, weak dpiLabel] val, isAuto in
             guard let slider, let previewView, let dpiLabel else { return }
             let clamped = min(max(val, ProjectionSettings.minDpi), ProjectionSettings.maxDpi)
             slider.value = Float(clamped)
             previewView.dpi = clamped
-            dpiLabel.text = "DPI: \(clamped)  (\(previewView.virtualWidthDp)×\(previewView.virtualHeightDp) dp)"
-            ProjectionSettings.dpi = clamped
+            let prefix = isAuto ? "Auto " : ""
+            dpiLabel.text = "DPI: \(prefix)(\(clamped))  (\(previewView.virtualWidthDp)×\(previewView.virtualHeightDp) dp)"
+            if isAuto {
+                ProjectionSettings.resetDpiToDefault()
+            } else {
+                ProjectionSettings.dpi = clamped
+            }
             previewView.setNeedsDisplay()
         }
+
+        var autoConfig = UIButton.Configuration.filled()
+        autoConfig.title = "Auto (\(ProjectionSettings.recommendedDpiForCurrentDevice()))"
+        autoConfig.cornerStyle = .capsule
+        autoConfig.buttonSize = .mini
+        let autoBtn = UIButton(configuration: autoConfig)
+        autoBtn.addAction(UIAction { _ in
+            let rec = ProjectionSettings.recommendedDpiForCurrentDevice()
+            updateDpiBlock(rec, true)
+        }, for: .touchUpInside)
+        presetStack.addArrangedSubview(autoBtn)
 
         let presets = [120, 160, 200, 240, 280]
         for p in presets {
@@ -1018,7 +1046,7 @@ class MainViewController: UIViewController {
             btnConfig.buttonSize = .mini
             let btn = UIButton(configuration: btnConfig)
             btn.addAction(UIAction { _ in
-                updateDpiBlock(p)
+                updateDpiBlock(p, false)
             }, for: .touchUpInside)
             presetStack.addArrangedSubview(btn)
         }
@@ -1053,7 +1081,7 @@ class MainViewController: UIViewController {
 
         slider.addAction(UIAction { [weak slider] _ in
             guard let slider else { return }
-            updateDpiBlock(Int(slider.value))
+            updateDpiBlock(Int(slider.value), false)
         }, for: .valueChanged)
 
         closeButton.addAction(UIAction { [weak previewVC] _ in

@@ -35,6 +35,54 @@ public final class DpiPreviewView: UIView {
         }
     }
 
+    public var codecWidthPx: Int = 1920 {
+        didSet {
+            if oldValue != codecWidthPx {
+                setNeedsDisplay()
+            }
+        }
+    }
+
+    public var codecHeightPx: Int = 1080 {
+        didSet {
+            if oldValue != codecHeightPx {
+                setNeedsDisplay()
+            }
+        }
+    }
+
+    public var activeWidthPx: Int = 1440 {
+        didSet {
+            if oldValue != activeWidthPx {
+                setNeedsDisplay()
+            }
+        }
+    }
+
+    public var activeHeightPx: Int = 1080 {
+        didSet {
+            if oldValue != activeHeightPx {
+                setNeedsDisplay()
+            }
+        }
+    }
+
+    public var marginWidthPx: Int = 480 {
+        didSet {
+            if oldValue != marginWidthPx {
+                setNeedsDisplay()
+            }
+        }
+    }
+
+    public var marginHeightPx: Int = 0 {
+        didSet {
+            if oldValue != marginHeightPx {
+                setNeedsDisplay()
+            }
+        }
+    }
+
     public var isRightHandDrive: Bool = false {
         didSet {
             if oldValue != isRightHandDrive {
@@ -53,12 +101,14 @@ public final class DpiPreviewView: UIView {
 
     public var virtualWidthDp: Int {
         guard dpi > 0 else { return 0 }
-        return (panelWidthPx * 160) / dpi
+        let w = activeWidthPx > 0 ? activeWidthPx : panelWidthPx
+        return (w * 160) / dpi
     }
 
     public var virtualHeightDp: Int {
         guard dpi > 0 else { return 0 }
-        return (panelHeightPx * 160) / dpi
+        let h = activeHeightPx > 0 ? activeHeightPx : panelHeightPx
+        return (h * 160) / dpi
     }
 
     public var isCoolwalkSplitScreen: Bool {
@@ -303,12 +353,22 @@ public final class DpiPreviewView: UIView {
             drawMapCard(ctx: ctx, rect: cardsContainerRect, scale: scale)
         }
 
-        // Status Header string: "\(panelWidthPx)x\(panelHeightPx) @ \(dpi) DPI (\(virtualWidthDp)x\(virtualHeightDp) dp)"
-        let statusText = String(
-            format: "%d×%d @ %d DPI (%d×%d dp)  |  %@",
-            panelWidthPx, panelHeightPx, dpi, virtualWidthDp, virtualHeightDp,
-            isSplit ? "Coolwalk Split Screen" : "Single Screen (Compact)"
-        )
+        // Status Header string: "有效分辨率: <activeW>x<activeH> (<codecW>x<codecH> 裁边) @ <dpi> DPI"
+        let statusText: String
+        let modeDesc = isSplit ? "Coolwalk 分屏" : "单卡片紧凑模式"
+        if marginWidthPx > 0 || marginHeightPx > 0 {
+            statusText = String(
+                format: "有效分辨率: %d×%d (%d×%d 裁边) @ %d DPI (%d×%d dp) | %@",
+                activeWidthPx, activeHeightPx, codecWidthPx, codecHeightPx, dpi, virtualWidthDp, virtualHeightDp, modeDesc
+            )
+        } else {
+            let effW = activeWidthPx > 0 ? activeWidthPx : panelWidthPx
+            let effH = activeHeightPx > 0 ? activeHeightPx : panelHeightPx
+            statusText = String(
+                format: "有效分辨率: %d×%d @ %d DPI (%d×%d dp) | %@",
+                effW, effH, dpi, virtualWidthDp, virtualHeightDp, modeDesc
+            )
+        }
         let font = UIFont.monospacedSystemFont(ofSize: 10, weight: .semibold)
         let textColor = isSplit
             ? UIColor(red: 0.2, green: 0.85, blue: 0.5, alpha: 0.95)

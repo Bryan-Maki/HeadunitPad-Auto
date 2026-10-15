@@ -34,38 +34,59 @@ public final class HeadUnitScreenConfig {
 
     private init() {}
 
+    public static func currentIpadLandscapeDimensions() -> (width: Int, height: Int) {
+        let screen = UIScreen.main
+        let bounds = screen.bounds
+        let scale = screen.nativeScale
+        let landW = Int((max(bounds.width, bounds.height) * scale).rounded())
+        let landH = Int((min(bounds.width, bounds.height) * scale).rounded())
+        return (landW, landH)
+    }
+
     public func initScreen(
         width: Int,
         height: Int,
         scale: Float = 2.0,
         fitMode: VideoFitMode = .fillMargin,
-        requestedResolution: ResolutionPreset = .r1280x720
+        requestedResolution: ResolutionPreset = .auto
     ) {
         self.videoFitMode = fitMode
         self.density = scale
-        self.screenWidthPx = width
-        self.screenHeightPx = height
+        self.screenWidthPx = max(width, height)
+        self.screenHeightPx = min(width, height)
         self.isInitialized = true
 
         recalculate(requestedResolution: requestedResolution)
     }
 
-    public func recalculate(requestedResolution: ResolutionPreset = .auto) {
+    public func recalculate(requestedResolution: ResolutionPreset? = nil) {
         guard screenWidthPx > 0 && screenHeightPx > 0 else { return }
 
         // 1. Determine negotiated resolution
         if !isResolutionLocked {
-            let res = NegotiatedResolutionPolicy.select(
-                isLocked: isResolutionLocked,
-                selected: requestedResolution,
-                panelW: screenWidthPx,
-                panelH: screenHeightPx,
-                fitMode: videoFitMode,
-                hevcSupported: true,
-                canHevcHighRes: false
-            ) ?? .r1280x720
+            let canHevc = (ProjectionSettings.videoCodecPreference != .h264)
+            if let req = requestedResolution {
+                let res = NegotiatedResolutionPolicy.select(
+                    isLocked: isResolutionLocked,
+                    selected: req,
+                    panelW: screenWidthPx,
+                    panelH: screenHeightPx,
+                    fitMode: videoFitMode,
+                    hevcSupported: true,
+                    canHevcHighRes: canHevc
+                ) ?? .r1280x720
 
-            self.negotiatedResolutionType = res.protoType
+                self.negotiatedResolutionType = res.protoType
+            } else if negotiatedResolutionType == ._1280x720 {
+                let res = NegotiatedResolutionPolicy.autoLadder(
+                    panelW: screenWidthPx,
+                    panelH: screenHeightPx,
+                    fitMode: videoFitMode,
+                    hevcSupported: true,
+                    canHevcHighRes: canHevc
+                )
+                self.negotiatedResolutionType = res.protoType
+            }
         }
 
         // 2. Perform scaling and margin calculation
@@ -116,36 +137,41 @@ public final class HeadUnitScreenConfig {
         }
     }
 
-    public func getWidthMargin() -> Int {
-        guard screenWidthPx > 0 && screenHeightPx > 0 else { return 0 }
-        let (videoW, _) = activeSize()
-        // In FillMargin mode on iPad 4:3 display (e.g. 2048x1536 / 1024x768):
-        // iPad aspect ratio is 4:3 (1.333), while AA video is 16:9 (1.777).
-        // To fill full screen, the left and right margins must be announced to cut off
-        // 16:9 width excess so the UI aspect matches iPad display!
+    public func getMargins() -> (widthMargin: Int, heightMargin: Int) {
+        guard screenWidthPx > 0 && screenHeightPx > 0 else { return (0, 0) }
+        let (codecW, codecH) = activeSize()
+        guard codecW > 0 && codecH > 0 else { return (0, 0) }
+
         if videoFitMode == .fillMargin {
-            let targetVideoWidthFor4to3 = (activeSize().height * screenWidthPx) / screenHeightPx
-            let margin = max(0, videoW - targetVideoWidthFor4to3)
-            return margin
+            let screenAspect = Double(screenWidthPx) / Double(screenHeightPx)
+            let codecAspect = Double(codecW) / Double(codecH)
+            if screenAspect < codecAspect {
+                let activeH = codecH
+                let activeW = Int((Double(codecH) * screenAspect).rounded()) & ~1
+                let widthMargin = max(0, codecW - activeW)
+                return (widthMargin, 0)
+            } else {
+                let activeW = codecW
+                let activeH = Int((Double(codecW) / screenAspect).rounded()) & ~1
+                let heightMargin = max(0, codecH - activeH)
+                return (0, heightMargin)
+            }
         }
-        if MarginStrategyPolicy.select(mode: videoFitMode, panelW: screenWidthPx, panelH: screenHeightPx, videoW: videoW, videoH: activeSize().height) == .par {
-            return 0
+        if MarginStrategyPolicy.select(mode: videoFitMode, panelW: screenWidthPx, panelH: screenHeightPx, videoW: codecW, videoH: codecH) == .par {
+            return (0, 0)
         }
-        return ProjectionGeometryPolicy.widthMargin(videoW: videoW, panelW: screenWidthPx, scaleFactor: scaleFactor)
+        return (
+            ProjectionGeometryPolicy.widthMargin(videoW: codecW, panelW: screenWidthPx, scaleFactor: scaleFactor),
+            ProjectionGeometryPolicy.heightMargin(videoH: codecH, panelH: screenHeightPx, scaleFactor: scaleFactor)
+        )
+    }
+
+    public func getWidthMargin() -> Int {
+        return getMargins().widthMargin
     }
 
     public func getHeightMargin() -> Int {
-        guard screenWidthPx > 0 && screenHeightPx > 0 else { return 0 }
-        let (videoW, videoH) = activeSize()
-        if videoFitMode == .fillMargin {
-            let targetVideoHeightFor4to3 = (videoW * screenHeightPx) / screenWidthPx
-            let margin = max(0, videoH - targetVideoHeightFor4to3)
-            return margin
-        }
-        if MarginStrategyPolicy.select(mode: videoFitMode, panelW: screenWidthPx, panelH: screenHeightPx, videoW: videoW, videoH: videoH) == .par {
-            return 0
-        }
-        return ProjectionGeometryPolicy.heightMargin(videoH: videoH, panelH: screenHeightPx, scaleFactor: scaleFactor)
+        return getMargins().heightMargin
     }
 
     public func getLeftMargin() -> Int {
@@ -222,12 +248,14 @@ public final class HeadUnitScreenConfig {
 
     public func updateDimensions(width: Int, height: Int) -> Bool {
         guard width > 0 && height > 0 else { return false }
-        if self.screenWidthPx == width && self.screenHeightPx == height {
+        let landW = max(width, height)
+        let landH = min(width, height)
+        if self.screenWidthPx == landW && self.screenHeightPx == landH {
             return false
         }
-        self.screenWidthPx = width
-        self.screenHeightPx = height
-        recalculate()
+        self.screenWidthPx = landW
+        self.screenHeightPx = landH
+        recalculate(requestedResolution: ProjectionSettings.resolution)
         checkAndNotifyMarginDivergence()
         return true
     }

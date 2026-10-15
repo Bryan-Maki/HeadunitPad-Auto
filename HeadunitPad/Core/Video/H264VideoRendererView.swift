@@ -43,11 +43,7 @@ public class H264VideoRendererView: UIView {
     public var onKeyframeRequested: (() -> Void)?
     public var onCorruptionDetected: ((String) -> Void)?
 
-    override public class var layerClass: AnyClass { AVSampleBufferDisplayLayer.self }
-
-    private var displayLayer: AVSampleBufferDisplayLayer {
-        return layer as! AVSampleBufferDisplayLayer
-    }
+    public let displayLayer = AVSampleBufferDisplayLayer()
 
     public private(set) var pinnedCodec: VideoCodecType?
 
@@ -89,7 +85,10 @@ public class H264VideoRendererView: UIView {
 
     private func commonInit() {
         backgroundColor = .black
-        displayLayer.videoGravity = .resizeAspect
+        clipsToBounds = true
+        layer.masksToBounds = true
+        displayLayer.videoGravity = .resize
+        layer.addSublayer(displayLayer)
         applyGeometry()
     }
 
@@ -107,49 +106,49 @@ public class H264VideoRendererView: UIView {
     public func applyGeometry() {
         let screenConfig = HeadUnitScreenConfig.shared
         let fitMode = screenConfig.videoFitMode
-        let videoW = screenConfig.getNegotiatedWidth()
-        let videoH = screenConfig.getNegotiatedHeight()
+        let codecW = screenConfig.getNegotiatedWidth()
+        let codecH = screenConfig.getNegotiatedHeight()
         let marginW = screenConfig.getWidthMargin()
         let marginH = screenConfig.getHeightMargin()
+        let viewBounds = self.bounds
+
+        guard viewBounds.width > 0 && viewBounds.height > 0 else { return }
 
         CATransaction.begin()
         CATransaction.setDisableActions(true)
 
-        switch fitMode {
-        case .fillMargin:
-            if videoW > 0 && videoH > 0 && (marginW > 0 || marginH > 0) && videoW > marginW && videoH > marginH {
-                let leftMargin = marginW / 2
-                let topMargin = marginH / 2
-                let uiW = videoW - marginW
-                let uiH = videoH - marginH
+        let activeW = max(1, codecW - marginW)
+        let activeH = max(1, codecH - marginH)
 
-                let normX = CGFloat(leftMargin) / CGFloat(videoW)
-                let normY = CGFloat(topMargin) / CGFloat(videoH)
-                let normW = CGFloat(uiW) / CGFloat(videoW)
-                let normH = CGFloat(uiH) / CGFloat(videoH)
+        let activeRect = ProjectionGeometryPolicy.activeDisplayRect(
+            bounds: viewBounds,
+            activeW: activeW,
+            activeH: activeH,
+            fitMode: fitMode
+        )
 
-                displayLayer.contentsRect = CGRect(x: normX, y: normY, width: normW, height: normH)
+        if marginW > 0 || marginH > 0 {
+            let overscanFrame = ProjectionGeometryPolicy.overscanLayerFrame(
+                activeRect: activeRect,
+                codecW: codecW,
+                codecH: codecH,
+                activeW: activeW,
+                activeH: activeH
+            )
+            displayLayer.videoGravity = .resize
+            displayLayer.frame = overscanFrame
+        } else {
+            switch fitMode {
+            case .contain, .fit:
+                displayLayer.videoGravity = .resizeAspect
+                displayLayer.frame = activeRect
+            case .cover:
+                displayLayer.videoGravity = .resizeAspectFill
+                displayLayer.frame = activeRect
+            case .fill, .fillMargin, .stretch:
                 displayLayer.videoGravity = .resize
-            } else {
-                displayLayer.contentsRect = CGRect(x: 0, y: 0, width: 1, height: 1)
-                displayLayer.videoGravity = .resize
+                displayLayer.frame = activeRect
             }
-
-        case .contain:
-            displayLayer.contentsRect = CGRect(x: 0, y: 0, width: 1, height: 1)
-            displayLayer.videoGravity = .resizeAspect
-
-        case .cover:
-            displayLayer.contentsRect = CGRect(x: 0, y: 0, width: 1, height: 1)
-            displayLayer.videoGravity = .resizeAspectFill
-
-        case .fill:
-            displayLayer.contentsRect = CGRect(x: 0, y: 0, width: 1, height: 1)
-            displayLayer.videoGravity = .resize
-
-        case .stretch:
-            displayLayer.contentsRect = CGRect(x: 0, y: 0, width: 1, height: 1)
-            displayLayer.videoGravity = .resize
         }
 
         CATransaction.commit()
