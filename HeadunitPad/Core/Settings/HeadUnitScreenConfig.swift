@@ -190,6 +190,13 @@ public final class HeadUnitScreenConfig {
         return getHeightMargin() - getTopMargin()
     }
 
+    public var codecWidthPx: Int { getNegotiatedWidth() }
+    public var codecHeightPx: Int { getNegotiatedHeight() }
+    public var widthMargin: Int { getWidthMargin() }
+    public var heightMargin: Int { getHeightMargin() }
+    public var activeWidthPx: Int { max(1, codecWidthPx - widthMargin) }
+    public var activeHeightPx: Int { max(1, codecHeightPx - heightMargin) }
+
     public func getPixelAspectRatioE4() -> Int {
         let (videoW, videoH) = activeSize()
         return ProjectionGeometryPolicy.pixelAspectRatioE4(
