@@ -2426,3 +2426,6 @@ public enum TouchAction: UInt8 {
     case POINTER_DOWN = 5
     case POINTER_UP = 6
 }
+
+typealias ProtoWire = AapTransport.ProtoWire
+

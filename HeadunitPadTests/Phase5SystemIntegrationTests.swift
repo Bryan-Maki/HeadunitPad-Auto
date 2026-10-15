@@ -585,7 +585,7 @@ final class Phase5SystemIntegrationTests: XCTestCase {
         XCTAssertNotNil(configPacket, "Transport must send Media.Config (0x8003) upon setup")
         if let configPacket = configPacket {
             let payload = configPacket.subdata(in: 6..<configPacket.count)
-            let maxUnacked = ProtoWire.extractFirstVarint(from: payload, fieldNumber: 2) ?? 0
+            let maxUnacked = AapTransport.ProtoWire.extractFirstVarint(from: payload, fieldNumber: 2) ?? 0
             XCTAssertGreaterThanOrEqual(maxUnacked, 12, "Video channel maxUnacked must be >= 12 (configured as 16)")
         }
 
