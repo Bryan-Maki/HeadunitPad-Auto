@@ -9,7 +9,7 @@
 import Foundation
 import AVFoundation
 
-public final class PCMAudioPlayer {
+final class PCMAudioPlayer {
     private struct Stream {
         let sampleRate: Int
         let channels: Int
@@ -168,7 +168,7 @@ public final class PCMAudioPlayer {
     /// Enqueues 16-bit Little-Endian Signed Integer (Int16) PCM data by converting to
     /// standard non-interleaved Float32 AVAudioPCMBuffer and scheduling on AVAudioPlayerNode.
     @discardableResult
-    public func enqueuePCMData(_ data: Data, sampleRate: Int, channels: Int, on channel: UInt8 = Channel.ID_AUD) -> AVAudioPCMBuffer? {
+    func enqueuePCMData(_ data: Data, sampleRate: Int, channels: Int, on channel: UInt8 = Channel.ID_AUD) -> AVAudioPCMBuffer? {
         guard let buffer = Self.convertInt16PCMToFloat32Buffer(data, sampleRate: sampleRate, channels: channels) else {
             return nil
         }
