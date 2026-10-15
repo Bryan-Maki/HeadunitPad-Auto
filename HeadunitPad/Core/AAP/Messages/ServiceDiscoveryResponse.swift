@@ -58,8 +58,8 @@ public final class AapServiceDiscoveryResponseMessage {
         screenConfig.recordAnnouncedMargins(widthMargin: phoneWidthMargin, heightMargin: phoneHeightMargin)
         screenConfig.recordAnnouncedCanvas()
 
-        let frameRateType: ControlService.MediaSinkService.VideoConfiguration.VideoFrameRateType =
-            (fpsLimit == 30) ? ._30 : ._60
+        let is30Fps = (fpsLimit == 30 || fpsLimit == ProjectionFpsLimit.fps30.rawValue)
+        let frameRateType: ControlService.MediaSinkService.VideoConfiguration.VideoFrameRateType = is30Fps ? ._30 : ._60
 
         // Use CodecTypeSelectionPolicy & user preference
         let userPref = ProjectionSettings.videoCodecPreference

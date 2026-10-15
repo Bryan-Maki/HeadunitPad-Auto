@@ -20,34 +20,7 @@ public enum VideoKeyframeScanner {
         let totalSize = size ?? (data.count - offset)
         if totalSize < 4 { return false }
         let end = min(offset + totalSize, data.count)
-        var i = offset
-        var headersSeen = 0
 
-        data.withUnsafeBytes { rawBuffer in
-            guard let ptr = rawBuffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return }
-
-            while i + 3 < end && headersSeen < maxNalHeadersScanned {
-                let headerPos = startCodeHeaderPos(ptr: ptr, i: i, end: end)
-                if headerPos < 0 {
-                    i += 1
-                    continue
-                }
-                headersSeen += 1
-                let b = Int(ptr[headerPos])
-                let isKeyframe: Bool
-                if isHevc {
-                    let nalType = (b & 0x7E) >> 1
-                    isKeyframe = hevcIrapRange.contains(nalType)
-                } else {
-                    let nalType = b & 0x1F
-                    isKeyframe = (nalType == avcNalIdr)
-                }
-                if isKeyframe { return }
-                i = headerPos + 1
-            }
-        }
-
-        // Re-run safely outside closure if found
         var found = false
         data.withUnsafeBytes { rawBuffer in
             guard let ptr = rawBuffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return }

@@ -431,4 +431,29 @@ final class Phase3VideoAndRecoveryTests: XCTestCase {
         XCTAssertEqual(DecoderStallCausePolicy.classify(stallGapMs: 5000, inputIdleGapMs: 100, keyframeDecodedSinceStart: false, sessionHasRendered: true), .starvedOfKeyframe)
         XCTAssertEqual(DecoderStallCausePolicy.classify(stallGapMs: 16_000, inputIdleGapMs: 100, keyframeDecodedSinceStart: false, sessionHasRendered: true), .stalled)
     }
+
+    // MARK: - 10. FrameReleasePacer VSync Timing
+
+    func testVSyncFrameReleasePacerSmoothsBurstArrivals() {
+        var pacer = H264VideoRendererView.FrameReleasePacer()
+        let frameInterval: Double = 1.0 / 60.0 // ~0.0166667s
+
+        // 3 frames arrive in the same millisecond burst: t = 100.000s, 100.001s, 100.002s
+        let pts0 = pacer.nextPts(nowSeconds: 100.000, frameInterval: frameInterval)
+        let pts1 = pacer.nextPts(nowSeconds: 100.001, frameInterval: frameInterval)
+        let pts2 = pacer.nextPts(nowSeconds: 100.002, frameInterval: frameInterval)
+
+        XCTAssertEqual(pts0, 100.000, accuracy: 0.0001)
+        XCTAssertEqual(pts1, 100.000 + frameInterval, accuracy: 0.0001)
+        XCTAssertEqual(pts2, 100.000 + (2.0 * frameInterval), accuracy: 0.0001)
+
+        let gap01 = pts1 - pts0
+        let gap12 = pts2 - pts1
+        XCTAssertEqual(gap01, frameInterval, accuracy: 0.0001)
+        XCTAssertEqual(gap12, frameInterval, accuracy: 0.0001)
+
+        // Verify catch-up when backlog exceeds 2.5 frames:
+        let pts3 = pacer.nextPts(nowSeconds: 100.200, frameInterval: frameInterval)
+        XCTAssertEqual(pts3, 100.200, accuracy: 0.0001, "Should catch up to current time when backlog exceeds 2.5 frames")
+    }
 }

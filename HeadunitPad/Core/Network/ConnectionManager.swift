@@ -224,21 +224,24 @@ class ConnectionManager {
         isUserInitiatedDisconnect = true
         autoReconnect.cancel()
 
+        if let transport = aapTransport, (transport.state == .running || transport.state == .binding || transport.state == .authenticatingComplete) {
+            transport.send(message: .userSelectionByebyeRequest)
+        }
+
         TeardownGuard.runThenClose(
             teardown: { [weak self] in
                 guard let self = self else { return }
                 NowPlayingCoordinator.shared.deactivate()
                 self.microphoneCapture.stop()
                 self.locationCapture.stop()
-                self.wirelessHelperServer.stop()
-                self.legacyAapServer.stop()
-                self.wppServer.stop()
                 self.connectedDevice = nil
                 self.state = .disconnected
                 self.updateStatus("Ready to connect")
             },
             close: { [weak self] in
-                self?.activeConnection?.disconnect()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    self?.activeConnection?.disconnect()
+                }
             },
             onError: { phase, error in
                 print("ConnectionManager: disconnect error during \(phase): \(error.localizedDescription)")
@@ -594,6 +597,7 @@ extension ConnectionManager {
         connectedDevice = DiscoveredDevice(ip: host, port: 5000, name: "Android Auto Client")
         updateStatus("Incoming connection from \(host). Starting Android Auto...")
         installAapTransport(connection: tcpHandler)
+        aapTransport?.initialVersionRequestDelay = 0.05
         aapTransport?.configurePeer(host: host, port: 5000)
         tcpHandler.accept(connection: connection, initialData: initialData)
     }
@@ -610,8 +614,8 @@ extension ConnectionManager {
 }
 
 extension ConnectionManager: WirelessHelperServerDelegate {
-    func wirelessHelperServer(_ server: WirelessHelperServer, didAccept connection: NWConnection, remoteHost: String?) {
-        acceptIncomingAapConnection(connection, remoteHost: remoteHost)
+    func wirelessHelperServer(_ server: WirelessHelperServer, didAccept connection: NWConnection, remoteHost: String?, initialData: Data) {
+        acceptIncomingAapConnection(connection, initialData: initialData, remoteHost: remoteHost)
     }
 
     func wirelessHelperServer(_ server: WirelessHelperServer, didFail error: Error) {

@@ -66,11 +66,37 @@ public class H264VideoRendererView: UIView {
 
     public private(set) var pinnedCodec: VideoCodecType?
 
+    public struct FrameReleasePacer {
+        public var nextScheduledPtsSeconds: Double = 0
+
+        public init(nextScheduledPtsSeconds: Double = 0) {
+            self.nextScheduledPtsSeconds = nextScheduledPtsSeconds
+        }
+
+        public mutating func nextPts(nowSeconds: Double, frameInterval: Double = 1.0 / 60.0) -> Double {
+            var targetSeconds = max(nowSeconds, nextScheduledPtsSeconds)
+            if targetSeconds - nowSeconds > frameInterval * 2.5 {
+                targetSeconds = nowSeconds
+            }
+            nextScheduledPtsSeconds = targetSeconds + frameInterval
+            return targetSeconds
+        }
+
+        public mutating func reset() {
+            nextScheduledPtsSeconds = 0
+        }
+    }
+
     private var formatDescription: CMVideoFormatDescription?
     private var vps: Data?
     private var sps: Data?
     private var pps: Data?
     private var frameIndex: Int64 = 0
+    public private(set) var framePacer = FrameReleasePacer()
+    public var nextScheduledPtsSeconds: Double {
+        return framePacer.nextScheduledPtsSeconds
+    }
+    private var decodedFrameCount: Int = 0
     private var notReadyStreak = 0
 
     private let processQueue = DispatchQueue(label: "com.headunitpad.videodecode", qos: .userInteractive)
@@ -216,6 +242,8 @@ public class H264VideoRendererView: UIView {
         processQueue.async { [weak self] in
             guard let self = self else { return }
             self.frameIndex = 0
+            self.framePacer.reset()
+            self.decodedFrameCount = 0
             self.vps = nil
             self.sps = nil
             self.pps = nil
@@ -312,6 +340,7 @@ public class H264VideoRendererView: UIView {
 
         if droppedFrames > 0 {
             updateDiagnostics { $0.queueDrops += droppedFrames }
+            onKeyframeRequested?()
         }
 
         guard shouldStartProcessing else { return }
@@ -358,12 +387,16 @@ public class H264VideoRendererView: UIView {
         var nalTypeInts: [Int] = []
         var accessUnitNALs: [Data] = []
         var hasVclSlice = false
+        var isKeyframe = false
 
         if isHevc {
             for nal in nalUnits {
                 guard let first = nal.first else { continue }
                 let nalType = Int((first & 0x7E) >> 1)
                 nalTypeInts.append(nalType)
+                if (16...21).contains(nalType) {
+                    isKeyframe = true
+                }
                 if nalType == 32 {
                     extractedVPS = nal
                 } else if nalType == 33 {
@@ -385,6 +418,9 @@ public class H264VideoRendererView: UIView {
                 guard let first = nal.first else { continue }
                 let nalType = Int(first & 0x1F)
                 nalTypeInts.append(nalType)
+                if nalType == 5 {
+                    isKeyframe = true
+                }
                 if nalType == 7 {
                     extractedSPS = nal
                 } else if nalType == 8 {
@@ -400,8 +436,6 @@ public class H264VideoRendererView: UIView {
                 }
             }
         }
-
-        let isKeyframe = VideoKeyframeScanner.containsKeyframe(data: frame, isHevc: isHevc)
 
         updateDiagnostics {
             $0.parsedFrames += 1
@@ -531,47 +565,47 @@ public class H264VideoRendererView: UIView {
         let elapsedUs = Int64((CFAbsoluteTimeGetCurrent() - startTime) * 1_000_000)
         latencyMonitor.onFrameDecoded(latencyUs: elapsedUs)
 
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-
-            if self.displayLayer.status == .failed {
-                self.updateDiagnostics { $0.layerFailures += 1 }
-                self.displayLayer.flushAndRemoveImage()
-                self.processQueue.async {
-                    self.formatDescription = nil
-                    self.frameIndex = 0
-                    self.hasDecodedKeyframe = false
-                }
-                self.notReadyStreak = 0
-                return
+        if displayLayer.status == .failed {
+            updateDiagnostics { $0.layerFailures += 1 }
+            DispatchQueue.main.async { [weak self] in
+                self?.displayLayer.flushAndRemoveImage()
             }
-
-            guard self.displayLayer.isReadyForMoreMediaData else {
-                self.updateDiagnostics { $0.notReadyDrops += 1 }
-                self.notReadyStreak += 1
-
-                if self.notReadyStreak == 30 {
-                    self.displayLayer.flush()
-                } else if self.notReadyStreak >= 90 {
-                    self.displayLayer.flushAndRemoveImage()
-                    self.processQueue.async {
-                        self.formatDescription = nil
-                        self.frameIndex = 0
-                        self.hasDecodedKeyframe = false
-                    }
-                    self.notReadyStreak = 0
-                }
-                return
-            }
-
-            self.notReadyStreak = 0
-            self.displayLayer.enqueue(sampleBuffer)
-            self.sessionHasRendered = true
-            _ = self.keyframeRepairTracker.onFrameRendered(ptsUs: currentPts)
-
-            self.updateDiagnostics { $0.enqueuedSamples += 1 }
-            self.onFrameDisplayed?()
+            formatDescription = nil
+            frameIndex = 0
+            hasDecodedKeyframe = false
+            notReadyStreak = 0
+            onKeyframeRequested?()
+            return
         }
+
+        guard displayLayer.isReadyForMoreMediaData else {
+            updateDiagnostics { $0.notReadyDrops += 1 }
+            notReadyStreak += 1
+            onKeyframeRequested?()
+
+            if notReadyStreak == 30 {
+                DispatchQueue.main.async { [weak self] in
+                    self?.displayLayer.flush()
+                }
+            } else if notReadyStreak >= 90 {
+                DispatchQueue.main.async { [weak self] in
+                    self?.displayLayer.flushAndRemoveImage()
+                }
+                formatDescription = nil
+                frameIndex = 0
+                hasDecodedKeyframe = false
+                notReadyStreak = 0
+            }
+            return
+        }
+
+        notReadyStreak = 0
+        displayLayer.enqueue(sampleBuffer)
+        sessionHasRendered = true
+        _ = keyframeRepairTracker.onFrameRendered(ptsUs: currentPts)
+
+        updateDiagnostics { $0.enqueuedSamples += 1 }
+        onFrameDisplayed?()
     }
 
     private func detectHevc(from nalUnits: [Data]) -> Bool {
@@ -695,11 +729,13 @@ public class H264VideoRendererView: UIView {
         }
         guard copyStatus == noErr else { return nil }
 
-        var timing = CMSampleTimingInfo(
-            duration: CMTime(value: 1, timescale: 30),
-            presentationTimeStamp: CMTime(value: frameIndex, timescale: 30),
-            decodeTimeStamp: .invalid
-        )
+        let nowSeconds = CMTimeGetSeconds(CMClockGetTime(CMClockGetHostTimeClock()))
+        let is30Fps = (ProjectionSettings.effectiveFpsLimit.rawValue == 2 || ProjectionSettings.effectiveFpsLimit == .fps30)
+        let frameInterval: Double = is30Fps ? (1.0 / 30.0) : (1.0 / 60.0)
+        let targetSeconds = framePacer.nextPts(nowSeconds: nowSeconds, frameInterval: frameInterval)
+        let pts = CMTimeMakeWithSeconds(targetSeconds, preferredTimescale: 1_000_000_000)
+        let duration = CMTimeMakeWithSeconds(frameInterval, preferredTimescale: 1_000_000_000)
+        var timing = CMSampleTimingInfo(duration: duration, presentationTimeStamp: pts, decodeTimeStamp: .invalid)
         frameIndex += 1
 
         var sampleBuffer: CMSampleBuffer?
@@ -724,12 +760,21 @@ public class H264VideoRendererView: UIView {
                 CFArrayGetValueAtIndex(attachments, 0),
                 to: CFMutableDictionary.self
             )
-            CFDictionarySetValue(
-                dictionary,
-                Unmanaged.passUnretained(kCMSampleAttachmentKey_DisplayImmediately).toOpaque(),
-                Unmanaged.passUnretained(kCFBooleanTrue).toOpaque()
-            )
+            if decodedFrameCount == 0 {
+                CFDictionarySetValue(
+                    dictionary,
+                    Unmanaged.passUnretained(kCMSampleAttachmentKey_DisplayImmediately).toOpaque(),
+                    Unmanaged.passUnretained(kCFBooleanTrue).toOpaque()
+                )
+            } else {
+                CFDictionarySetValue(
+                    dictionary,
+                    Unmanaged.passUnretained(kCMSampleAttachmentKey_DisplayImmediately).toOpaque(),
+                    Unmanaged.passUnretained(kCFBooleanFalse).toOpaque()
+                )
+            }
         }
+        decodedFrameCount += 1
         return sampleBuffer
     }
 

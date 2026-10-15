@@ -51,6 +51,9 @@ public final class WppTcpServer {
     }
 
     public func start(port: UInt16 = WppTcpServer.defaultPort) {
+        if isListening && listeningPort == Int(port) && listener != nil {
+            return
+        }
         if let existing = listener {
             existing.cancel()
             listener = nil

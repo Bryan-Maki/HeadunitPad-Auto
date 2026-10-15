@@ -104,6 +104,10 @@ public final class AapMessage: Equatable, CustomStringConvertible {
         return data.subdata(in: dataOffset..<size)
     }
 
+    public var payloadSize: Int {
+        return max(0, size - dataOffset)
+    }
+
     public var isAudio: Bool {
         return Channel.isAudio(UInt8(channel))
     }

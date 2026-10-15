@@ -1286,7 +1286,6 @@ extension MainViewController: ConnectionManagerDelegate {
     }
 
     func connectionManager(_ manager: ConnectionManager, didReceiveVideoData data: Data) {
-        VideoFrameBus.shared.publish(frame: data)
         videoRenderer.enqueueAnnexBFrame(data)
     }
 

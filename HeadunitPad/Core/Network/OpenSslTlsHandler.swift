@@ -36,6 +36,7 @@ class OpenSslTlsHandler {
     private var clientPrivateKey: OpaquePointer?
     private var certPath: String?
     private var keyPath: String?
+    private var decryptScratchBuffer = [UInt8](repeating: 0, count: 65536)
 
     init() {}
 
@@ -255,12 +256,11 @@ class OpenSslTlsHandler {
         guard written > 0 else { return nil }
 
         var decrypted = Data()
-        var buffer = [UInt8](repeating: 0, count: 65536)
 
         while true {
-            let read = SSL_read(ssl, &buffer, Int32(buffer.count))
+            let read = SSL_read(ssl, &decryptScratchBuffer, Int32(decryptScratchBuffer.count))
             if read > 0 {
-                decrypted.append(contentsOf: buffer[0..<Int(read)])
+                decrypted.append(contentsOf: decryptScratchBuffer[0..<Int(read)])
                 continue
             }
 

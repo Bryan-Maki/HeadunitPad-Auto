@@ -80,7 +80,7 @@ class AapTransport {
     private var handshakeTimer: DispatchWorkItem?
     private let versionHandshakeTimeout: TimeInterval
     private let tlsHandshakeTimeout: TimeInterval = 15.0
-    private let initialVersionRequestDelay: TimeInterval = 0.5
+    var initialVersionRequestDelay: TimeInterval = 0.5
     private let versionRetryInterval: TimeInterval = 2.0
     private let maxVersionRequestAttempts: Int
     private var versionRequestAttempts = 0
@@ -463,7 +463,7 @@ class AapTransport {
     }
 
     func send(message: AapMessage, completion: ((Error?) -> Void)? = nil) {
-        recordAapTrace(direction: "TX", channel: message.channelUInt8, flags: message.flags, type: message.typeUInt16, payloadSize: message.payload.count)
+        recordAapTrace(direction: "TX", channel: message.channelUInt8, flags: message.flags, type: message.typeUInt16, payloadSize: message.payloadSize)
 
         if state == .authenticating || state == .authenticatingComplete || state == .binding || state == .running {
             processingQueue.async { [weak self] in
@@ -473,6 +473,17 @@ class AapTransport {
                 }
                 self.sendEncryptedMessage(message, completion: completion)
             }
+        } else {
+            let data = message.toData()
+            connection.send(data, completion: completion)
+        }
+    }
+
+    private func sendOnProcessingQueue(message: AapMessage, completion: ((Error?) -> Void)? = nil) {
+        recordAapTrace(direction: "TX", channel: message.channelUInt8, flags: message.flags, type: message.typeUInt16, payloadSize: message.payloadSize)
+
+        if state == .authenticating || state == .authenticatingComplete || state == .binding || state == .running {
+            sendEncryptedMessage(message, completion: completion)
         } else {
             let data = message.toData()
             connection.send(data, completion: completion)
@@ -1083,8 +1094,8 @@ class AapTransport {
 
     func handleMessage(_ message: AapMessage) {
         let channelId = message.channelUInt8
-        recordAapTrace(direction: "RX", channel: channelId, flags: message.flags, type: message.typeUInt16, payloadSize: message.payload.count)
-        noteInboundMessage(channel: Int(channelId), bytes: message.payload.count)
+        recordAapTrace(direction: "RX", channel: channelId, flags: message.flags, type: message.typeUInt16, payloadSize: message.payloadSize)
+        noteInboundMessage(channel: Int(channelId), bytes: message.payloadSize)
 
         if channelId != Channel.ID_VID && !Channel.isAudio(channelId) && channelId != Channel.ID_MIC {
             print("AapTransport: Received message on channel \(Channel.name(for: channelId)), type=\(message.type), size=\(message.payload.count)")
@@ -1926,7 +1937,8 @@ private enum ProtoWire {
             }
 
         case 0, 1: // MEDIA_MESSAGE_DATA (0x0000) / MEDIA_MESSAGE_CODEC_CONFIG (0x0001)
-            if AapMessageFraming.isLast(message.flags) {
+            let isFirst = (message.flags & AapMessageFraming.FLAG_BIT_FIRST) != 0 || message.flags == 0x09 || message.flags == 0x0b
+            if isFirst {
                 sendMediaAck(on: message.channelUInt8)
             }
             processVideoStreamPacket(message)
@@ -2049,34 +2061,24 @@ private enum ProtoWire {
     }
 
     private func findAnnexBStartOffset(in data: Data) -> Int? {
-        let bytes = [UInt8](data)
-        if bytes.isEmpty { return nil }
-
-        func hasStartCode(at i: Int) -> Bool {
-            if i + 3 <= bytes.count,
-               bytes[i] == 0x00,
-               bytes[i + 1] == 0x00,
-               bytes[i + 2] == 0x01 {
-                return true
+        guard data.count >= 3 else { return nil }
+        return data.withUnsafeBytes { rawBuffer -> Int? in
+            guard let ptr = rawBuffer.bindMemory(to: UInt8.self).baseAddress else { return nil }
+            let maxScan = min(data.count, 64)
+            var i = 0
+            while i + 3 <= maxScan {
+                if ptr[i] == 0x00 && ptr[i + 1] == 0x00 {
+                    if ptr[i + 2] == 0x01 {
+                        return i
+                    }
+                    if i + 4 <= maxScan && ptr[i + 2] == 0x00 && ptr[i + 3] == 0x01 {
+                        return i
+                    }
+                }
+                i += 1
             }
-            if i + 4 <= bytes.count,
-               bytes[i] == 0x00,
-               bytes[i + 1] == 0x00,
-               bytes[i + 2] == 0x00,
-               bytes[i + 3] == 0x01 {
-                return true
-            }
-            return false
+            return nil
         }
-
-        if hasStartCode(at: 0) { return 0 }
-
-        var i = 0
-        while i + 3 <= bytes.count {
-            if hasStartCode(at: i) { return i }
-            i += 1
-        }
-        return nil
     }
 
     private func handleAudioMessage(_ message: AapMessage) {
@@ -2256,7 +2258,7 @@ private enum ProtoWire {
             type: 0x8004,
             payload: payload
         )
-        self.send(message: message)
+        self.sendOnProcessingQueue(message: message)
     }
 
     private func requestVideoRecoveryIfNeeded(reason: String, ignoreRecentVideoGuard: Bool) {
@@ -2315,8 +2317,8 @@ private enum ProtoWire {
     }
 
     private func sendMediaConfig(on channel: UInt8) {
-        // Media.Config { status=READY(2), max_unacked=16 for audio, 8 for video, configuration_indices=[0] }
-        let maxUnacked: UInt64 = (channel == Channel.ID_VID) ? 8 : (Channel.isAudio(channel) ? 16 : 8)
+        // Media.Config { status=READY(2), max_unacked=30 for audio, 16 for video, configuration_indices=[0] }
+        let maxUnacked: UInt64 = (channel == Channel.ID_VID) ? 16 : (Channel.isAudio(channel) ? 30 : 8)
         let payload = ProtoWire.fieldVarint(1, value: 2)
             + ProtoWire.fieldVarint(2, value: maxUnacked)
             + ProtoWire.fieldVarint(3, value: 0)
@@ -2348,6 +2350,9 @@ private enum ProtoWire {
     }
 
     private func recordAapTrace(direction: String, channel: UInt8, flags: UInt8, type: UInt16, payloadSize: Int) {
+        if (channel == Channel.ID_VID || Channel.isAudio(channel)) && (type == 0 || type == 1) {
+            return
+        }
         let ts = UInt64(Date().timeIntervalSince1970 * 1000)
         let entry = AapTraceEntry(
             timestampMs: ts,

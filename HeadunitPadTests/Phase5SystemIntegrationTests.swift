@@ -554,4 +554,86 @@ final class Phase5SystemIntegrationTests: XCTestCase {
         let tcpHandler = TcpHandler()
         XCTAssertFalse(tcpHandler.isConnected)
     }
+
+    func testVideoMediaAckSentImmediatelyOnFirstFragment() {
+        final class MockConnection: ByteStreamConnection {
+            weak var delegate: ByteStreamConnectionDelegate?
+            var isConnected: Bool = true
+            var sentPackets: [Data] = []
+            func send(_ data: Data, completion: ((Error?) -> Void)?) {
+                sentPackets.append(data)
+                completion?(nil)
+            }
+            func disconnect() { isConnected = false }
+        }
+
+        let connection = MockConnection()
+        let transport = AapTransport(connection: connection, handshakeProfile: .network)
+        transport.setState(.running)
+
+        // 1. Send Media.Setup on video channel to trigger sendMediaConfig
+        let setupMsg = AapMessage(channel: Int(Channel.ID_VID), flags: 0x0b, type: 0x8000, payload: Data())
+        transport.handleMessage(setupMsg)
+
+        // Find MediaConfig (0x8003) sent on Channel.ID_VID
+        let configPacket = connection.sentPackets.first { packet in
+            guard packet.count >= 6 else { return false }
+            let chan = packet[0]
+            let type = (Int(packet[4]) << 8) | Int(packet[5])
+            return chan == Channel.ID_VID && type == 0x8003
+        }
+        XCTAssertNotNil(configPacket, "Transport must send Media.Config (0x8003) upon setup")
+        if let configPacket = configPacket {
+            let payload = configPacket.subdata(in: 6..<configPacket.count)
+            let maxUnacked = ProtoWire.extractFirstVarint(from: payload, fieldNumber: 2) ?? 0
+            XCTAssertGreaterThanOrEqual(maxUnacked, 12, "Video channel maxUnacked must be >= 12 (configured as 16)")
+        }
+
+        // 2. Clear sent packets to isolate MediaAck check
+        connection.sentPackets.removeAll()
+
+        // 3. Send FIRST fragment of a video frame (flags = 0x09, type = 0x0000)
+        var firstFragPayload = Data(repeating: 0x00, count: 8)
+        firstFragPayload.append(Data(repeating: 0x12, count: 200))
+        let firstFragMsg = AapMessage(channel: Int(Channel.ID_VID), flags: 0x09, type: 0x0000, payload: firstFragPayload)
+
+        transport.handleMessage(firstFragMsg)
+
+        // Verify MediaAck (0x8004) was sent immediately without waiting for 0x0a last fragment
+        let ackPacket = connection.sentPackets.first { packet in
+            guard packet.count >= 6 else { return false }
+            let chan = packet[0]
+            let type = (Int(packet[4]) << 8) | Int(packet[5])
+            return chan == Channel.ID_VID && type == 0x8004
+        }
+        XCTAssertNotNil(ackPacket, "MediaAck (0x8004) must be sent immediately upon first fragment (0x09)")
+    }
+
+    func testWirelessListenerReusesRunningSocketOnRepeatedStart() {
+        let server = WirelessHelperServer()
+        XCTAssertFalse(server.isRunning)
+
+        server.start(port: 5288, enableBonjour: false)
+
+        let exp = expectation(description: "Server isRunning")
+        DispatchQueue.global().async {
+            for _ in 0..<20 {
+                if server.isRunning {
+                    exp.fulfill()
+                    break
+                }
+                Thread.sleep(forTimeInterval: 0.05)
+            }
+        }
+        wait(for: [exp], timeout: 2.0)
+
+        XCTAssertTrue(server.isRunning)
+
+        // Repeated start on the same port should keep isRunning = true without tearing down
+        server.start(port: 5288, enableBonjour: false)
+        XCTAssertTrue(server.isRunning, "Repeated start should not tear down running listener")
+
+        server.stop()
+        XCTAssertFalse(server.isRunning)
+    }
 }

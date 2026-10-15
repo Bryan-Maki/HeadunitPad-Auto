@@ -286,7 +286,9 @@ public final class Discovery {
         }
 
         let endpoint = NWEndpoint.hostPort(host: NWEndpoint.Host(ip), port: portEndpoint)
-        let parameters = NWParameters.tcp
+        let tcpOptions = NWProtocolTCP.Options()
+        tcpOptions.noDelay = true
+        let parameters = NWParameters(tls: nil, tcp: tcpOptions)
         parameters.prohibitExpensivePaths = false
 
         let connection = NWConnection(to: endpoint, using: parameters)

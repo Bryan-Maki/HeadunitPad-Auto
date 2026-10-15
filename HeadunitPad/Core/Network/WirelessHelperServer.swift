@@ -9,7 +9,7 @@ import Foundation
 import Network
 
 protocol WirelessHelperServerDelegate: AnyObject {
-    func wirelessHelperServer(_ server: WirelessHelperServer, didAccept connection: NWConnection, remoteHost: String?)
+    func wirelessHelperServer(_ server: WirelessHelperServer, didAccept connection: NWConnection, remoteHost: String?, initialData: Data)
     func wirelessHelperServer(_ server: WirelessHelperServer, didFail error: Error)
 }
 
@@ -25,6 +25,9 @@ final class WirelessHelperServer {
     public private(set) var listeningPort: UInt16 = 5000
 
     func start(port: UInt16 = WirelessHelperServer.defaultPort, enableBonjour: Bool = true) {
+        if isRunning && self.listeningPort == port && self.listener != nil {
+            return
+        }
         if let existing = listener {
             existing.cancel()
             listener = nil
@@ -73,9 +76,7 @@ final class WirelessHelperServer {
                 }
                 let remoteHost = Self.hostString(from: connection.endpoint)
                 print("WirelessHelperServer: accepted connection from \(remoteHost ?? "unknown")")
-                DispatchQueue.main.async {
-                    self.delegate?.wirelessHelperServer(self, didAccept: connection, remoteHost: remoteHost)
-                }
+                self.sniffAndRoute(connection: connection, remoteHost: remoteHost)
             }
 
             self.listener = listener
@@ -84,6 +85,81 @@ final class WirelessHelperServer {
             isRunning = false
             DispatchQueue.main.async {
                 self.delegate?.wirelessHelperServer(self, didFail: error)
+            }
+        }
+    }
+
+    private func sniffAndRoute(connection: NWConnection, remoteHost: String?) {
+        var completed = false
+        let lock = NSLock()
+
+        let timeoutWorkItem = DispatchWorkItem { [weak self, weak connection] in
+            lock.lock()
+            guard !completed else {
+                lock.unlock()
+                return
+            }
+            completed = true
+            lock.unlock()
+
+            guard let self = self, let conn = connection else { return }
+            print("WirelessHelperServer: Sniff timeout 200ms reached without data from \(remoteHost ?? "unknown"). Routing as raw AAP.")
+            DispatchQueue.main.async {
+                self.delegate?.wirelessHelperServer(self, didAccept: conn, remoteHost: remoteHost, initialData: Data())
+            }
+        }
+
+        queue.asyncAfter(deadline: .now() + 0.2, execute: timeoutWorkItem)
+
+        connection.stateUpdateHandler = { [weak connection] state in
+            if case .failed = state {
+                timeoutWorkItem.cancel()
+            }
+        }
+        connection.start(queue: queue)
+
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 4096) { [weak self, weak connection] content, _, _, _ in
+            lock.lock()
+            guard !completed else {
+                lock.unlock()
+                return
+            }
+            completed = true
+            lock.unlock()
+            timeoutWorkItem.cancel()
+
+            guard let self = self, let conn = connection else { return }
+            let data = content ?? Data()
+
+            // Sniff if WPP control frame
+            let isWpp: Bool
+            if data.count >= 4 {
+                let wppType = (Int(data[2]) << 8) | Int(data[3])
+                isWpp = (wppType >= 1 && wppType <= 11)
+            } else {
+                isWpp = false
+            }
+
+            if isWpp {
+                print("WirelessHelperServer: Sniffed WPP control frame from \(remoteHost ?? "unknown"), responding with WifiStartRequest for port 5000")
+                let stationIp = NetworkAddresses.stationIpv4() ?? "0.0.0.0"
+                let wppType = (Int(data[2]) << 8) | Int(data[3])
+                if wppType == WppMessageType.pingRequest.rawValue {
+                    let payload = (data.count > 4) ? data.subdata(in: 4..<data.count) : Data()
+                    if let pingResp = try? WppFraming.encodeFrame(payload: payload, type: WppMessageType.pingResponse) {
+                        conn.send(content: pingResp, completion: .contentProcessed({ _ in }))
+                    }
+                } else {
+                    let req = WppMessages.startRequest(ip: stationIp, port: 5000)
+                    if let framed = try? WppMessages.frame(req, type: WppMessageType.startRequest) {
+                        conn.send(content: framed, completion: .contentProcessed({ _ in }))
+                    }
+                }
+            } else {
+                print("WirelessHelperServer: Sniffed raw AAP packet (\(data.count) bytes) from \(remoteHost ?? "unknown"). Routing to AAP transport.")
+                DispatchQueue.main.async {
+                    self.delegate?.wirelessHelperServer(self, didAccept: conn, remoteHost: remoteHost, initialData: data)
+                }
             }
         }
     }

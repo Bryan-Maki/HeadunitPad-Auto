@@ -88,11 +88,9 @@ class TcpHandler: ByteStreamConnection, @unchecked Sendable {
         case .ready:
             connectionTimer?.cancel()
             isConnected = true
-            DispatchQueue.main.async {
-                self.delegate?.byteStreamConnectionDidConnect(self)
-                if !initialData.isEmpty {
-                    self.delegate?.byteStreamConnection(self, didReceive: initialData)
-                }
+            delegate?.byteStreamConnectionDidConnect(self)
+            if !initialData.isEmpty {
+                delegate?.byteStreamConnection(self, didReceive: initialData)
             }
             startReceiving()
         case .setup:
@@ -146,9 +144,7 @@ class TcpHandler: ByteStreamConnection, @unchecked Sendable {
                 print("TcpHandler: state = ready, connected!")
                 self.connectionTimer?.cancel()
                 self.isConnected = true
-                DispatchQueue.main.async {
-                    self.delegate?.byteStreamConnectionDidConnect(self)
-                }
+                self.delegate?.byteStreamConnectionDidConnect(self)
                 self.startReceiving()
 
             case .failed(let error):

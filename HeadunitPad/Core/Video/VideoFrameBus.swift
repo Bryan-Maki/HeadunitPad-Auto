@@ -43,11 +43,15 @@ public final class VideoFrameBus {
     }
 
     public func publish(frame: Data) {
-        updateCodecCaches(with: frame)
-
         lock.lock()
+        if sinks.isEmpty {
+            lock.unlock()
+            return
+        }
         let callbacks = Array(sinks.values)
         lock.unlock()
+
+        updateCodecCaches(with: frame)
 
         for callback in callbacks {
             callback(frame)
