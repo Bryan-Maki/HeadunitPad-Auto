@@ -719,7 +719,7 @@ final class Phase5SystemIntegrationTests: XCTestCase {
 
         // In holding stage, pings are handled to keep connection alive
         let pingPayload = Data([0xaa, 0xbb, 0xcc])
-        let actions3 = session.on(event: .messageReceived(type: WppMessageType.pingRequest, status: nil, rawPayload: pingPayload))
+        let actions3 = session.on(event: .messageReceived(type: WppMessageType.pingRequest.rawValue, status: nil, rawPayload: pingPayload))
         XCTAssertEqual(session.stage, .holding)
         XCTAssertEqual(actions3, [.sendPingResponse(pingPayload)])
     }
