@@ -63,6 +63,7 @@ public final class AapServiceDiscoveryResponseMessage {
             marginWidth: UInt32(phoneWidthMargin),
             marginHeight: UInt32(phoneHeightMargin),
             density: UInt32(densityDecision.announced),
+            decoderAdditionalDepth: 8,
             pixelAspectRatioE4: UInt32(par),
             videoCodecType: effectiveCodec
         )

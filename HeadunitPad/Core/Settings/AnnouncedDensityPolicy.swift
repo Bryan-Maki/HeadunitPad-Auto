@@ -41,40 +41,61 @@ public enum AnnouncedDensityPolicy {
     public static func recommendedDpi(
         screenBounds: CGRect = UIScreen.main.bounds,
         activeW: Int,
-        activeH: Int
+        activeH: Int,
+        panelW: Int? = nil,
+        panelH: Int? = nil
     ) -> Int {
         guard activeW > 0, activeH > 0 else { return fallbackDpi }
-        let longPt = max(screenBounds.width, screenBounds.height)
-        let shortPt = min(screenBounds.width, screenBounds.height)
-        let diagonalPt = sqrt(longPt * longPt + shortPt * shortPt)
+
+        let pw = panelW ?? Int((max(screenBounds.width, screenBounds.height) * UIScreen.main.nativeScale).rounded())
+        let ph = panelH ?? Int((min(screenBounds.width, screenBounds.height) * UIScreen.main.nativeScale).rounded())
+        let family = HeadUnitScreenConfig.detectModelFamily(panelW: pw, panelH: ph)
 
         let baseDpi: Int
         if activeH >= 1400 {
             // ~1440p / 2K+
-            if diagonalPt <= 1360 {
-                baseDpi = 210 // iPad mini
-            } else if diagonalPt <= 1550 {
-                baseDpi = 220 // 10"-11" iPad
-            } else {
-                baseDpi = 240 // 12.9"-13" iPad Pro
+            switch family {
+            case .ipadMini: baseDpi = 210
+            case .ipadStandard102: baseDpi = 220
+            case .ipadAirAndStandard109, .ipadPro11: baseDpi = 240
+            case .ipadPro129AndAir13, .ipadPro13M4: baseDpi = 260
+            case .genericIpad:
+                let longPt = max(screenBounds.width, screenBounds.height)
+                let shortPt = min(screenBounds.width, screenBounds.height)
+                let diagonalPt = sqrt(longPt * longPt + shortPt * shortPt)
+                if diagonalPt <= 1360 { baseDpi = 210 }
+                else if diagonalPt <= 1550 { baseDpi = 220 }
+                else { baseDpi = 240 }
             }
         } else if activeH >= 1000 {
             // ~1080p
-            if diagonalPt <= 1360 {
-                baseDpi = 160 // iPad mini
-            } else if diagonalPt <= 1550 {
-                baseDpi = 180 // 10"-11" iPad
-            } else {
-                baseDpi = 200 // 12.9"-13" iPad Pro
+            switch family {
+            case .ipadMini: baseDpi = 160
+            case .ipadStandard102: baseDpi = 170
+            case .ipadAirAndStandard109, .ipadPro11: baseDpi = 180
+            case .ipadPro129AndAir13, .ipadPro13M4: baseDpi = 200
+            case .genericIpad:
+                let longPt = max(screenBounds.width, screenBounds.height)
+                let shortPt = min(screenBounds.width, screenBounds.height)
+                let diagonalPt = sqrt(longPt * longPt + shortPt * shortPt)
+                if diagonalPt <= 1360 { baseDpi = 160 }
+                else if diagonalPt <= 1550 { baseDpi = 180 }
+                else { baseDpi = 200 }
             }
         } else {
             // ~720p / 480p
-            if diagonalPt <= 1360 {
-                baseDpi = 120
-            } else if diagonalPt <= 1550 {
-                baseDpi = 130
-            } else {
-                baseDpi = 140
+            switch family {
+            case .ipadMini: baseDpi = 120
+            case .ipadStandard102: baseDpi = 130
+            case .ipadAirAndStandard109, .ipadPro11: baseDpi = 135
+            case .ipadPro129AndAir13, .ipadPro13M4: baseDpi = 140
+            case .genericIpad:
+                let longPt = max(screenBounds.width, screenBounds.height)
+                let shortPt = min(screenBounds.width, screenBounds.height)
+                let diagonalPt = sqrt(longPt * longPt + shortPt * shortPt)
+                if diagonalPt <= 1360 { baseDpi = 120 }
+                else if diagonalPt <= 1550 { baseDpi = 130 }
+                else { baseDpi = 140 }
             }
         }
 

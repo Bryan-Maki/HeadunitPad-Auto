@@ -1866,6 +1866,7 @@ private enum ProtoWire {
     private func handleVideoMessage(_ message: AapMessage) {
         switch message.type {
         case 0x8000: // Media.MsgType.MEDIA_MESSAGE_SETUP
+            setMediaSessionId(fromStartPayload: message.payload, on: message.channelUInt8)
             sendMediaConfig(on: message.channelUInt8)
             sendVideoFocusNotification(on: message.channelUInt8, reason: "video-setup")
 
@@ -2149,15 +2150,7 @@ private enum ProtoWire {
             type: 0x8004,
             payload: payload
         )
-        mediaAckQueue.async { [weak self] in
-            guard let self = self else { return }
-            let start = DispatchTime.now().uptimeNanoseconds
-            self.send(message: message)
-            let elapsedMs = (DispatchTime.now().uptimeNanoseconds - start) / 1_000_000
-            if elapsedMs > 25 {
-                print("AapTransport: Slow media ACK on \(Channel.name(for: channel)) took \(elapsedMs)ms")
-            }
-        }
+        self.send(message: message)
     }
 
     private func requestVideoRecoveryIfNeeded(reason: String, ignoreRecentVideoGuard: Bool) {

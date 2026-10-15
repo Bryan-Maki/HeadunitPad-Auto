@@ -54,7 +54,7 @@ public class H264VideoRendererView: UIView {
     private var frameIndex: Int64 = 0
     private var notReadyStreak = 0
 
-    private let processQueue = DispatchQueue(label: "com.headunitpad.video.process", qos: .userInteractive)
+    private let processQueue = DispatchQueue(label: "com.headunitpad.videodecode", qos: .userInteractive)
     private let frameQueueLock = NSLock()
     private var pendingFrames: [Data] = []
     private var isProcessingFrame = false
@@ -65,6 +65,16 @@ public class H264VideoRendererView: UIView {
     private var hasDecodedKeyframe = false
     private let diagnosticsLock = NSLock()
     private var diagnostics = RendererDiagnostics()
+
+    private struct GeometryCache: Equatable {
+        let bounds: CGRect
+        let fitMode: VideoFitMode
+        let codecW: Int
+        let codecH: Int
+        let marginW: Int
+        let marginH: Int
+    }
+    private var lastAppliedGeometry: GeometryCache?
 
     // Recovery, concealment, and latency monitors
     private let keyframeRepairTracker = KeyframeRepairTracker()
@@ -86,6 +96,7 @@ public class H264VideoRendererView: UIView {
     private func commonInit() {
         backgroundColor = .black
         clipsToBounds = true
+        isUserInteractionEnabled = false
         layer.masksToBounds = true
         displayLayer.videoGravity = .resize
         layer.addSublayer(displayLayer)
@@ -113,6 +124,19 @@ public class H264VideoRendererView: UIView {
         let viewBounds = self.bounds
 
         guard viewBounds.width > 0 && viewBounds.height > 0 else { return }
+
+        let currentGeom = GeometryCache(
+            bounds: viewBounds,
+            fitMode: fitMode,
+            codecW: codecW,
+            codecH: codecH,
+            marginW: marginW,
+            marginH: marginH
+        )
+        if lastAppliedGeometry == currentGeom {
+            return
+        }
+        lastAppliedGeometry = currentGeom
 
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -350,12 +374,22 @@ public class H264VideoRendererView: UIView {
             }
         }
 
-        if let v = extractedVPS { self.vps = v }
-        if let s = extractedSPS { self.sps = s }
-        if let p = extractedPPS { self.pps = p }
+        var paramSetsChanged = false
+        if let v = extractedVPS, v != self.vps {
+            self.vps = v
+            paramSetsChanged = true
+        }
+        if let s = extractedSPS, s != self.sps {
+            self.sps = s
+            paramSetsChanged = true
+        }
+        if let p = extractedPPS, p != self.pps {
+            self.pps = p
+            paramSetsChanged = true
+        }
 
-        // Build format description when parameter sets are ready
-        if formatDescription == nil {
+        // Build format description when parameter sets are ready or have changed
+        if formatDescription == nil || paramSetsChanged {
             if isHevc, let v = vps, let s = sps, let p = pps {
                 if let desc = createHevcFormatDescription(vps: v, sps: s, pps: p) {
                     formatDescription = desc

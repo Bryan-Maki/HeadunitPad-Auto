@@ -146,12 +146,13 @@ class ConnectionManager {
         state = .discovering
 
         let stationIp = NetworkAddresses.stationIpv4() ?? "No Wi-Fi"
-        updateStatus("iPad IP: \(stationIp) | 正在扫描手机热点...")
+        updateStatus("iPad IP: \(stationIp) | Scanning for phone hotspot / headunit...")
 
         // Awake iOS 14+ local network permission
         Discovery.triggerLocalNetworkPermission()
 
         wppServer.start()
+        wirelessHelperServer.start()
         discovery.startScan(ports: [Discovery.headunitPort])
     }
 
@@ -160,6 +161,7 @@ class ConnectionManager {
         autoReconnect.cancel()
         discovery.stopScan()
         wppServer.stop()
+        wirelessHelperServer.stop()
         if state == .discovering || state == .waitingForWirelessHelper {
             state = .disconnected
             updateStatus("Ready to connect")
@@ -377,7 +379,7 @@ extension ConnectionManager: DiscoveryDelegate {
                 return
             }
             state = .disconnected
-            updateStatus("未发现车机服务器，请确认手机已开启热点并在 Android Auto 中启动 Headunit Server (5277)")
+            updateStatus("No headunit server found. Please ensure hotspot is enabled and Android Auto Headunit Server is running (port 5277)")
             scheduleReconnectIfNeeded(reason: "Scan finished")
         }
     }

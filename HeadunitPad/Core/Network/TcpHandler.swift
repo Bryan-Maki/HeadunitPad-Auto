@@ -172,7 +172,7 @@ class TcpHandler: ByteStreamConnection, @unchecked Sendable {
     }
 
     private func startReceiving() {
-        connection?.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, isComplete, error in
+        connection?.receive(minimumIncompleteLength: 1, maximumLength: 262144) { [weak self] data, _, isComplete, error in
             guard let self = self else { return }
 
             if let data = data, !data.isEmpty {

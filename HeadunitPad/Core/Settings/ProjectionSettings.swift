@@ -47,13 +47,18 @@ public enum ProjectionOrientation: Int, CaseIterable {
 }
 
 public enum ProjectionConnectionMode: Int, CaseIterable {
-    case auto = 0
-    case directHeadunit = 1
+    case nativeWpp = 0
+    case hotspotServer = 1
+    case manualIp = 2
+
+    public static let auto = ProjectionConnectionMode.nativeWpp
+    public static let directHeadunit = ProjectionConnectionMode.hotspotServer
 
     public var title: String {
         switch self {
-        case .auto: return "Auto (Hotspot Scan)"
-        case .directHeadunit: return "Direct IP"
+        case .nativeWpp: return "Native Mode (Auto WPP)"
+        case .hotspotServer: return "Hotspot Server Mode (Port 5277)"
+        case .manualIp: return "Manual IP"
         }
     }
 }

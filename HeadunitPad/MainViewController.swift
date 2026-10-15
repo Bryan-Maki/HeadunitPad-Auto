@@ -104,6 +104,32 @@ class MainViewController: UIViewController {
         return button
     }()
 
+    private let homeScrollView: UIScrollView = {
+        let scrollView = UIScrollView()
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.alwaysBounceVertical = true
+        scrollView.showsVerticalScrollIndicator = false
+        return scrollView
+    }()
+
+    private let homeContentView: UIView = {
+        let view = UIView()
+        view.translatesAutoresizingMaskIntoConstraints = false
+        return view
+    }()
+
+    private lazy var floatingDisconnectButton: UIButton = {
+        var config = UIButton.Configuration.plain()
+        config.image = UIImage(systemName: "xmark.circle.fill")
+        config.baseForegroundColor = UIColor.white.withAlphaComponent(0.4)
+        config.contentInsets = NSDirectionalEdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8)
+
+        let button = UIButton(configuration: config)
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.addTarget(self, action: #selector(floatingDisconnectButtonTapped), for: .touchUpInside)
+        return button
+    }()
+
     private let directConnectContainer: UIView = {
         let view = UIView()
         view.backgroundColor = UIColor.secondarySystemBackground.withAlphaComponent(0.85)
@@ -116,7 +142,7 @@ class MainViewController: UIViewController {
 
     private let directIpLabel: UILabel = {
         let label = UILabel()
-        label.text = "手机热点 IP 直连 (Direct Connect)"
+        label.text = "Direct Connect (Phone Hotspot IP)"
         label.font = .systemFont(ofSize: 13, weight: .semibold)
         label.textColor = .secondaryLabel
         label.textAlignment = .center
@@ -142,7 +168,7 @@ class MainViewController: UIViewController {
 
     private lazy var directConnectButton: UIButton = {
         var config = UIButton.Configuration.filled()
-        config.title = "直接连接此 IP (Direct Connect)"
+        config.title = "Direct Connect to this IP"
         config.image = UIImage(systemName: "arrow.right.circle.fill")
         config.imagePadding = 6
         config.cornerStyle = .medium
@@ -156,7 +182,7 @@ class MainViewController: UIViewController {
 
     private let orDividerLabel: UILabel = {
         let label = UILabel()
-        label.text = "— 或者 (or) —"
+        label.text = "— or —"
         label.font = .systemFont(ofSize: 13, weight: .medium)
         label.textColor = .tertiaryLabel
         label.textAlignment = .center
@@ -297,8 +323,12 @@ class MainViewController: UIViewController {
     private func setupUI() {
         view.backgroundColor = .systemBackground
 
+        videoRenderer.isUserInteractionEnabled = false
+        touchOverlayView.isUserInteractionEnabled = true
+
         videoContainerView.addSubview(videoRenderer)
         videoContainerView.addSubview(touchOverlayView)
+        videoContainerView.addSubview(floatingDisconnectButton)
         videoRenderer.translatesAutoresizingMaskIntoConstraints = false
         touchOverlayView.translatesAutoresizingMaskIntoConstraints = false
 
@@ -306,16 +336,20 @@ class MainViewController: UIViewController {
         directConnectContainer.addSubview(directIpTextField)
         directConnectContainer.addSubview(directConnectButton)
 
+        homeContentView.addSubview(titleLabel)
+        homeContentView.addSubview(subtitleLabel)
+        homeContentView.addSubview(statusLabel)
+        homeContentView.addSubview(directConnectContainer)
+        homeContentView.addSubview(orDividerLabel)
+        homeContentView.addSubview(connectButton)
+        homeContentView.addSubview(activityIndicator)
+        homeContentView.addSubview(settingsButton)
+        homeContentView.addSubview(disconnectButton)
+
+        homeScrollView.addSubview(homeContentView)
+
         view.addSubview(videoContainerView)
-        view.addSubview(titleLabel)
-        view.addSubview(subtitleLabel)
-        view.addSubview(statusLabel)
-        view.addSubview(directConnectContainer)
-        view.addSubview(orDividerLabel)
-        view.addSubview(connectButton)
-        view.addSubview(activityIndicator)
-        view.addSubview(settingsButton)
-        view.addSubview(disconnectButton)
+        view.addSubview(homeScrollView)
 
         NSLayoutConstraint.activate([
             videoRenderer.leadingAnchor.constraint(equalTo: videoContainerView.leadingAnchor),
@@ -326,7 +360,12 @@ class MainViewController: UIViewController {
             touchOverlayView.leadingAnchor.constraint(equalTo: videoContainerView.leadingAnchor),
             touchOverlayView.trailingAnchor.constraint(equalTo: videoContainerView.trailingAnchor),
             touchOverlayView.topAnchor.constraint(equalTo: videoContainerView.topAnchor),
-            touchOverlayView.bottomAnchor.constraint(equalTo: videoContainerView.bottomAnchor)
+            touchOverlayView.bottomAnchor.constraint(equalTo: videoContainerView.bottomAnchor),
+
+            floatingDisconnectButton.topAnchor.constraint(equalTo: videoContainerView.safeAreaLayoutGuide.topAnchor, constant: 12),
+            floatingDisconnectButton.leadingAnchor.constraint(equalTo: videoContainerView.safeAreaLayoutGuide.leadingAnchor, constant: 12),
+            floatingDisconnectButton.widthAnchor.constraint(equalToConstant: 44),
+            floatingDisconnectButton.heightAnchor.constraint(equalToConstant: 44)
         ])
 
         touchOverlayView.onTouch = { [weak self] pointers, action, actionIndex in
@@ -344,7 +383,13 @@ class MainViewController: UIViewController {
             self.connectionManager.sendTouchEvent(pointers: mappedPointers, action: action, actionIndex: actionIndex)
         }
 
+        let twoFingerDoubleTap = UITapGestureRecognizer(target: self, action: #selector(handleTwoFingerDoubleTap))
+        twoFingerDoubleTap.numberOfTouchesRequired = 2
+        twoFingerDoubleTap.numberOfTapsRequired = 2
+        touchOverlayView.addGestureRecognizer(twoFingerDoubleTap)
+
         videoContainerView.isHidden = true
+        homeScrollView.isHidden = false
     }
 
     private let connectControlWidth: CGFloat = 340
@@ -356,20 +401,31 @@ class MainViewController: UIViewController {
             videoContainerView.topAnchor.constraint(equalTo: view.topAnchor),
             videoContainerView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
 
+            homeScrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            homeScrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            homeScrollView.topAnchor.constraint(equalTo: view.topAnchor),
+            homeScrollView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+
+            homeContentView.leadingAnchor.constraint(equalTo: homeScrollView.contentLayoutGuide.leadingAnchor),
+            homeContentView.trailingAnchor.constraint(equalTo: homeScrollView.contentLayoutGuide.trailingAnchor),
+            homeContentView.topAnchor.constraint(equalTo: homeScrollView.contentLayoutGuide.topAnchor),
+            homeContentView.bottomAnchor.constraint(equalTo: homeScrollView.contentLayoutGuide.bottomAnchor),
+            homeContentView.widthAnchor.constraint(equalTo: homeScrollView.frameLayoutGuide.widthAnchor),
+
             // Title
-            titleLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            titleLabel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 48),
+            titleLabel.centerXAnchor.constraint(equalTo: homeContentView.centerXAnchor),
+            titleLabel.topAnchor.constraint(equalTo: homeContentView.safeAreaLayoutGuide.topAnchor, constant: 48),
 
             // Subtitle
-            subtitleLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            subtitleLabel.centerXAnchor.constraint(equalTo: homeContentView.centerXAnchor),
             subtitleLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 10),
 
             // Status
-            statusLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            statusLabel.centerXAnchor.constraint(equalTo: homeContentView.centerXAnchor),
             statusLabel.topAnchor.constraint(equalTo: subtitleLabel.bottomAnchor, constant: 18),
 
             // Direct Connect Container
-            directConnectContainer.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            directConnectContainer.centerXAnchor.constraint(equalTo: homeContentView.centerXAnchor),
             directConnectContainer.topAnchor.constraint(equalTo: statusLabel.bottomAnchor, constant: 28),
             directConnectContainer.widthAnchor.constraint(equalToConstant: connectControlWidth),
 
@@ -389,29 +445,39 @@ class MainViewController: UIViewController {
             directConnectButton.heightAnchor.constraint(equalToConstant: 44),
 
             // Or Divider
-            orDividerLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            orDividerLabel.centerXAnchor.constraint(equalTo: homeContentView.centerXAnchor),
             orDividerLabel.topAnchor.constraint(equalTo: directConnectContainer.bottomAnchor, constant: 16),
 
             // Auto-Scan Button
-            connectButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            connectButton.centerXAnchor.constraint(equalTo: homeContentView.centerXAnchor),
             connectButton.topAnchor.constraint(equalTo: orDividerLabel.bottomAnchor, constant: 16),
             connectButton.widthAnchor.constraint(equalToConstant: connectControlWidth),
             connectButton.heightAnchor.constraint(equalToConstant: 48),
 
             // Disconnect Button
-            disconnectButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            disconnectButton.centerXAnchor.constraint(equalTo: homeContentView.centerXAnchor),
             disconnectButton.topAnchor.constraint(equalTo: statusLabel.bottomAnchor, constant: 36),
             disconnectButton.widthAnchor.constraint(equalToConstant: 200),
             disconnectButton.heightAnchor.constraint(equalToConstant: 48),
 
             // Activity Indicator
-            activityIndicator.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            activityIndicator.centerXAnchor.constraint(equalTo: homeContentView.centerXAnchor),
             activityIndicator.topAnchor.constraint(equalTo: connectButton.bottomAnchor, constant: 20),
 
             // Settings Button
-            settingsButton.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16),
-            settingsButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 12)
+            settingsButton.trailingAnchor.constraint(equalTo: homeContentView.safeAreaLayoutGuide.trailingAnchor, constant: -16),
+            settingsButton.topAnchor.constraint(equalTo: homeContentView.safeAreaLayoutGuide.topAnchor, constant: 12),
+
+            homeContentView.bottomAnchor.constraint(greaterThanOrEqualTo: activityIndicator.bottomAnchor, constant: 48)
         ])
+    }
+
+    override var prefersStatusBarHidden: Bool {
+        return connectionManager.state == .running
+    }
+
+    override var prefersHomeIndicatorAutoHidden: Bool {
+        return connectionManager.state == .running
     }
 
     // MARK: - UI Updates
@@ -422,13 +488,15 @@ class MainViewController: UIViewController {
         case .disconnected:
             stopVideoWatchdog()
             videoContainerView.isHidden = true
+            homeScrollView.isHidden = false
+            view.bringSubviewToFront(homeScrollView)
             videoRenderer.reset()
             audioPlayer.reset()
             settingsButton.isHidden = false
             titleLabel.isHidden = false
             subtitleLabel.isHidden = false
             statusLabel.isHidden = false
-            statusLabel.text = "iPad IP: \(currentIp) | 就绪，等待连接"
+            statusLabel.text = "iPad IP: \(currentIp) | Ready to connect"
             statusLabel.textColor = .tertiaryLabel
             directConnectContainer.isHidden = false
             orDividerLabel.isHidden = false
@@ -440,25 +508,33 @@ class MainViewController: UIViewController {
             }
             disconnectButton.isHidden = true
             activityIndicator.stopAnimating()
+            setNeedsStatusBarAppearanceUpdate()
+            setNeedsUpdateOfHomeIndicatorAutoHidden()
 
         case .discovering:
             stopVideoWatchdog()
             videoContainerView.isHidden = true
+            homeScrollView.isHidden = false
+            view.bringSubviewToFront(homeScrollView)
             settingsButton.isHidden = false
             titleLabel.isHidden = false
             subtitleLabel.isHidden = false
             statusLabel.isHidden = false
-            statusLabel.text = "iPad IP: \(currentIp) | 正在扫描手机热点..."
+            statusLabel.text = "iPad IP: \(currentIp) | Scanning for phone hotspot / headunit..."
             statusLabel.textColor = .secondaryLabel
             directConnectContainer.isHidden = true
             orDividerLabel.isHidden = true
             connectButton.isHidden = true
             disconnectButton.isHidden = true
             activityIndicator.startAnimating()
+            setNeedsStatusBarAppearanceUpdate()
+            setNeedsUpdateOfHomeIndicatorAutoHidden()
 
         case .waitingForWirelessHelper:
             stopVideoWatchdog()
             videoContainerView.isHidden = true
+            homeScrollView.isHidden = false
+            view.bringSubviewToFront(homeScrollView)
             settingsButton.isHidden = false
             titleLabel.isHidden = false
             subtitleLabel.isHidden = false
@@ -470,69 +546,84 @@ class MainViewController: UIViewController {
             connectButton.isHidden = true
             disconnectButton.isHidden = false
             activityIndicator.startAnimating()
+            setNeedsStatusBarAppearanceUpdate()
+            setNeedsUpdateOfHomeIndicatorAutoHidden()
 
         case .connecting:
             stopVideoWatchdog()
             videoContainerView.isHidden = true
+            homeScrollView.isHidden = false
+            view.bringSubviewToFront(homeScrollView)
             settingsButton.isHidden = false
             titleLabel.isHidden = false
             subtitleLabel.isHidden = false
             statusLabel.isHidden = false
-            statusLabel.text = "正在连接 \(connectionManager.connectedDevice?.displayName ?? "手机")..."
+            statusLabel.text = "Connecting to \(connectionManager.connectedDevice?.displayName ?? "Phone")..."
             statusLabel.textColor = .secondaryLabel
             directConnectContainer.isHidden = true
             orDividerLabel.isHidden = true
             connectButton.isHidden = true
             disconnectButton.isHidden = true
             activityIndicator.startAnimating()
+            setNeedsStatusBarAppearanceUpdate()
+            setNeedsUpdateOfHomeIndicatorAutoHidden()
 
         case .handshaking:
             stopVideoWatchdog()
             videoContainerView.isHidden = true
+            homeScrollView.isHidden = false
+            view.bringSubviewToFront(homeScrollView)
             settingsButton.isHidden = false
             titleLabel.isHidden = false
             subtitleLabel.isHidden = false
             statusLabel.isHidden = false
-            statusLabel.text = "正在与 Android Auto 握手..."
+            statusLabel.text = "Handshaking with Android Auto..."
             statusLabel.textColor = .systemBlue
             directConnectContainer.isHidden = true
             orDividerLabel.isHidden = true
             connectButton.isHidden = true
             disconnectButton.isHidden = false
             activityIndicator.startAnimating()
+            setNeedsStatusBarAppearanceUpdate()
+            setNeedsUpdateOfHomeIndicatorAutoHidden()
 
         case .running:
             startVideoWatchdog()
+            homeScrollView.isHidden = true
             videoContainerView.isHidden = false
-            settingsButton.isHidden = false
-            titleLabel.isHidden = true
-            subtitleLabel.isHidden = true
-            statusLabel.isHidden = true
-            directConnectContainer.isHidden = true
-            orDividerLabel.isHidden = true
-            connectButton.isHidden = true
-            disconnectButton.isHidden = true
+            view.bringSubviewToFront(videoContainerView)
+            videoContainerView.bringSubviewToFront(touchOverlayView)
+            videoContainerView.bringSubviewToFront(floatingDisconnectButton)
             activityIndicator.stopAnimating()
+            videoRenderer.applyGeometry()
+            setNeedsStatusBarAppearanceUpdate()
+            setNeedsUpdateOfHomeIndicatorAutoHidden()
 
         case .disconnecting:
             stopVideoWatchdog()
             videoContainerView.isHidden = true
+            homeScrollView.isHidden = false
+            view.bringSubviewToFront(homeScrollView)
             audioPlayer.reset()
             settingsButton.isHidden = false
             titleLabel.isHidden = false
             subtitleLabel.isHidden = false
             statusLabel.isHidden = false
-            statusLabel.text = "正在断开连接..."
+            statusLabel.text = "Disconnecting..."
             statusLabel.textColor = .secondaryLabel
             directConnectContainer.isHidden = true
             orDividerLabel.isHidden = true
             connectButton.isHidden = true
             disconnectButton.isHidden = true
             activityIndicator.startAnimating()
+            setNeedsStatusBarAppearanceUpdate()
+            setNeedsUpdateOfHomeIndicatorAutoHidden()
 
         case .error(let message):
             stopVideoWatchdog()
             videoContainerView.isHidden = true
+            homeScrollView.isHidden = false
+            view.bringSubviewToFront(homeScrollView)
             audioPlayer.reset()
             settingsButton.isHidden = false
             titleLabel.isHidden = false
@@ -547,16 +638,20 @@ class MainViewController: UIViewController {
             updateConnectButtonTitle()
             disconnectButton.isHidden = true
             activityIndicator.stopAnimating()
+            setNeedsStatusBarAppearanceUpdate()
+            setNeedsUpdateOfHomeIndicatorAutoHidden()
         }
     }
 
     private func updateConnectButtonTitle() {
         let title: String
         switch ProjectionSettings.connectionMode {
-        case .auto:
-            title = "自动扫描手机热点 (Scan Hotspot)"
-        case .directHeadunit:
-            title = "扫描车机服务器 (Scan 5277)"
+        case .nativeWpp:
+            title = "Auto Scan (WPP & Hotspot)"
+        case .hotspotServer:
+            title = "Scan Headunit Server (Port 5277)"
+        case .manualIp:
+            title = "Direct Connect (Port 5277)"
         }
         connectButton.configuration?.title = title
     }
@@ -619,7 +714,11 @@ class MainViewController: UIViewController {
 
     @objc private func connectButtonTapped() {
         view.endEditing(true)
-        connectionManager.startDiscovery()
+        if ProjectionSettings.connectionMode == .manualIp {
+            directConnectButtonTapped()
+        } else {
+            connectionManager.startDiscovery()
+        }
     }
 
     @objc private func disconnectButtonTapped() {
@@ -724,12 +823,6 @@ class MainViewController: UIViewController {
             alert.addAction(UIAlertAction(title: "Connection Details", style: .default) { [weak self] _ in
                 self?.presentConnectionDetails()
             })
-            alert.addAction(UIAlertAction(title: "Open Video-Only Window", style: .default) { [weak self] _ in
-                self?.openVideoOnlyWindow()
-            })
-            alert.addAction(UIAlertAction(title: "Open Trackpad Window", style: .default) { [weak self] _ in
-                self?.openTrackpadWindow()
-            })
             alert.addAction(UIAlertAction(title: "Disconnect", style: .destructive) { [weak self] _ in
                 self?.connectionManager.disconnect()
             })
@@ -743,7 +836,7 @@ class MainViewController: UIViewController {
     private func presentConnectionModeMenu() {
         let alert = UIAlertController(title: "Connection Mode", message: nil, preferredStyle: .actionSheet)
 
-        for option in [ProjectionConnectionMode.auto, .directHeadunit] {
+        for option in ProjectionConnectionMode.allCases {
             let title = option == ProjectionSettings.connectionMode ? "\(option.title) (Current)" : option.title
             alert.addAction(UIAlertAction(title: title, style: .default) { [weak self] _ in
                 ProjectionSettings.connectionMode = option
@@ -1137,24 +1230,25 @@ class MainViewController: UIViewController {
         }
     }
 
-    private func openVideoOnlyWindow() {
-        let activity = NSUserActivity(activityType: AppDelegate.videoOnlyWindowActivityType)
-        activity.title = "HeadunitPad Video Only"
-        UIApplication.shared.requestSceneSessionActivation(nil, userActivity: activity, options: nil) { error in
-            print("MainViewController: Failed to open video-only window: \(error)")
-        }
-        connectionManager.requestVideoRecoveryForNewDisplay()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) { [weak self] in
-            self?.connectionManager.requestVideoRecoveryForNewDisplay()
-        }
+    @objc private func floatingDisconnectButtonTapped() {
+        promptDisconnectConfirmation()
     }
 
-    private func openTrackpadWindow() {
-        let activity = NSUserActivity(activityType: AppDelegate.trackpadWindowActivityType)
-        activity.title = "HeadunitPad Trackpad"
-        UIApplication.shared.requestSceneSessionActivation(nil, userActivity: activity, options: nil) { error in
-            print("MainViewController: Failed to open trackpad window: \(error)")
-        }
+    @objc private func handleTwoFingerDoubleTap() {
+        promptDisconnectConfirmation()
+    }
+
+    private func promptDisconnectConfirmation() {
+        let alert = UIAlertController(
+            title: "Disconnect",
+            message: "Do you want to disconnect Android Auto?",
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "Disconnect", style: .destructive) { [weak self] _ in
+            self?.connectionManager.disconnect()
+        })
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        present(alert, animated: true)
     }
 
     private func mapTouchPointToAa(_ point: CGPoint) -> (x: Int, y: Int) {

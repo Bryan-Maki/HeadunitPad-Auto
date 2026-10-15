@@ -32,6 +32,53 @@ public final class HeadUnitScreenConfig {
 
     public var onMarginsDiverged: (() -> Bool)?
 
+    public enum IPadModelFamily: String, CaseIterable {
+        case ipadMini              // iPad mini 6 / 7 (8.3")
+        case ipadStandard102       // iPad 8 / 9 (10.2")
+        case ipadAirAndStandard109 // iPad 10 / 11 & Air 4 / 5 / M2 (10.9" / 11")
+        case ipadPro11             // iPad Pro 11" (Gen 2-4 & M4)
+        case ipadPro129AndAir13    // iPad Pro 12.9" & Air 13"
+        case ipadPro13M4           // iPad Pro 13" M4 OLED
+        case genericIpad           // Fallback
+
+        public var displayName: String {
+            switch self {
+            case .ipadMini: return "iPad mini (8.3\")"
+            case .ipadStandard102: return "iPad (10.2\")"
+            case .ipadAirAndStandard109: return "iPad / iPad Air (10.9\"-11\")"
+            case .ipadPro11: return "iPad Pro 11\""
+            case .ipadPro129AndAir13: return "iPad Pro 12.9\" / iPad Air 13\""
+            case .ipadPro13M4: return "iPad Pro 13\" (M4 OLED)"
+            case .genericIpad: return "iPad (Generic)"
+            }
+        }
+    }
+
+    public static func detectModelFamily(panelW: Int, panelH: Int) -> IPadModelFamily {
+        let longW = max(panelW, panelH)
+        let shortH = min(panelW, panelH)
+
+        if (longW == 2266 && shortH == 1488) || (longW == 1133 && shortH == 744) {
+            return .ipadMini
+        } else if (longW == 2160 && shortH == 1620) || (longW == 1080 && shortH == 810) {
+            return .ipadStandard102
+        } else if (longW == 2360 && shortH == 1640) || (longW == 1180 && shortH == 820) {
+            return .ipadAirAndStandard109
+        } else if (longW == 2388 && shortH == 1668) || (longW == 2420 && shortH == 1668) || (longW == 1194 && shortH == 834) || (longW == 1210 && shortH == 834) {
+            return .ipadPro11
+        } else if (longW == 2732 && shortH == 2048) || (longW == 1366 && shortH == 1024) {
+            return .ipadPro129AndAir13
+        } else if (longW == 2752 && shortH == 2064) || (longW == 1376 && shortH == 1032) {
+            return .ipadPro13M4
+        } else {
+            return .genericIpad
+        }
+    }
+
+    public var currentModelFamily: IPadModelFamily {
+        return Self.detectModelFamily(panelW: screenWidthPx, panelH: screenHeightPx)
+    }
+
     private init() {}
 
     public static func currentIpadLandscapeDimensions() -> (width: Int, height: Int) {

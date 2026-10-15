@@ -353,19 +353,19 @@ public final class DpiPreviewView: UIView {
             drawMapCard(ctx: ctx, rect: cardsContainerRect, scale: scale)
         }
 
-        // Status Header string: "有效分辨率: <activeW>x<activeH> (<codecW>x<codecH> 裁边) @ <dpi> DPI"
+        // Status Header string: "Active Res: <activeW>x<activeH> (<codecW>x<codecH> cropped) @ <dpi> DPI"
         let statusText: String
-        let modeDesc = isSplit ? "Coolwalk 分屏" : "单卡片紧凑模式"
+        let modeDesc = isSplit ? "Coolwalk Split Screen" : "Single Card Compact"
         if marginWidthPx > 0 || marginHeightPx > 0 {
             statusText = String(
-                format: "有效分辨率: %d×%d (%d×%d 裁边) @ %d DPI (%d×%d dp) | %@",
+                format: "Active Res: %d×%d (%d×%d cropped) @ %d DPI (%d×%d dp) | %@",
                 activeWidthPx, activeHeightPx, codecWidthPx, codecHeightPx, dpi, virtualWidthDp, virtualHeightDp, modeDesc
             )
         } else {
             let effW = activeWidthPx > 0 ? activeWidthPx : panelWidthPx
             let effH = activeHeightPx > 0 ? activeHeightPx : panelHeightPx
             statusText = String(
-                format: "有效分辨率: %d×%d @ %d DPI (%d×%d dp) | %@",
+                format: "Active Res: %d×%d @ %d DPI (%d×%d dp) | %@",
                 effW, effH, dpi, virtualWidthDp, virtualHeightDp, modeDesc
             )
         }

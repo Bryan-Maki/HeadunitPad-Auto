@@ -89,9 +89,12 @@ final class ViewControllersSmokeTests: XCTestCase {
         let gw = NetworkAddresses.currentHotspotGatewayIpv4()
         XCTAssertFalse(gw.isEmpty)
 
-        // ProjectionConnectionMode should only contain auto and directHeadunit
+        // ProjectionConnectionMode should contain nativeWpp, hotspotServer, and manualIp
         let modes = ProjectionConnectionMode.allCases
-        XCTAssertEqual(modes.count, 2)
+        XCTAssertEqual(modes.count, 3)
+        XCTAssertTrue(modes.contains(.nativeWpp))
+        XCTAssertTrue(modes.contains(.hotspotServer))
+        XCTAssertTrue(modes.contains(.manualIp))
         XCTAssertTrue(modes.contains(.auto))
         XCTAssertTrue(modes.contains(.directHeadunit))
     }
