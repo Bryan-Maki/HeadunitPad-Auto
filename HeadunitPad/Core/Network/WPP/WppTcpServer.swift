@@ -15,9 +15,10 @@ public protocol WppTcpServerDelegate: AnyObject {
 }
 
 public final class WppTcpServer {
-    public static let defaultPort: UInt16 = 5299
+    public static let defaultPort: UInt16 = 5288
 
     public weak var delegate: WppTcpServerDelegate?
+    public var onRawAapConnectionDetected: ((NWConnection, Data) -> Void)?
 
     private let queue = DispatchQueue(label: "com.headunitpad.wpp.tcp", qos: .userInitiated)
     private var listener: NWListener?
@@ -26,7 +27,7 @@ public final class WppTcpServer {
     public private(set) var listeningPort: Int? = nil
 
     public var carInfo: WppCarInfo
-    public var projectionPort: Int = 5288
+    public var projectionPort: Int = 5000
     public var ssid: String = "HeadunitPad-AP"
     public var passkey: String = "12345678"
     public var bssid: String? = nil
@@ -151,6 +152,19 @@ public final class WppTcpServer {
 
             if let data = content, !data.isEmpty {
                 client.buffer.append(data)
+
+                if self.isRawAapPacket(client.buffer) {
+                    let initialData = client.buffer
+                    let conn = client.connection
+                    self.activeSessions.removeValue(forKey: ObjectIdentifier(conn))
+                    conn.stateUpdateHandler = nil
+                    print("WppTcpServer: Detected raw AAP connection on port 5288, delegating to ConnectionManager")
+                    DispatchQueue.main.async { [weak self] in
+                        self?.onRawAapConnectionDetected?(conn, initialData)
+                    }
+                    return
+                }
+
                 self.drainFrames(client)
             }
 
@@ -162,6 +176,21 @@ public final class WppTcpServer {
 
             self.readNextChunk(client)
         }
+    }
+
+    private func isRawAapPacket(_ data: Data) -> Bool {
+        guard data.count >= 4 else { return false }
+        if data[0] == 0x00 {
+            if data.count >= 6 && data[4] == 0x00 && data[5] == 0x01 {
+                return true
+            }
+            let wppType = (Int(data[2]) << 8) | Int(data[3])
+            let isWppType = (wppType >= 1 && wppType <= 11)
+            if !isWppType && (data[1] == 0x01 || data[1] == 0x03 || data[1] == 0x05) {
+                return true
+            }
+        }
+        return false
     }
 
     private func drainFrames(_ client: ClientSession) {

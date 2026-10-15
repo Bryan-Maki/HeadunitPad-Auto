@@ -64,9 +64,14 @@ class ConnectionManager {
     static let shared = ConnectionManager()
     weak var delegate: ConnectionManagerDelegate?
 
+    public var screenConfig: HeadUnitScreenConfig {
+        return HeadUnitScreenConfig.shared
+    }
+
     private let discovery = Discovery()
     private let tcpHandler = TcpHandler()
     private let wirelessHelperServer = WirelessHelperServer()
+    private let legacyAapServer = WirelessHelperServer()
     private let wppServer = WppTcpServer()
     private let arbiter = ConnectionArbiter()
     // TeardownGuard is used via its static methods (e.g. TeardownGuard.runThenClose(...))
@@ -106,7 +111,12 @@ class ConnectionManager {
     init() {
         discovery.delegate = self
         wirelessHelperServer.delegate = self
+        legacyAapServer.delegate = self
         wppServer.delegate = self
+        wppServer.onRawAapConnectionDetected = { [weak self] connection, initialData in
+            let host = Self.hostString(from: connection.endpoint)
+            self?.acceptIncomingAapConnection(connection, initialData: initialData, remoteHost: host)
+        }
         installAapTransport(connection: tcpHandler)
         microphoneCapture.onPCMData = { [weak self] data in
             self?.aapTransport?.sendMicrophoneAudioData(data)
@@ -152,9 +162,11 @@ class ConnectionManager {
         // Awake iOS 14+ local network permission
         Discovery.triggerLocalNetworkPermission()
 
-        wppServer.start()
-        wirelessHelperServer.start()
-        discovery.startScan(ports: [Discovery.headunitPort])
+        wppServer.start(port: 5288)
+        wirelessHelperServer.start(port: 5000)
+        legacyAapServer.start(port: 5277)
+        BluetoothWakeManager.shared.start()
+        discovery.startScan(ports: [Discovery.headunitPort, Discovery.wppPort])
     }
 
     func stopDiscovery() {
@@ -163,6 +175,8 @@ class ConnectionManager {
         discovery.stopScan()
         wppServer.stop()
         wirelessHelperServer.stop()
+        legacyAapServer.stop()
+        BluetoothWakeManager.shared.stop()
         if state == .discovering || state == .waitingForWirelessHelper {
             state = .disconnected
             updateStatus("Ready to connect")
@@ -220,7 +234,9 @@ class ConnectionManager {
                 self.microphoneCapture.stop()
                 self.locationCapture.stop()
                 self.wirelessHelperServer.stop()
+                self.legacyAapServer.stop()
                 self.wppServer.stop()
+                BluetoothWakeManager.shared.stop()
                 self.connectedDevice = nil
                 self.state = .disconnected
                 self.updateStatus("Ready to connect")
@@ -556,8 +572,7 @@ extension ConnectionManager: AapTransportDelegate {
     }
 }
 
-extension ConnectionManager: WirelessHelperServerDelegate {
-    func wirelessHelperServer(_ server: WirelessHelperServer, didAccept connection: NWConnection, remoteHost: String?) {
+    public func acceptIncomingAapConnection(_ connection: NWConnection, initialData: Data = Data(), remoteHost: String? = nil) {
         let canAccept: Bool
         switch state {
         case .discovering, .waitingForWirelessHelper, .disconnected, .error:
@@ -567,24 +582,44 @@ extension ConnectionManager: WirelessHelperServerDelegate {
         }
 
         guard canAccept else {
-            print("ConnectionManager: dropping inbound wireless helper connection while state=\(state.description)")
+            print("ConnectionManager: dropping inbound AAP connection while state=\(state.description)")
             connection.cancel()
             return
         }
 
         discovery.stopScan()
-        state = .connecting
+        wppServer.stop()
+        wirelessHelperServer.stop()
+        legacyAapServer.stop()
+        BluetoothWakeManager.shared.stop()
 
-        let host = remoteHost ?? "Wireless Helper"
-        connectedDevice = DiscoveredDevice(ip: host, port: WirelessHelperServer.port, name: "Wireless Helper")
-        updateStatus("Wireless Helper connected. Starting Android Auto...")
+        state = .connecting
+        let host = remoteHost ?? "Client"
+        connectedDevice = DiscoveredDevice(ip: host, port: 5000, name: "Android Auto Client")
+        updateStatus("Incoming connection from \(host). Starting Android Auto...")
         installAapTransport(connection: tcpHandler)
-        aapTransport?.configurePeer(host: host, port: WirelessHelperServer.port)
-        tcpHandler.acceptConnection(connection, host: host, port: WirelessHelperServer.port)
+        aapTransport?.configurePeer(host: host, port: 5000)
+        tcpHandler.accept(connection: connection, initialData: initialData)
+    }
+
+    public static func hostString(from endpoint: NWEndpoint) -> String? {
+        guard case let .hostPort(host, _) = endpoint else { return nil }
+        switch host {
+        case .name(let name, _): return name
+        case .ipv4(let address): return "\(address)"
+        case .ipv6(let address): return "\(address)"
+        @unknown default: return "\(host)"
+        }
+    }
+}
+
+extension ConnectionManager: WirelessHelperServerDelegate {
+    func wirelessHelperServer(_ server: WirelessHelperServer, didAccept connection: NWConnection, remoteHost: String?) {
+        acceptIncomingAapConnection(connection, remoteHost: remoteHost)
     }
 
     func wirelessHelperServer(_ server: WirelessHelperServer, didFail error: Error) {
-        print("ConnectionManager: wireless helper server failed with error: \(error.localizedDescription)")
+        print("ConnectionManager: wireless helper server on port \(server.listeningPort) failed with error: \(error.localizedDescription)")
         if state == .discovering {
             state = .error(error.localizedDescription)
             updateStatus(error.localizedDescription)
@@ -596,8 +631,14 @@ extension ConnectionManager: WirelessHelperServerDelegate {
 extension ConnectionManager: WppTcpServerDelegate {
     func wppTcpServer(_ server: WppTcpServer, didCompleteHandshakeFor clientIp: String) {
         print("ConnectionManager: WPP Handshake completed successfully with \(clientIp)")
-        updateStatus("WPP Handshake completed with \(clientIp). Starting Android Auto...")
-        connect(to: clientIp)
+        updateStatus("WPP Handshake completed with \(clientIp). Awaiting phone connection...")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
+            guard let self = self else { return }
+            if self.state == .discovering || self.state == .waitingForWirelessHelper {
+                print("ConnectionManager: No inbound AAP connection received after WPP, attempting fallback connect to \(clientIp):5277")
+                self.connect(to: clientIp)
+            }
+        }
     }
 
     func wppTcpServer(_ server: WppTcpServer, didFailWith error: Error) {

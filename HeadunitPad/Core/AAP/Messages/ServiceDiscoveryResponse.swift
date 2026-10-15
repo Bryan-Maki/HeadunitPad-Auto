@@ -14,7 +14,7 @@ public final class AapServiceDiscoveryResponseMessage {
         rightHandDrive: Bool = false,
         useGps: Bool = true,
         useMic: Bool = true,
-        requestedDpi: Int = 160,
+        requestedDpi: Int? = nil,
         vehicleMake: String = "Apple",
         vehicleModel: String = "iPad",
         vehicleYear: String = "2024",
@@ -51,7 +51,8 @@ public final class AapServiceDiscoveryResponseMessage {
         let negotiatedRes = screenConfig.negotiatedResolutionType
         let phoneWidthMargin = screenConfig.getWidthMargin()
         let phoneHeightMargin = screenConfig.getHeightMargin()
-        let densityDecision = screenConfig.densityDecision(requestedDpi: requestedDpi)
+        let effectiveRequestedDpi = requestedDpi ?? screenConfig.announcedDensity
+        let densityDecision = screenConfig.densityDecision(requestedDpi: effectiveRequestedDpi)
         let par = screenConfig.getPixelAspectRatioE4()
 
         screenConfig.recordAnnouncedMargins(widthMargin: phoneWidthMargin, heightMargin: phoneHeightMargin)

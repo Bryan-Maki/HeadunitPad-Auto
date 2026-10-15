@@ -25,12 +25,21 @@ public final class HeadUnitScreenConfig {
     public var negotiatedResolutionType: ControlService.MediaSinkService.VideoConfiguration.VideoCodecResolutionType = ._1280x720
     public var isResolutionLocked: Bool = false
 
+    public var customDpi: Int?
+
     public var announcedWidthMargin: Int = MarginAnnouncementPolicy.notAnnounced
     public var announcedHeightMargin: Int = MarginAnnouncementPolicy.notAnnounced
     public var announcedCanvasW: Int = 0
     public var announcedCanvasH: Int = 0
 
     public var onMarginsDiverged: (() -> Bool)?
+
+    public init() {
+        self.videoFitMode = ProjectionSettings.videoFitMode
+        if !ProjectionSettings.isAutoDpi && ProjectionSettings.dpi > 0 {
+            self.customDpi = ProjectionSettings.dpi
+        }
+    }
 
     public enum IPadModelFamily: String, CaseIterable {
         case ipadMini              // iPad mini 6 / 7 (8.3")
@@ -78,8 +87,6 @@ public final class HeadUnitScreenConfig {
     public var currentModelFamily: IPadModelFamily {
         return Self.detectModelFamily(panelW: screenWidthPx, panelH: screenHeightPx)
     }
-
-    private init() {}
 
     public static func currentIpadLandscapeDimensions() -> (width: Int, height: Int) {
         let screen = UIScreen.main
@@ -162,6 +169,67 @@ public final class HeadUnitScreenConfig {
         }
     }
 
+    private var customNegotiatedWidth: Int?
+    private var customNegotiatedHeight: Int?
+
+    public var negotiatedWidth: Int {
+        get { customNegotiatedWidth ?? getNegotiatedWidth() }
+        set {
+            customNegotiatedWidth = newValue
+            if let h = customNegotiatedHeight {
+                updateNegotiatedResolutionType(w: newValue, h: h)
+            }
+        }
+    }
+
+    public var negotiatedHeight: Int {
+        get { customNegotiatedHeight ?? getNegotiatedHeight() }
+        set {
+            customNegotiatedHeight = newValue
+            if let w = customNegotiatedWidth {
+                updateNegotiatedResolutionType(w: w, h: newValue)
+            }
+        }
+    }
+
+    public func setNegotiatedResolution(width: Int, height: Int) {
+        customNegotiatedWidth = width
+        customNegotiatedHeight = height
+        updateNegotiatedResolutionType(w: width, h: height)
+    }
+
+    private func updateNegotiatedResolutionType(w: Int, h: Int) {
+        let allRes: [ControlService.MediaSinkService.VideoConfiguration.VideoCodecResolutionType] = [
+            ._800x480, ._1280x720, ._1920x1080, ._2560x1440, ._3840x2160,
+            ._720x1280, ._1080x1920, ._1440x2560, ._2160x3840
+        ]
+        for res in allRes {
+            let dims = resolutionDimensions(res)
+            if dims.0 == w && dims.1 == h {
+                negotiatedResolutionType = res
+                break
+            }
+        }
+    }
+
+    private func resolutionDimensions(_ type: ControlService.MediaSinkService.VideoConfiguration.VideoCodecResolutionType) -> (Int, Int) {
+        switch type {
+        case ._800x480: return (800, 480)
+        case ._1280x720: return (1280, 720)
+        case ._1920x1080: return (1920, 1080)
+        case ._2560x1440: return (2560, 1440)
+        case ._3840x2160: return (3840, 2160)
+        case ._720x1280: return (720, 1280)
+        case ._1080x1920: return (1080, 1920)
+        case ._1440x2560: return (1440, 2560)
+        case ._2160x3840: return (2160, 3840)
+        }
+    }
+
+    public func recalculateMargins() {
+        recalculate(requestedResolution: ProjectionSettings.resolution)
+    }
+
     public func getNegotiatedWidth() -> Int {
         return activeSize().width
     }
@@ -171,6 +239,9 @@ public final class HeadUnitScreenConfig {
     }
 
     public func activeSize() -> (width: Int, height: Int) {
+        if let w = customNegotiatedWidth, let h = customNegotiatedHeight, w > 0 && h > 0 {
+            return (w, h)
+        }
         switch negotiatedResolutionType {
         case ._800x480: return (800, 480)
         case ._1280x720: return (1280, 720)
@@ -257,9 +328,29 @@ public final class HeadUnitScreenConfig {
         )
     }
 
+    public var announcedDensity: Int {
+        if let custom = customDpi, custom > 0 {
+            return min(max(custom, 100), 400)
+        }
+        if !ProjectionSettings.isAutoDpi && ProjectionSettings.dpi > 0 {
+            return min(max(ProjectionSettings.dpi, 100), 400)
+        }
+        let visibleW = max(1, getNegotiatedWidth() - getWidthMargin())
+        let visibleH = max(1, getNegotiatedHeight() - getHeightMargin())
+        return AnnouncedDensityPolicy.recommendedDpi(activeW: visibleW, activeH: visibleH, panelW: screenWidthPx, panelH: screenHeightPx)
+    }
+
     public func densityDecision(requestedDpi: Int = 160) -> AnnouncedDensityPolicy.Decision {
-        let visibleW = getNegotiatedWidth() - getWidthMargin()
-        let visibleH = getNegotiatedHeight() - getHeightMargin()
+        if let custom = customDpi, custom > 0 {
+            let clamped = min(max(custom, 100), 400)
+            return AnnouncedDensityPolicy.Decision(announced: clamped, requested: clamped, reason: .asStored)
+        }
+        if !ProjectionSettings.isAutoDpi && ProjectionSettings.dpi > 0 {
+            let clamped = min(max(ProjectionSettings.dpi, 100), 400)
+            return AnnouncedDensityPolicy.Decision(announced: clamped, requested: clamped, reason: .asStored)
+        }
+        let visibleW = max(1, getNegotiatedWidth() - getWidthMargin())
+        let visibleH = max(1, getNegotiatedHeight() - getHeightMargin())
         return AnnouncedDensityPolicy.decide(stored: requestedDpi, visibleW: visibleW, visibleH: visibleH)
     }
 

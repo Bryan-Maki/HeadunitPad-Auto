@@ -168,6 +168,18 @@ class MainViewController: UIViewController {
         return button
     }()
 
+    private lazy var qrSetupButton: UIButton = {
+        var config = UIButton.Configuration.tinted()
+        config.title = "QR Setup & Pairing"
+        config.image = UIImage(systemName: "qrcode")
+        config.imagePadding = 6
+        config.cornerStyle = .medium
+        let button = UIButton(configuration: config)
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.addTarget(self, action: #selector(qrSetupButtonTapped), for: .touchUpInside)
+        return button
+    }()
+
     private let orDividerLabel: UILabel = {
         let label = UILabel()
         label.text = "— or —"
@@ -221,25 +233,10 @@ class MainViewController: UIViewController {
             let h = Int(size.height)
             if w > 0 && h > 0 {
                 print("MainViewController: Video size resolved from SPS: \(w)x\(h)")
-                self.touchOverlayView.codecWidth = w
-                self.touchOverlayView.codecHeight = h
-                let screen = self.view.window?.screen ?? UIScreen.main
-                let screenBounds = screen.bounds
-                let landW = max(screenBounds.width, screenBounds.height)
-                let landH = min(screenBounds.width, screenBounds.height)
-                let screenAspect = Double(landW) / Double(landH)
-                let codecAspect = Double(w) / Double(h)
-                if screenAspect < codecAspect {
-                    let activeH = h
-                    let activeW = Int((Double(activeH) * screenAspect).rounded()) & ~1
-                    self.touchOverlayView.widthMargin = max(0, w - activeW)
-                    self.touchOverlayView.heightMargin = 0
-                } else {
-                    let activeW = w
-                    let activeH = Int((Double(activeW) / screenAspect).rounded()) & ~1
-                    self.touchOverlayView.widthMargin = 0
-                    self.touchOverlayView.heightMargin = max(0, h - activeH)
-                }
+                self.connectionManager.screenConfig.negotiatedWidth = w
+                self.connectionManager.screenConfig.negotiatedHeight = h
+                self.connectionManager.screenConfig.recalculateMargins()
+                self.syncVideoAndTouchGeometry()
             }
         }
         TrackpadInputBridge.shared.setTouchSender { pointers, action, actionIndex in
@@ -249,6 +246,27 @@ class MainViewController: UIViewController {
             self?.connectionManager.sendUpdateUiConfigRequest(left: left, top: top, right: right, bottom: bottom)
         }
         updateUIForConnectionState(.disconnected)
+        syncVideoAndTouchGeometry()
+    }
+
+    private func syncVideoAndTouchGeometry() {
+        let cfg = connectionManager.screenConfig
+        let wMargin = (cfg.announcedWidthMargin >= 0) ? cfg.announcedWidthMargin : cfg.getWidthMargin()
+        let hMargin = (cfg.announcedHeightMargin >= 0) ? cfg.announcedHeightMargin : cfg.getHeightMargin()
+
+        videoRenderer.codecWidth = cfg.negotiatedWidth
+        videoRenderer.codecHeight = cfg.negotiatedHeight
+        videoRenderer.widthMargin = wMargin
+        videoRenderer.heightMargin = hMargin
+        videoRenderer.fitMode = cfg.videoFitMode
+
+        touchOverlayView.surfaceSize = touchOverlayView.bounds.size
+        touchOverlayView.screenConfig = cfg
+        touchOverlayView.videoFitMode = cfg.videoFitMode
+        touchOverlayView.codecWidth = cfg.negotiatedWidth
+        touchOverlayView.codecHeight = cfg.negotiatedHeight
+        touchOverlayView.widthMargin = wMargin
+        touchOverlayView.heightMargin = hMargin
     }
 
     @objc private func dismissKeyboard() {
@@ -259,12 +277,6 @@ class MainViewController: UIViewController {
         super.viewDidLayoutSubviews()
         touchOverlayView.frame = videoContainerView.bounds
         touchOverlayView.isUserInteractionEnabled = true
-        touchOverlayView.surfaceSize = touchOverlayView.bounds.size
-        touchOverlayView.screenConfig = HeadUnitScreenConfig.shared
-        touchOverlayView.videoFitMode = HeadUnitScreenConfig.shared.videoFitMode
-        if !videoContainerView.isHidden {
-            videoContainerView.bringSubviewToFront(touchOverlayView)
-        }
         let screen = view.window?.screen ?? UIScreen.main
         let screenBounds = screen.bounds
         let nativeScale = screen.nativeScale
@@ -272,6 +284,10 @@ class MainViewController: UIViewController {
         let landH = Int((min(screenBounds.width, screenBounds.height) * nativeScale).rounded())
         if landW > 0 && landH > 0 {
             _ = HeadUnitScreenConfig.shared.updateDimensions(width: landW, height: landH)
+        }
+        syncVideoAndTouchGeometry()
+        if !videoContainerView.isHidden {
+            videoContainerView.bringSubviewToFront(touchOverlayView)
         }
     }
 
@@ -284,6 +300,7 @@ class MainViewController: UIViewController {
             let landW = Int((max(size.width, size.height) * nativeScale).rounded())
             let landH = Int((min(size.width, size.height) * nativeScale).rounded())
             _ = HeadUnitScreenConfig.shared.updateDimensions(width: landW, height: landH)
+            self.syncVideoAndTouchGeometry()
         })
     }
 
@@ -360,6 +377,7 @@ class MainViewController: UIViewController {
         directConnectContainer.addSubview(directIpLabel)
         directConnectContainer.addSubview(directIpTextField)
         directConnectContainer.addSubview(directConnectButton)
+        directConnectContainer.addSubview(qrSetupButton)
 
         homeContentView.addSubview(titleLabel)
         homeContentView.addSubview(subtitleLabel)
@@ -395,14 +413,6 @@ class MainViewController: UIViewController {
 
             ConnectionManager.shared.sendTouchEvent(pointers: pointers, action: action, actionIndex: actionIndex)
         }
-
-        let twoFingerDoubleTap = UITapGestureRecognizer(target: self, action: #selector(handleTwoFingerDoubleTap))
-        twoFingerDoubleTap.numberOfTouchesRequired = 2
-        twoFingerDoubleTap.numberOfTapsRequired = 2
-        twoFingerDoubleTap.delaysTouchesBegan = false
-        twoFingerDoubleTap.delaysTouchesEnded = false
-        twoFingerDoubleTap.cancelsTouchesInView = false
-        touchOverlayView.addGestureRecognizer(twoFingerDoubleTap)
 
         videoContainerView.isHidden = true
         homeScrollView.isHidden = false
@@ -457,8 +467,13 @@ class MainViewController: UIViewController {
             directConnectButton.topAnchor.constraint(equalTo: directIpTextField.bottomAnchor, constant: 12),
             directConnectButton.leadingAnchor.constraint(equalTo: directConnectContainer.leadingAnchor, constant: 16),
             directConnectButton.trailingAnchor.constraint(equalTo: directConnectContainer.trailingAnchor, constant: -16),
-            directConnectButton.bottomAnchor.constraint(equalTo: directConnectContainer.bottomAnchor, constant: -14),
             directConnectButton.heightAnchor.constraint(equalToConstant: 44),
+
+            qrSetupButton.topAnchor.constraint(equalTo: directConnectButton.bottomAnchor, constant: 10),
+            qrSetupButton.leadingAnchor.constraint(equalTo: directConnectContainer.leadingAnchor, constant: 16),
+            qrSetupButton.trailingAnchor.constraint(equalTo: directConnectContainer.trailingAnchor, constant: -16),
+            qrSetupButton.bottomAnchor.constraint(equalTo: directConnectContainer.bottomAnchor, constant: -14),
+            qrSetupButton.heightAnchor.constraint(equalToConstant: 44),
 
             // Or Divider
             orDividerLabel.centerXAnchor.constraint(equalTo: homeContentView.centerXAnchor),
@@ -608,11 +623,8 @@ class MainViewController: UIViewController {
             homeScrollView.isHidden = true
             videoContainerView.isHidden = false
             view.bringSubviewToFront(videoContainerView)
-            videoContainerView.bringSubviewToFront(touchOverlayView)
-            touchOverlayView.surfaceSize = touchOverlayView.bounds.size
-            touchOverlayView.screenConfig = HeadUnitScreenConfig.shared
-            touchOverlayView.videoFitMode = HeadUnitScreenConfig.shared.videoFitMode
             activityIndicator.stopAnimating()
+            syncVideoAndTouchGeometry()
             videoRenderer.applyGeometry()
             setNeedsStatusBarAppearanceUpdate()
             setNeedsUpdateOfHomeIndicatorAutoHidden()
@@ -1242,21 +1254,10 @@ class MainViewController: UIViewController {
         }
     }
 
-    @objc private func handleTwoFingerDoubleTap() {
-        promptDisconnectConfirmation()
-    }
-
-    private func promptDisconnectConfirmation() {
-        let alert = UIAlertController(
-            title: "Disconnect",
-            message: "Do you want to disconnect Android Auto?",
-            preferredStyle: .alert
-        )
-        alert.addAction(UIAlertAction(title: "Disconnect", style: .destructive) { [weak self] _ in
-            self?.connectionManager.disconnect()
-        })
-        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
-        present(alert, animated: true)
+    @objc private func qrSetupButtonTapped() {
+        let ip = NetworkAddresses.stationIpv4() ?? NetworkAddresses.currentHotspotGatewayIpv4() ?? "192.168.43.1"
+        let qrVc = ProjectionSetupQrViewController(ssid: "HeadunitPad-AP", passphrase: "None", ipAddress: ip, port: 5000)
+        present(qrVc, animated: true)
     }
 }
 

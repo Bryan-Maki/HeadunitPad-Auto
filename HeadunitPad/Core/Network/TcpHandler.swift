@@ -59,6 +59,50 @@ class TcpHandler: ByteStreamConnection, @unchecked Sendable {
         startConnectionTimeout()
     }
 
+    public func accept(connection incomingConnection: NWConnection, initialData: Data = Data()) {
+        var remoteHost = "unknown"
+        var remotePort: UInt16 = 5000
+        if case .hostPort(let host, let port) = incomingConnection.endpoint {
+            switch host {
+            case .name(let name, _): remoteHost = name
+            case .ipv4(let addr): remoteHost = "\(addr)"
+            case .ipv6(let addr): remoteHost = "\(addr)"
+            @unknown default: remoteHost = "\(host)"
+            }
+            remotePort = port.rawValue
+        }
+        print("TcpHandler: accepting incoming connection from \(remoteHost):\(remotePort) with \(initialData.count) initial bytes")
+
+        disconnect()
+        connection = incomingConnection
+
+        if !initialData.isEmpty {
+            pendingDataLock.lock()
+            pendingData.append(initialData)
+            pendingDataLock.unlock()
+        }
+
+        setupStateHandler(host: remoteHost, port: remotePort)
+
+        switch incomingConnection.state {
+        case .ready:
+            connectionTimer?.cancel()
+            isConnected = true
+            DispatchQueue.main.async {
+                self.delegate?.byteStreamConnectionDidConnect(self)
+                if !initialData.isEmpty {
+                    self.delegate?.byteStreamConnection(self, didReceiveData: initialData)
+                }
+            }
+            startReceiving()
+        case .setup:
+            incomingConnection.start(queue: queue)
+            startConnectionTimeout()
+        default:
+            startConnectionTimeout()
+        }
+    }
+
     func connect(host: String, port: UInt16) {
         print("TcpHandler: connect called with host=\(host), port=\(port)")
 

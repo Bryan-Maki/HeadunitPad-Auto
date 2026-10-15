@@ -20,11 +20,13 @@ final class WirelessHelperServer {
     private var listener: NWListener?
     private(set) var isRunning = false
 
-    static let port: UInt16 = 5288
-    static let serviceType = "_aawireless._tcp"
+    public static let defaultPort: UInt16 = 5000
+    public static let serviceType = "_aawireless._tcp"
+    public private(set) var listeningPort: UInt16 = 5000
 
-    func start() {
+    func start(port: UInt16 = WirelessHelperServer.defaultPort) {
         guard !isRunning else { return }
+        self.listeningPort = port
 
         do {
             let tcpOptions = NWProtocolTCP.Options()
@@ -34,8 +36,8 @@ final class WirelessHelperServer {
             let parameters = NWParameters(tls: nil, tcp: tcpOptions)
             parameters.allowLocalEndpointReuse = true
 
-            let port = NWEndpoint.Port(rawValue: Self.port)!
-            let listener = try NWListener(using: parameters, on: port)
+            guard let nwPort = NWEndpoint.Port(rawValue: port) else { return }
+            let listener = try NWListener(using: parameters, on: nwPort)
             listener.service = NWListener.Service(name: "HeadunitPad", type: Self.serviceType)
 
             listener.stateUpdateHandler = { [weak self] state in
@@ -43,7 +45,7 @@ final class WirelessHelperServer {
                 switch state {
                 case .ready:
                     self.isRunning = true
-                    print("WirelessHelperServer: listening on \(Self.port)")
+                    print("WirelessHelperServer: listening on \(port)")
                 case .failed(let error):
                     self.isRunning = false
                     print("WirelessHelperServer: failed: \(error)")

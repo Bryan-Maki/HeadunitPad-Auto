@@ -66,6 +66,16 @@ public final class WppHandshakeSession {
         self.credentialsKnown = credentialsKnown
     }
 
+    public func start(localIp: String? = nil, aapPort: Int = 5000) -> [Data] {
+        let ip = localIp ?? NetworkAddresses.stationIpv4() ?? NetworkAddresses.currentHotspotGatewayIpv4() ?? "0.0.0.0"
+        let req = WppMessages.startRequest(ip: ip, port: aapPort)
+        if let framed = try? WppMessages.frame(req, type: .startRequest) {
+            stage = .awaitInfoRequest
+            return [framed]
+        }
+        return []
+    }
+
     public enum State: Equatable {
         case waitingForVersionRequest
         case waitingForSecurityOrStart

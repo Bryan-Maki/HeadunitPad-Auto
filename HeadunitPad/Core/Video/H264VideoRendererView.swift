@@ -44,6 +44,24 @@ public class H264VideoRendererView: UIView {
     public var onCorruptionDetected: ((String) -> Void)?
     public var onVideoSizeResolved: ((CGSize) -> Void)?
 
+    public var codecWidth: Int = 1920 {
+        didSet { if codecWidth != oldValue { updateGeometry() } }
+    }
+    public var codecHeight: Int = 1080 {
+        didSet { if codecHeight != oldValue { updateGeometry() } }
+    }
+    public var widthMargin: Int = 0 {
+        didSet { if widthMargin != oldValue { updateGeometry() } }
+    }
+    public var heightMargin: Int = 0 {
+        didSet { if heightMargin != oldValue { updateGeometry() } }
+    }
+    public var fitMode: VideoFitMode = .fillMargin {
+        didSet { if fitMode != oldValue { updateGeometry() } }
+    }
+
+    private var lastNotifiedVideoSize: CGSize = .zero
+
     public let displayLayer = AVSampleBufferDisplayLayer()
 
     public private(set) var pinnedCodec: VideoCodecType?
@@ -116,15 +134,15 @@ public class H264VideoRendererView: UIView {
     }
 
     public func applyGeometry() {
-        let screenConfig = HeadUnitScreenConfig.shared
-        let fitMode = screenConfig.videoFitMode
-        let codecW = screenConfig.getNegotiatedWidth()
-        let codecH = screenConfig.getNegotiatedHeight()
-        let marginW = screenConfig.getWidthMargin()
-        let marginH = screenConfig.getHeightMargin()
         let viewBounds = self.bounds
-
         guard viewBounds.width > 0 && viewBounds.height > 0 else { return }
+
+        let screenConfig = HeadUnitScreenConfig.shared
+        let fitMode = self.fitMode
+        let codecW = self.codecWidth > 0 ? self.codecWidth : screenConfig.getNegotiatedWidth()
+        let codecH = self.codecHeight > 0 ? self.codecHeight : screenConfig.getNegotiatedHeight()
+        let marginW = self.widthMargin
+        let marginH = self.heightMargin
 
         let currentGeom = GeometryCache(
             bounds: viewBounds,
@@ -437,8 +455,11 @@ public class H264VideoRendererView: UIView {
             let dims = CMVideoFormatDescriptionGetDimensions(formatDesc)
             if dims.width > 0 && dims.height > 0 {
                 let resolved = CGSize(width: Int(dims.width), height: Int(dims.height))
-                DispatchQueue.main.async { [weak self] in
-                    self?.onVideoSizeResolved?(resolved)
+                if resolved != lastNotifiedVideoSize {
+                    lastNotifiedVideoSize = resolved
+                    DispatchQueue.main.async { [weak self] in
+                        self?.onVideoSizeResolved?(resolved)
+                    }
                 }
             }
         }

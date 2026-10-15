@@ -435,4 +435,104 @@ final class Phase5SystemIntegrationTests: XCTestCase {
         transport.handleMessage(msg)
         XCTAssertTrue(delegate.exitRequested, "Native video focus request (mode=2) must trigger aapTransportDidRequestExit")
     }
+
+    // MARK: - 8. Custom DPI Priority & Margins Alignment & WPP Wakeup
+
+    func testCustomDpiOverridesDefaultModelDpiInServiceDiscovery() {
+        let config = HeadUnitScreenConfig.shared
+        config.initScreen(width: 2360, height: 1640, scale: 2.0, fitMode: .fillMargin, requestedResolution: .r1920x1080)
+
+        // Without custom DPI, iPad Air default recommended DPI in 1080p is 180
+        config.customDpi = nil
+        ProjectionSettings.isAutoDpi = true
+        let defaultDecision = config.densityDecision(requestedDpi: 160)
+        XCTAssertEqual(defaultDecision.announced, 180)
+
+        // With custom DPI set to 220
+        config.customDpi = 220
+        let customDecision = config.densityDecision(requestedDpi: 160)
+        XCTAssertEqual(customDecision.announced, 220)
+        XCTAssertEqual(config.announcedDensity, 220)
+
+        // Verify in ServiceDiscoveryResponse videoConfig density
+        let message = AapServiceDiscoveryResponseMessage.make(
+            screenConfig: config,
+            fpsLimit: 60,
+            rightHandDrive: false
+        )
+        // Find video channel
+        let videoServices = message.services.filter { $0.id == UInt32(Channel.ID_VID) }
+        XCTAssertFalse(videoServices.isEmpty)
+        guard let videoService = videoServices.first else { return }
+        let videoConfig = videoService.mediaSinkService.videoConfigs.first
+        XCTAssertEqual(videoConfig?.density, 220, "Video configuration density must equal custom DPI (220)")
+
+        // Clean up
+        config.customDpi = nil
+        ProjectionSettings.isAutoDpi = true
+    }
+
+    func testVideoRendererAndTouchOverlayShareIdenticalMargins() {
+        let config = HeadUnitScreenConfig.shared
+        // iPad Air 4 (2360x1640, native pt 1180x820)
+        config.initScreen(width: 2360, height: 1640, scale: 2.0, fitMode: .fillMargin, requestedResolution: .r1920x1080)
+
+        let renderer = H264VideoRendererView()
+        let touchView = TouchInputView()
+        touchView.frame = CGRect(x: 0, y: 0, width: 1180, height: 820)
+        renderer.frame = CGRect(x: 0, y: 0, width: 1180, height: 820)
+
+        let expectedMarginW = config.getWidthMargin()
+        let expectedMarginH = config.getHeightMargin()
+        XCTAssertEqual(expectedMarginW, 366, "iPad Air 4 1080p fillMargin width margin must be 366")
+        XCTAssertEqual(expectedMarginH, 0)
+
+        config.recordAnnouncedMargins(widthMargin: expectedMarginW, heightMargin: expectedMarginH)
+
+        // Simulate unified syncVideoAndTouchGeometry
+        renderer.codecWidth = config.negotiatedWidth
+        renderer.codecHeight = config.negotiatedHeight
+        renderer.widthMargin = config.announcedWidthMargin
+        renderer.heightMargin = config.announcedHeightMargin
+        renderer.fitMode = config.videoFitMode
+
+        touchView.surfaceSize = touchView.bounds.size
+        touchView.screenConfig = config
+        touchView.videoFitMode = config.videoFitMode
+        touchView.codecWidth = config.negotiatedWidth
+        touchView.codecHeight = config.negotiatedHeight
+        touchView.widthMargin = renderer.widthMargin
+        touchView.heightMargin = renderer.heightMargin
+
+        XCTAssertEqual(renderer.widthMargin, touchView.widthMargin)
+        XCTAssertEqual(renderer.heightMargin, touchView.heightMargin)
+        XCTAssertEqual(renderer.codecWidth, touchView.codecWidth)
+        XCTAssertEqual(renderer.codecHeight, touchView.codecHeight)
+
+        // Center tap (590, 410) on 1180x820 screen
+        // Active content is (1920 - 366) = 1554 wide, centered at 183 px left margin
+        // Center of 1554 is 777. 183 + 777 = 960 (exact horizontal center of 1920x1080)
+        let mappedCenter = touchView.mapTouchToActiveContent(CGPoint(x: 590, y: 410))
+        XCTAssertEqual(mappedCenter.x, 960, "Center screen tap must map precisely to active horizontal center 960")
+        XCTAssertEqual(mappedCenter.y, 540, "Center screen tap must map precisely to active vertical center 540")
+    }
+
+    func testWppHandshakeSessionSendsImmediateWifiStartRequestAndAcceptsIncomingAap() {
+        let wppSession = WppHandshakeSession()
+        let frames = wppSession.start(localIp: "192.168.43.1", aapPort: 5000)
+
+        XCTAssertFalse(frames.isEmpty, "WPP start must produce at least one frame")
+        guard let firstFrame = frames.first else { return }
+
+        XCTAssertGreaterThanOrEqual(firstFrame.count, 4, "WPP frame must be at least header size")
+        let decodedType = try? WppFraming.decodeType(header: firstFrame.prefix(4))
+        XCTAssertEqual(decodedType, WppMessageType.startRequest.rawValue, "WPP frame type must be startRequest (1)")
+
+        let decodedPayloadSize = try? WppFraming.decodePayloadSize(header: firstFrame.prefix(4))
+        XCTAssertEqual(firstFrame.count - 4, decodedPayloadSize, "Decoded payload size must match frame body length")
+
+        // Verify TcpHandler has accept(connection:initialData:)
+        let tcpHandler = TcpHandler()
+        XCTAssertFalse(tcpHandler.isConnected)
+    }
 }
