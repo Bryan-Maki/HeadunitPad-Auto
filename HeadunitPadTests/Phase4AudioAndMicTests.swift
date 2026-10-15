@@ -489,7 +489,7 @@ final class Phase4AudioAndMicTests: XCTestCase {
         let player = PCMAudioPlayer.shared
         player.reset()
         XCTAssertEqual(player.streamCount, 0)
-        XCTAssertTrue(player.isPrebuffering(channel: Channel.ID_AUD))
+        XCTAssertNil(player.isPrebuffering(channel: Channel.ID_AUD))
 
         player.rebuildEngineAndStreams(reason: "unit-test-route-change")
         XCTAssertEqual(player.streamCount, 0)
