@@ -76,7 +76,7 @@ class AapTransport {
     private let handshakeQueue = DispatchQueue(label: "com.headunitpad.aap.handshake", qos: .userInitiated)
     private let processingQueue = DispatchQueue(label: "com.headunitpad.aap.processing", qos: .userInitiated)
     private let mediaAckQueue = DispatchQueue(label: "com.headunitpad.aap.media-ack", qos: .utility)
-    private var state: AapTransportState = .idle
+    private(set) var state: AapTransportState = .idle
     private var handshakeTimer: DispatchWorkItem?
     private let versionHandshakeTimeout: TimeInterval
     private let tlsHandshakeTimeout: TimeInterval = 15.0
