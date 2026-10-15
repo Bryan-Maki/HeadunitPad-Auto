@@ -486,7 +486,7 @@ final class Phase4AudioAndMicTests: XCTestCase {
     }
 
     func testPCMAudioPlayerRouteRebuildResetsStreamsCleanly() {
-        let player = PCMAudioPlayer.shared
+        let player = PCMAudioPlayer()
         player.reset()
         XCTAssertEqual(player.streamCount, 0)
         XCTAssertNil(player.isPrebuffering(channel: Channel.ID_AUD))

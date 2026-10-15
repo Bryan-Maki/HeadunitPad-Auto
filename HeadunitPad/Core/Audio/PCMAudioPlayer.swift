@@ -40,6 +40,7 @@ final class PCMAudioPlayer {
     private var routeChangeObserver: NSObjectProtocol?
     private var interruptionObserver: NSObjectProtocol?
     private var engineConfigObserver: NSObjectProtocol?
+    private var isRebuilding = false
 
     public let mixer = AudioMixer(duckMediaForSpeech: true)
     private var aacDecoders: [UInt8: AacAudioDecoder] = [:]
@@ -109,7 +110,7 @@ final class PCMAudioPlayer {
             queue: nil
         ) { [weak self] _ in
             self?.audioQueue.async {
-                guard let self = self else { return }
+                guard let self = self, !self.isRebuilding else { return }
                 self.rebuildEngineAndStreams(reason: "engineConfigChange")
             }
         }
@@ -132,8 +133,7 @@ final class PCMAudioPlayer {
     }
 
     public func reset() {
-        audioQueue.async { [weak self] in
-            guard let self = self else { return }
+        let block = { [self] in
             self.streams.values.forEach {
                 $0.player.stop()
                 $0.prebufferQueue.removeAll()
@@ -142,12 +142,20 @@ final class PCMAudioPlayer {
                 $0.needsFadeIn = true
             }
             self.streams.removeAll()
-            self.engine.stop()
+            if self.engine.isRunning {
+                self.engine.stop()
+            }
             self.engine.reset()
             self.sessionConfigured = false
             self.mixer.reset()
             self.aacDecoders.values.forEach { $0.reset() }
             self.duckingEnvelope.reset()
+        }
+
+        if DispatchQueue.getSpecific(key: Self.audioQueueKey) != nil {
+            block()
+        } else {
+            audioQueue.sync(execute: block)
         }
     }
 
@@ -364,7 +372,7 @@ final class PCMAudioPlayer {
         let session = AVAudioSession.sharedInstance()
         do {
             if !isMicrophoneActive {
-                try session.setCategory(.playback, mode: .default, options: [.allowBluetoothA2DP, .mixWithOthers])
+                try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
                 try session.setPreferredSampleRate(48000)
                 try session.setPreferredIOBufferDuration(0.02)
                 try session.setActive(true)
@@ -395,6 +403,10 @@ final class PCMAudioPlayer {
 
     func rebuildEngineAndStreams(reason: String) {
         let block = { [self] in
+            guard !self.isRebuilding else { return }
+            self.isRebuilding = true
+            defer { self.isRebuilding = false }
+
             // 1. 停止并清理所有现有 StreamContext 与旧 PlayerNode
             for stream in self.streams.values {
                 stream.player.stop()

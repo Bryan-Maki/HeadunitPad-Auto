@@ -83,7 +83,7 @@ final class NowPlayingCoordinator {
 
         let session = AVAudioSession.sharedInstance()
         do {
-            try session.setCategory(.playback, mode: .default, options: [.allowBluetoothA2DP, .mixWithOthers])
+            try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
             try session.setActive(true)
             hasConfiguredAudioSession = true
             print("NowPlayingCoordinator: audio session activated for AVRCP")
