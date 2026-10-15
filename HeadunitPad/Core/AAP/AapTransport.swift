@@ -1393,7 +1393,7 @@ class AapTransport {
             if let sensorTypeRaw = ProtoWire.extractFirstVarint(from: message.payload, fieldNumber: 1) {
                 let sensorType = Int(sensorTypeRaw)
                 reqSensorType = sensorType
-                startedSensors.insert(sensorType)
+                startedSensors.insert(sensorTypeRaw)
 
                 if sensorType == 1 {
                     let shouldUseIpadGps = ProjectionSettings.gpsSource == .ipad
