@@ -270,6 +270,14 @@ class AapTransport {
         videoFirstFragmentAtMs = 0
         lastVideoPacketRxAtMs = 0
         lastVideoRecoveryRequestAtMs = 0
+        mediaSessionIds = [
+            Channel.ID_VID: 0,
+            Channel.ID_AUD: 0,
+            Channel.ID_AU1: 0,
+            Channel.ID_AU2: 0,
+            Channel.ID_MIC: 0
+        ]
+        sinkCodecs.removeAll()
         focusCyclesUsedThisSession = 0
         lastFocusCycleAtMs = 0
         lastWireCorruptionAtMs = 0
@@ -654,7 +662,7 @@ class AapTransport {
         }
 
         let message = AapTouchEventMessage.make(
-            timestampNs: DispatchTime.now().uptimeNanoseconds,
+            timestampNs: UInt64(DispatchTime.now().uptimeNanoseconds / 1000),
             action: protoAction,
             actionIndex: actionIndex,
             pointers: pointers
@@ -1078,8 +1086,10 @@ class AapTransport {
             print("AapTransport: Received message on channel \(Channel.name(for: channelId)), type=\(message.type), size=\(message.payload.count)")
         }
 
-        // Android Auto may carry control message types on non-control channels with flag 0x0f.
-        if channelId != Channel.ID_CTR && message.flags == 0x0f && isControlMessageType(message.typeUInt16) {
+        // ChannelOpenRequest (0x0007) is handled before the service is established on any channel,
+        // and control-flagged messages (FLAG_BIT_CONTROL = 0x04) route to generic control handling.
+        if message.typeUInt16 == AapMessageType.CHANNEL_OPEN_REQUEST.rawValue ||
+           (channelId != Channel.ID_CTR && (message.flags & AapMessageFraming.FLAG_BIT_CONTROL) != 0 && isControlMessageType(message.typeUInt16)) {
             handleControlMessage(message)
             return
         }
@@ -1350,6 +1360,10 @@ class AapTransport {
     }
 
     private func handleInputMessage(_ message: AapMessage) {
+        if message.type == Int(AapMessageType.CHANNEL_OPEN_REQUEST.rawValue) {
+            sendChannelOpenResponse(on: message.channelUInt8)
+            return
+        }
         // Input.MsgType.BINDINGREQUEST = 0x8002
         if message.type == 0x8002 {
             sendInputBindingResponse(on: message.channelUInt8)
@@ -1397,17 +1411,17 @@ class AapTransport {
         let requestType = ProtoWire.extractFirstVarint(from: request.payload, fieldNumber: 1) ?? 1
         let focusState: UInt64
         switch requestType {
+        case 1:
+            focusState = 1 // STATE_GAIN
+        case 2, 3:
+            focusState = 2 // STATE_GAIN_TRANSIENT
         case 4:
             focusState = 3 // STATE_LOSS
-        case 2:
-            focusState = 2 // STATE_GAIN_TRANSIENT
-        case 3:
-            focusState = 7 // STATE_GAIN_TRANSIENT_GUIDANCE_ONLY
         default:
             focusState = 1 // STATE_GAIN
         }
 
-        let payload = ProtoWire.fieldVarint(1, value: focusState)
+        let payload = Data([0x08, UInt8(focusState & 0x7F)])
         let message = AapMessage(
             channel: channel,
             flags: AapFlags.CONTROL_MESSAGE,
@@ -1865,25 +1879,41 @@ private enum ProtoWire {
 }
     private func handleVideoMessage(_ message: AapMessage) {
         switch message.type {
+        case Int(AapMessageType.CHANNEL_OPEN_REQUEST.rawValue):
+            sendChannelOpenResponse(on: message.channelUInt8)
+
         case 0x8000: // Media.MsgType.MEDIA_MESSAGE_SETUP
-            setMediaSessionId(fromStartPayload: message.payload, on: message.channelUInt8)
+            if mediaSessionIds[message.channelUInt8] == nil {
+                mediaSessionIds[message.channelUInt8] = 0
+            }
             sendMediaConfig(on: message.channelUInt8)
             sendVideoFocusNotification(on: message.channelUInt8, reason: "video-setup")
 
         case 0x8001: // Media.MsgType.MEDIA_MESSAGE_START
             setMediaSessionId(fromStartPayload: message.payload, on: message.channelUInt8)
+            if state != .running {
+                setState(.running)
+            }
             sendVideoFocusNotification(on: message.channelUInt8, reason: "video-start")
 
         case 0x8002: // Media.MsgType.MEDIA_MESSAGE_STOP
             break
 
-        case 0, 1: // MEDIA_MESSAGE_DATA / MEDIA_MESSAGE_CODEC_CONFIG
+        case 0x8007: // Media.MsgType.MEDIA_MESSAGE_VIDEO_FOCUS_REQUEST
+            let requestedMode = ProtoWire.extractFirstVarint(from: message.payload, fieldNumber: 2) ?? 1
+            if requestedMode != 2 {
+                sendVideoFocusNotification(on: message.channelUInt8, gain: true, reason: "video-focus-request")
+            }
+
+        case 0, 1: // MEDIA_MESSAGE_DATA (0x0000) / MEDIA_MESSAGE_CODEC_CONFIG (0x0001)
+            if AapMessageFraming.isLast(message.flags) {
+                sendMediaAck(on: message.channelUInt8)
+            }
             processVideoStreamPacket(message)
-            sendMediaAck(on: message.channelUInt8)
 
         case Int(AapMessageType.VIDEO_FRAME.rawValue):
             // Legacy fallback path.
-            processVideoPayloadAsSingleFrame(message.payload)
+            processVideoPayloadAsSingleFrame(message.payload, hasTimestamp: false)
 
         default:
             break
@@ -1893,6 +1923,7 @@ private enum ProtoWire {
     private func processVideoStreamPacket(_ message: AapMessage) {
         let flags = message.flags
         let payload = message.payload
+        let hasTimestamp = (message.type == 0)
         let nowMs = uptimeMs()
         lastVideoPacketRxAtMs = nowMs
         videoDiagnosticsLock.lock()
@@ -1915,21 +1946,20 @@ private enum ProtoWire {
             videoAssemblyBuffer.removeAll(keepingCapacity: true)
             videoAssemblyMessageType = 0
             videoFirstFragmentAtMs = 0
-            processVideoPayloadAsSingleFrame(payload)
+            processVideoPayloadAsSingleFrame(payload, hasTimestamp: hasTimestamp)
 
         case 0x09: // first fragment
             videoFirstFragmentAtMs = nowMs
             videoAssemblyMessageType = message.typeUInt16
             videoAssemblyBuffer.removeAll(keepingCapacity: true)
-            if message.type == 1 {
-                // Codec configuration may be avcC or length-prefixed and only
-                // becomes parseable after all fragments have been assembled.
-                videoAssemblyBuffer.append(payload)
-            } else if let offset = findAnnexBStartOffset(in: payload) {
-                videoAssemblyBuffer.append(payload.subdata(in: offset..<payload.count))
+            if hasTimestamp {
+                // 0x0000 (MEDIA_WITH_TIMESTAMP_INDICATION): first 8 bytes are UInt64 timestamp
+                if payload.count > 8 {
+                    videoAssemblyBuffer.append(payload.subdata(in: 8..<payload.count))
+                }
             } else {
-                print("AapTransport: First video fragment missing Annex-B start code")
-                requestVideoRecoveryIfNeeded(reason: "missing-start-code", ignoreRecentVideoGuard: false)
+                // 0x0001 (MEDIA_INDICATION): no 8-byte timestamp, starts at byte 0
+                videoAssemblyBuffer.append(payload)
             }
 
         case 0x08: // middle fragment
@@ -1960,22 +1990,31 @@ private enum ProtoWire {
             videoFirstFragmentAtMs = 0
             videoAssemblyBuffer.append(payload)
             if !videoAssemblyBuffer.isEmpty {
-                processVideoPayloadAsSingleFrame(videoAssemblyBuffer)
+                processVideoPayloadAsSingleFrame(videoAssemblyBuffer, hasTimestamp: false)
             }
             videoAssemblyBuffer.removeAll(keepingCapacity: true)
             videoAssemblyMessageType = 0
 
         default:
             // Unknown media flag variant: best-effort pass through.
-            processVideoPayloadAsSingleFrame(payload)
+            processVideoPayloadAsSingleFrame(payload, hasTimestamp: hasTimestamp)
         }
     }
 
-    private func processVideoPayloadAsSingleFrame(_ payload: Data) {
+    private func processVideoPayloadAsSingleFrame(_ payload: Data, hasTimestamp: Bool = false) {
         lastVideoPacketRxAtMs = uptimeMs()
-        if let offset = findAnnexBStartOffset(in: payload) {
-            deliverVideoFrame(payload.subdata(in: offset..<payload.count))
-        } else if let parameterSets = H264NALParser.annexBParameterSets(from: payload) {
+        let videoBytes: Data
+        if hasTimestamp {
+            guard payload.count > 8 else { return }
+            videoBytes = payload.subdata(in: 8..<payload.count)
+        } else {
+            videoBytes = payload
+        }
+        guard !videoBytes.isEmpty else { return }
+
+        if let offset = findAnnexBStartOffset(in: videoBytes) {
+            deliverVideoFrame(offset == 0 ? videoBytes : videoBytes.subdata(in: offset..<videoBytes.count))
+        } else if let parameterSets = H264NALParser.annexBParameterSets(from: videoBytes) {
             print("AapTransport: Normalized non-Annex-B H.264 codec configuration")
             deliverVideoFrame(parameterSets)
         }
@@ -2010,7 +2049,6 @@ private enum ProtoWire {
             return false
         }
 
-        if bytes.count >= 8 && hasStartCode(at: 8) { return 8 }
         if hasStartCode(at: 0) { return 0 }
 
         var i = 0
@@ -2023,10 +2061,18 @@ private enum ProtoWire {
 
     private func handleAudioMessage(_ message: AapMessage) {
         switch message.type {
+        case Int(AapMessageType.CHANNEL_OPEN_REQUEST.rawValue):
+            sendChannelOpenResponse(on: message.channelUInt8)
+
         case 0x8000: // Media.MsgType.MEDIA_MESSAGE_SETUP
+            if mediaSessionIds[message.channelUInt8] == nil {
+                mediaSessionIds[message.channelUInt8] = 0
+            }
             if let codecVal = ProtoWire.extractFirstVarint(from: message.payload, fieldNumber: 1) {
-                let codec = AudioSinkCodecPolicy.codec(for: Int(codecVal))
+                let codec = AudioSinkCodecPolicy.codec(for: Int(codecVal)) ?? .pcm
                 sinkCodecs[message.channelUInt8] = codec
+            } else {
+                sinkCodecs[message.channelUInt8] = .pcm
             }
             sendMediaConfig(on: message.channelUInt8)
             sendAudioFocusGainUnsolicited()
@@ -2037,25 +2083,28 @@ private enum ProtoWire {
         case 0x8002: // Media.MsgType.MEDIA_MESSAGE_STOP
             break
 
-        case 0: // MEDIA_MESSAGE_DATA
-            let payloadOffset = resolveAudioPayloadOffset(message.payload)
-            if message.payload.count > payloadOffset {
-                let audioData = message.payload.subdata(in: payloadOffset..<message.payload.count)
-                let isAac = sinkCodecs[message.channelUInt8]?.isAac ?? (ProjectionSettings.audioCodecPreference != .pcm)
+        case 0: // 0x0000 MEDIA_WITH_TIMESTAMP_INDICATION (8-byte timestamp + audio payload)
+            sendMediaAck(on: message.channelUInt8)
+            if message.payload.count > 8 {
+                let audioData = message.payload.subdata(in: 8..<message.payload.count)
+                let isAac = sinkCodecs[message.channelUInt8]?.isAac ?? (ProjectionSettings.audioCodecPreference == .aac)
                 delegate?.aapTransport(self, didReceiveAudioData: audioData, on: message.channelUInt8, isAac: isAac)
             }
-            sendMediaAck(on: message.channelUInt8)
 
-        case 1: // MEDIA_MESSAGE_CODEC_CONFIG
-            // AudioSpecificConfig CSD from phone (starts directly at message.payload)
-            delegate?.aapTransport(self, didReceiveAudioCodecConfig: message.payload, on: message.channelUInt8)
-            // Per open-headunit AudioMediaPayload, CODEC_CONFIG consumes no ACK credit.
+        case 1: // 0x0001 MEDIA_INDICATION / MEDIA_MESSAGE_CODEC_CONFIG (no 8-byte timestamp)
+            sendMediaAck(on: message.channelUInt8)
+            let isAac = sinkCodecs[message.channelUInt8]?.isAac ?? (ProjectionSettings.audioCodecPreference == .aac)
+            if isAac && message.payload.count <= 16 {
+                delegate?.aapTransport(self, didReceiveAudioCodecConfig: message.payload, on: message.channelUInt8)
+            } else if !message.payload.isEmpty {
+                delegate?.aapTransport(self, didReceiveAudioData: message.payload, on: message.channelUInt8, isAac: isAac)
+            }
 
         case Int(AapMessageType.AUDIO_FRAME.rawValue):
             // Legacy fallback path.
-            let payloadOffset = resolveAudioPayloadOffset(message.payload)
-            if message.payload.count > payloadOffset {
-                let audioData = message.payload.subdata(in: payloadOffset..<message.payload.count)
+            sendMediaAck(on: message.channelUInt8)
+            if message.payload.count > 8 {
+                let audioData = message.payload.subdata(in: 8..<message.payload.count)
                 let isAac = sinkCodecs[message.channelUInt8]?.isAac ?? false
                 delegate?.aapTransport(self, didReceiveAudioData: audioData, on: message.channelUInt8, isAac: isAac)
             }
@@ -2063,20 +2112,6 @@ private enum ProtoWire {
         default:
             print("AapTransport: Unhandled audio message type=\(message.type) on channel \(Channel.name(for: message.channelUInt8))")
         }
-    }
-
-    private func resolveAudioPayloadOffset(_ payload: Data) -> Int {
-        // Two payload variants are observed in the wild:
-        // 1) [8-byte timestamp][PCM]
-        // 2) [2-byte media msg type][8-byte timestamp][PCM]
-        // If we always assume one variant, the other produces severe static.
-        if payload.count >= 10 {
-            let typeCandidate = UInt16(payload[0]) << 8 | UInt16(payload[1])
-            if isKnownMediaMsgType(typeCandidate) {
-                return 10
-            }
-        }
-        return 8
     }
 
     private func handleMicrophoneMessage(_ message: AapMessage) {
@@ -2132,17 +2167,17 @@ private enum ProtoWire {
 
     private func setMediaSessionId(fromStartPayload payload: Data, on channel: UInt8) {
         // Media.Start { session_id = 1, configuration_index = 2 }
-        if let sessionId = ProtoWire.extractFirstVarint(from: payload, fieldNumber: 1) {
-            mediaSessionIds[channel] = sessionId
-            print("AapTransport: Stored media session id \(sessionId) for channel \(Channel.name(for: channel))")
-        }
+        let sessionId = ProtoWire.extractFirstVarint(from: payload, fieldNumber: 1) ?? 0
+        mediaSessionIds[channel] = sessionId
+        print("AapTransport: Stored media session id \(sessionId) for channel \(Channel.name(for: channel))")
     }
 
     private func sendMediaAck(on channel: UInt8) {
-        let sessionId = mediaSessionIds[channel] ?? 0
-        // Media.Ack { session_id = 1, ack = 1 }
-        let payload = ProtoWire.fieldVarint(1, value: sessionId)
-            + ProtoWire.fieldVarint(2, value: 1)
+        let sessionId = Int32(truncatingIfNeeded: mediaSessionIds[channel] ?? 0)
+        // Media.Ack { required int32 session_id = 1; optional uint32 ack = 2; }
+        // Always write both field 1 (0x08 + varint(sessionId), even when 0) and field 2 (0x10 + varint(1)).
+        let ackProto = MediaAck(sessionId: sessionId, ack: 1)
+        let payload = ackProto.serializedData()
 
         let message = AapMessage(
             channel: channel,
@@ -2194,14 +2229,13 @@ private enum ProtoWire {
         switch action {
         case .nudge:
             print("AapTransport: Requesting video recovery (nudge), reason=\(reason)")
-            sendMediaConfig(on: Channel.ID_VID)
             sendVideoFocusNotification(on: Channel.ID_VID, gain: true, reason: "recovery-\(reason)")
         case .cycleFocus:
             print("AapTransport: Requesting video recovery (escalated cycle), reason=\(reason)")
             performVideoFocusCycle(reason: reason)
         case .waitForQuiet:
             print("AapTransport: Wire corruption active, waiting for quiet before video recovery cycle")
-            sendMediaConfig(on: Channel.ID_VID)
+            sendVideoFocusNotification(on: Channel.ID_VID, gain: true, reason: "recovery-quiet-\(reason)")
         }
     }
 
@@ -2210,9 +2244,10 @@ private enum ProtoWire {
     }
 
     private func sendMediaConfig(on channel: UInt8) {
-        // Media.Config { status=HEADUNIT(2), max_unacked=30, configuration_indices=[0] }
+        // Media.Config { status=READY(2), max_unacked=8, configuration_indices=[0] }
+        let maxUnacked: UInt64 = Channel.isAudio(channel) ? 8 : 12
         let payload = ProtoWire.fieldVarint(1, value: 2)
-            + ProtoWire.fieldVarint(2, value: 30)
+            + ProtoWire.fieldVarint(2, value: maxUnacked)
             + ProtoWire.fieldVarint(3, value: 0)
 
         let message = AapMessage(

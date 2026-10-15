@@ -20,13 +20,12 @@ public enum AudioMediaPayload {
     }
 
     /// Resolves payload offset into the message payload:
-    /// For type 0 (DATA): skips 8-byte timestamp, or 10 bytes if outer type prefix is present.
-    public static func resolveAudioPayloadOffset(_ payload: Data) -> Int {
-        if payload.count >= 10 {
-            let typeCandidate = UInt16(payload[0]) << 8 | UInt16(payload[1])
-            if typeCandidate == 0 || typeCandidate == 1 {
-                return 10
-            }
+    /// After AapMessage strips the 2-byte message type:
+    /// - For type 0 (DATA): skips 8-byte timestamp (offset = 8).
+    /// - For type 1 (CODEC_CONFIG / MEDIA_INDICATION): no timestamp (offset = 0).
+    public static func resolveAudioPayloadOffset(_ payload: Data, messageType: Int = 0) -> Int {
+        if messageType == 1 {
+            return 0
         }
         return 8
     }

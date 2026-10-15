@@ -24,6 +24,18 @@ public final class AapServiceDiscoveryResponseMessage {
     ) -> AapMessage {
         var services: [ControlService] = []
 
+        if screenConfig.screenWidthPx <= 0 || screenConfig.screenHeightPx <= 0 {
+            let dims = HeadUnitScreenConfig.currentIpadLandscapeDimensions()
+            if dims.width > 0 && dims.height > 0 {
+                screenConfig.initScreen(
+                    width: dims.width,
+                    height: dims.height,
+                    fitMode: ProjectionSettings.videoFitMode,
+                    requestedResolution: ProjectionSettings.resolution
+                )
+            }
+        }
+
         // 1. Sensors Service (Channel 1)
         var sensorTypes: [ControlService.SensorSourceService.Sensor] = [
             ControlService.SensorSourceService.Sensor(type: .drivingStatus),
@@ -81,18 +93,26 @@ public final class AapServiceDiscoveryResponseMessage {
             width: UInt32(screenConfig.getNegotiatedWidth()),
             height: UInt32(screenConfig.getNegotiatedHeight())
         )
+        let supportedKeycodes: [UInt32] = [
+            1, 2, 3, 4, 5, 6,
+            7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18,
+            19, 20, 21, 22, 23, 24, 25,
+            61, 62, 66, 79, 81, 84, 85, 86, 87, 88,
+            126, 127, 224, 264, 265, 267, 268, 269, 270, 271,
+            65536, 65537, 65538
+        ]
         let inputService = ControlService.InputSourceService(
-            keycodesSupported: [1, 2, 3, 4, 19, 20, 21, 22, 66, 84, 85, 87, 88],
+            keycodesSupported: supportedKeycodes,
             touchscreen: touchConfig,
-            touchpad: touchConfig
+            touchpad: nil
         )
         services.append(ControlService(id: UInt32(Channel.ID_INP), inputSourceService: inputService))
 
         // 4. Audio Services (Channels 4, 5, 6)
         let userAudioPref = ProjectionSettings.audioCodecPreference
-        let announcedAudioCodec: MediaCodecType = (userAudioPref == .pcm)
-            ? .mediaCodecAudioPcm
-            : .mediaCodecAudioAacLc
+        let announcedAudioCodec: MediaCodecType = (userAudioPref == .aac)
+            ? .mediaCodecAudioAacLc
+            : .mediaCodecAudioPcm
 
         // Audio2 (System) - Always announced to maintain AA link
         let audio2Sink = ControlService.MediaSinkService(

@@ -9,8 +9,10 @@
 import Foundation
 import AVFoundation
 
-final class PCMAudioPlayer {
+public final class PCMAudioPlayer {
     private struct Stream {
+        let sampleRate: Int
+        let channels: Int
         let format: AVAudioFormat
         let player: AVAudioPlayerNode
     }
@@ -22,6 +24,8 @@ final class PCMAudioPlayer {
     private var isMicrophoneActive = false
     private var microphoneStateObserver: NSObjectProtocol?
     private var routeChangeObserver: NSObjectProtocol?
+    private var interruptionObserver: NSObjectProtocol?
+    private var engineConfigObserver: NSObjectProtocol?
 
     public let mixer = AudioMixer(duckMediaForSpeech: true)
     private var aacDecoders: [UInt8: AacAudioDecoder] = [:]
@@ -29,7 +33,7 @@ final class PCMAudioPlayer {
     private var speechActiveTimer: DispatchSourceTimer?
     private var isSpeechActive = false
 
-    init() {
+    public init() {
         // Register mixer channels
         _ = mixer.registerChannel(channelId: Channel.ID_AUD, sampleRate: 48000, channelCount: 2, isMediaSink: true)
         _ = mixer.registerChannel(channelId: Channel.ID_AU1, sampleRate: 16000, channelCount: 1, isMediaSink: false)
@@ -44,14 +48,8 @@ final class PCMAudioPlayer {
             self?.audioQueue.async {
                 guard let self = self else { return }
                 self.isMicrophoneActive = active
-                self.sessionConfigured = false
-
-                if !active {
-                    self.streams.values.forEach { $0.player.stop() }
-                    self.streams.removeAll()
-                    self.engine.stop()
-                    self.engine.reset()
-                }
+                self.ensureSessionConfigured()
+                self.restartEngineAndPlayersIfNeeded()
             }
         }
 
@@ -60,14 +58,44 @@ final class PCMAudioPlayer {
             object: nil,
             queue: nil
         ) { [weak self] note in
+            let reasonValue = note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt
+            let reason = reasonValue.flatMap { AVAudioSession.RouteChangeReason(rawValue: $0) }
+            // Ignore categoryChange notifications triggered by our own setCategory call
+            if reason == .categoryChange {
+                return
+            }
             self?.audioQueue.async {
                 guard let self = self else { return }
-                self.logCurrentAudioRoute(prefix: "PCMAudioPlayer: route changed")
-                self.streams.values.forEach { $0.player.stop() }
-                self.streams.removeAll()
-                self.engine.stop()
-                self.engine.reset()
-                self.sessionConfigured = false
+                self.logCurrentAudioRoute(prefix: "PCMAudioPlayer: route changed (\(reason.map { "\($0.rawValue)" } ?? "unknown"))")
+                self.restartEngineAndPlayersIfNeeded()
+            }
+        }
+
+        interruptionObserver = NotificationCenter.default.addObserver(
+            forName: AVAudioSession.interruptionNotification,
+            object: nil,
+            queue: nil
+        ) { [weak self] note in
+            let typeValue = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt
+            let type = typeValue.flatMap { AVAudioSession.InterruptionType(rawValue: $0) }
+            if type == .ended {
+                self?.audioQueue.async {
+                    guard let self = self else { return }
+                    self.sessionConfigured = false
+                    self.ensureSessionConfigured()
+                    self.restartEngineAndPlayersIfNeeded()
+                }
+            }
+        }
+
+        engineConfigObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange,
+            object: engine,
+            queue: nil
+        ) { [weak self] _ in
+            self?.audioQueue.async {
+                guard let self = self else { return }
+                self.restartEngineAndPlayersIfNeeded()
             }
         }
     }
@@ -80,9 +108,15 @@ final class PCMAudioPlayer {
         if let routeChangeObserver {
             NotificationCenter.default.removeObserver(routeChangeObserver)
         }
+        if let interruptionObserver {
+            NotificationCenter.default.removeObserver(interruptionObserver)
+        }
+        if let engineConfigObserver {
+            NotificationCenter.default.removeObserver(engineConfigObserver)
+        }
     }
 
-    func reset() {
+    public func reset() {
         audioQueue.async { [weak self] in
             guard let self = self else { return }
             self.streams.values.forEach { $0.player.stop() }
@@ -96,25 +130,17 @@ final class PCMAudioPlayer {
         }
     }
 
-    func configureCodec(channel: UInt8, csd: Data) {
+    public func configureCodec(channel: UInt8, csd: Data) {
         audioQueue.async { [weak self] in
             guard let self = self else { return }
-            let (rate, channels): (Int, Int) = {
-                switch channel {
-                case Channel.ID_AU1, Channel.ID_AU2:
-                    return (16000, 1)
-                default:
-                    return (48000, 2)
-                }
-            }()
-
+            let (rate, channels) = self.streamFormatParameters(for: channel)
             let decoder = self.aacDecoders[channel] ?? AacAudioDecoder(sampleRate: rate, channels: channels)
             decoder.configure(csd: csd)
             self.aacDecoders[channel] = decoder
         }
     }
 
-    func playAudio(_ data: Data, on channel: UInt8, isAac: Bool) {
+    public func playAudio(_ data: Data, on channel: UInt8, isAac: Bool) {
         guard !data.isEmpty else { return }
         audioQueue.async { [weak self] in
             guard let self = self else { return }
@@ -130,32 +156,101 @@ final class PCMAudioPlayer {
                 pcmData = data
             }
 
-            self.playPCMInternal(pcmData, on: channel)
+            let (sampleRate, channels) = self.streamFormatParameters(for: channel)
+            self.enqueuePCMDataInternal(pcmData, sampleRate: sampleRate, channels: channels, on: channel)
         }
     }
 
-    func playPCM(_ data: Data, on channel: UInt8) {
+    public func playPCM(_ data: Data, on channel: UInt8) {
         playAudio(data, on: channel, isAac: false)
     }
 
-    private func playPCMInternal(_ data: Data, on channel: UInt8) {
-        guard !data.isEmpty else { return }
-        self.ensureSessionConfigured()
-        guard let stream = self.ensureStream(for: channel) else { return }
-        guard self.startEngineIfNeeded() else { return }
+    /// Enqueues 16-bit Little-Endian Signed Integer (Int16) PCM data by converting to
+    /// standard non-interleaved Float32 AVAudioPCMBuffer and scheduling on AVAudioPlayerNode.
+    @discardableResult
+    public func enqueuePCMData(_ data: Data, sampleRate: Int, channels: Int, on channel: UInt8 = Channel.ID_AUD) -> AVAudioPCMBuffer? {
+        guard let buffer = Self.convertInt16PCMToFloat32Buffer(data, sampleRate: sampleRate, channels: channels) else {
+            return nil
+        }
+        audioQueue.async { [weak self] in
+            guard let self = self else { return }
+            self.enqueuePreparedBuffer(buffer, rawPCMData: data, sampleRate: sampleRate, channels: channels, on: channel)
+        }
+        return buffer
+    }
 
-        // Feed to mixer buffer
-        mixer.feed(channelId: channel, pcmData: data)
+    /// Converts 16-bit Little-Endian Signed Integer (Int16) PCM bytes into a non-interleaved Float32 AVAudioPCMBuffer.
+    public static func convertInt16PCMToFloat32Buffer(_ data: Data, sampleRate: Int, channels: Int) -> AVAudioPCMBuffer? {
+        guard sampleRate > 0, channels > 0 else { return nil }
+        let bytesPerSample = MemoryLayout<Int16>.size
+        let bytesPerFrame = channels * bytesPerSample
+        let frameCount = data.count / bytesPerFrame
+        guard frameCount > 0 else { return nil }
 
-        // Ducking management: if Guidance (Channel 4) or System (Channel 5) plays, smoothly duck Media (Channel 3/6)
+        guard let format = AVAudioFormat(
+            standardFormatWithSampleRate: Double(sampleRate),
+            channels: AVAudioChannelCount(channels)
+        ) else {
+            return nil
+        }
+
+        guard let buffer = AVAudioPCMBuffer(
+            pcmFormat: format,
+            frameCapacity: AVAudioFrameCount(frameCount)
+        ) else {
+            return nil
+        }
+        buffer.frameLength = AVAudioFrameCount(frameCount)
+
+        guard let floatChannelData = buffer.floatChannelData else {
+            return nil
+        }
+
+        data.withUnsafeBytes { rawBuffer in
+            guard let baseAddress = rawBuffer.baseAddress else { return }
+            let int16Ptr = baseAddress.assumingMemoryBound(to: Int16.self)
+            for frame in 0..<frameCount {
+                let frameBase = frame * channels
+                for ch in 0..<channels {
+                    let sample = Int16(littleEndian: int16Ptr[frameBase + ch])
+                    floatChannelData[ch][frame] = Float32(sample) / 32768.0
+                }
+            }
+        }
+
+        return buffer
+    }
+
+    private func enqueuePCMDataInternal(_ data: Data, sampleRate: Int, channels: Int, on channel: UInt8) {
+        guard let buffer = Self.convertInt16PCMToFloat32Buffer(data, sampleRate: sampleRate, channels: channels) else {
+            return
+        }
+        enqueuePreparedBuffer(buffer, rawPCMData: data, sampleRate: sampleRate, channels: channels, on: channel)
+    }
+
+    private func enqueuePreparedBuffer(_ buffer: AVAudioPCMBuffer, rawPCMData: Data, sampleRate: Int, channels: Int, on channel: UInt8) {
+        ensureSessionConfigured()
+        guard let stream = ensureStream(for: channel, sampleRate: sampleRate, channels: channels) else { return }
+        guard startEngineIfNeeded() else { return }
+
+        mixer.feed(channelId: channel, pcmData: rawPCMData)
+
         if channel == Channel.ID_AU1 || channel == Channel.ID_AU2 {
             noteSpeechActivity()
         }
 
-        guard let buffer = self.makePCMBuffer(from: data, format: stream.format, channel: channel) else { return }
-        stream.player.scheduleBuffer(buffer, completionHandler: nil)
         if !stream.player.isPlaying {
             stream.player.play()
+        }
+        stream.player.scheduleBuffer(buffer, completionHandler: nil)
+    }
+
+    private func streamFormatParameters(for channel: UInt8) -> (sampleRate: Int, channels: Int) {
+        switch channel {
+        case Channel.ID_AU1, Channel.ID_AU2:
+            return (16000, 1)
+        default:
+            return (48000, 2)
         }
     }
 
@@ -187,46 +282,24 @@ final class PCMAudioPlayer {
 
     private func ensureAacDecoder(for channel: UInt8) -> AacAudioDecoder {
         if let existing = aacDecoders[channel] { return existing }
-        let (rate, channels): (Int, Int) = {
-            switch channel {
-            case Channel.ID_AU1, Channel.ID_AU2:
-                return (16000, 1)
-            default:
-                return (48000, 2)
-            }
-        }()
+        let (rate, channels) = streamFormatParameters(for: channel)
         let decoder = AacAudioDecoder(sampleRate: rate, channels: channels)
         aacDecoders[channel] = decoder
         return decoder
     }
 
     private func ensureSessionConfigured() {
+        guard !sessionConfigured else { return }
         let session = AVAudioSession.sharedInstance()
-
-        if isMicrophoneActive || session.category == .playAndRecord {
-            do {
-                try session.setActive(true)
-                sessionConfigured = true
-            } catch {
-                print("PCMAudioPlayer: Failed to activate existing playAndRecord session: \(error)")
-            }
-            return
-        }
-
-        let needsConfigure = !sessionConfigured
-            || session.category != .playback
-            || session.mode != .default
-
-        if needsConfigure {
-            do {
-                try session.setCategory(.playback, mode: .default, options: [])
-                try session.setActive(true)
-                sessionConfigured = true
-                logCurrentAudioRoute(prefix: "PCMAudioPlayer: audio session configured")
-            } catch {
-                print("PCMAudioPlayer: Failed to configure audio session: \(error)")
-            }
-        }
+        try? session.setCategory(
+            .playAndRecord,
+            mode: .default,
+            options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP, .mixWithOthers]
+        )
+        try? session.setPreferredSampleRate(48000)
+        try? session.setActive(true)
+        sessionConfigured = true
+        logCurrentAudioRoute(prefix: "PCMAudioPlayer: audio session configured")
     }
 
     private func startEngineIfNeeded() -> Bool {
@@ -241,80 +314,54 @@ final class PCMAudioPlayer {
         return true
     }
 
-    private func ensureStream(for channel: UInt8) -> Stream? {
-        if let existing = streams[channel] { return existing }
-
-        let (sampleRate, outputChannels): (Double, AVAudioChannelCount)
-        switch channel {
-        case 6, Channel.ID_AUD:
-            sampleRate = 48_000
-            outputChannels = 2
-        case 4, 5, Channel.ID_AU1, Channel.ID_AU2:
-            sampleRate = 16_000
-            outputChannels = 2
-        default:
-            sampleRate = 48_000
-            outputChannels = 2
-        }
-
-        guard let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: sampleRate, channels: outputChannels, interleaved: false) else {
-            return nil
-        }
-
-        let player = AVAudioPlayerNode()
-        engine.attach(player)
-        engine.connect(player, to: engine.mainMixerNode, format: format)
-
-        let stream = Stream(format: format, player: player)
-        streams[channel] = stream
-        return stream
-    }
-
-    private func makePCMBuffer(from data: Data, format: AVAudioFormat, channel: UInt8) -> AVAudioPCMBuffer? {
-        let outputChannels = Int(format.channelCount)
-        guard outputChannels > 0 else { return nil }
-
-        let inputChannels: Int
-        if format.sampleRate == 16_000 {
-            inputChannels = 1
-        } else {
-            inputChannels = 2
-        }
-
-        let bytesPerSample = 2
-        let bytesPerFrame = inputChannels * bytesPerSample
-        let frameCount = data.count / bytesPerFrame
-        guard frameCount > 0 else { return nil }
-
-        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(frameCount)) else {
-            return nil
-        }
-        buffer.frameLength = AVAudioFrameCount(frameCount)
-
-        guard let channelData = buffer.floatChannelData else { return nil }
-
-        data.withUnsafeBytes { raw in
-            let samples = raw.bindMemory(to: Int16.self)
-            if inputChannels == 1 {
-                let left = channelData[0]
-                let right = outputChannels > 1 ? channelData[1] : nil
-                for i in 0..<frameCount {
-                    let s = Float(samples[i]) / 32768.0
-                    left[i] = s
-                    right?[i] = s
-                }
-            } else {
-                let left = channelData[0]
-                let right = outputChannels > 1 ? channelData[1] : channelData[0]
-                for i in 0..<frameCount {
-                    let base = i * inputChannels
-                    left[i] = Float(samples[base]) / 32768.0
-                    right[i] = Float(samples[base + 1]) / 32768.0
-                }
+    private func restartEngineAndPlayersIfNeeded() {
+        ensureSessionConfigured()
+        if !engine.isRunning {
+            do {
+                try engine.start()
+            } catch {
+                print("PCMAudioPlayer: Failed to restart AVAudioEngine after route/config change: \(error)")
+                return
             }
         }
+        for stream in streams.values {
+            if !stream.player.isPlaying {
+                stream.player.play()
+            }
+        }
+    }
 
-        return buffer
+    private func ensureStream(for channel: UInt8, sampleRate: Int, channels: Int) -> Stream? {
+        if let existing = streams[channel],
+           existing.sampleRate == sampleRate,
+           existing.channels == channels {
+            return existing
+        }
+
+        guard let floatFormat = AVAudioFormat(
+            standardFormatWithSampleRate: Double(sampleRate),
+            channels: AVAudioChannelCount(channels)
+        ) else {
+            return nil
+        }
+
+        let playerNode = AVAudioPlayerNode()
+        engine.attach(playerNode)
+        engine.connect(playerNode, to: engine.mainMixerNode, format: floatFormat)
+        if !engine.isRunning {
+            try? engine.start()
+        }
+        playerNode.play()
+
+        let stream = Stream(
+            sampleRate: sampleRate,
+            channels: channels,
+            format: floatFormat,
+            player: playerNode
+        )
+        streams[channel] = stream
+        applyDuckingToMediaStream()
+        return stream
     }
 
     private func logCurrentAudioRoute(prefix: String) {

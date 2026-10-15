@@ -230,31 +230,32 @@ class OpenSslTlsHandler {
 
     func encrypt(data: Data) -> Data? {
         guard let ssl = ssl, isHandshakeComplete else { return nil }
+        guard !data.isEmpty else { return nil }
 
-        let written = SSL_write(ssl, (data as NSData).bytes, Int32(data.count))
+        let written = data.withUnsafeBytes { rawPtr -> Int32 in
+            guard let base = rawPtr.baseAddress else { return 0 }
+            return SSL_write(ssl, base, Int32(data.count))
+        }
         guard written > 0 else { return nil }
 
         var encrypted = Data()
-        let pending = BIO_ctrl_pending(writeBio)
-        if pending > 0 {
-            var buffer = [UInt8](repeating: 0, count: Int(pending))
-            let read = BIO_read(writeBio, &buffer, Int32(pending))
-            if read > 0 {
-                encrypted.append(contentsOf: buffer[0..<Int(read)])
-            }
-        }
+        drainWriteBio(into: &encrypted)
 
         return encrypted.isEmpty ? nil : encrypted
     }
 
     func decrypt(data: Data) -> Data? {
         guard let ssl = ssl, isHandshakeComplete else { return nil }
+        guard !data.isEmpty else { return nil }
 
-        let written = BIO_write(readBio, (data as NSData).bytes, Int32(data.count))
+        let written = data.withUnsafeBytes { rawPtr -> Int32 in
+            guard let base = rawPtr.baseAddress else { return 0 }
+            return BIO_write(readBio, base, Int32(data.count))
+        }
         guard written > 0 else { return nil }
 
         var decrypted = Data()
-        var buffer = [UInt8](repeating: 0, count: 16384)
+        var buffer = [UInt8](repeating: 0, count: 65536)
 
         while true {
             let read = SSL_read(ssl, &buffer, Int32(buffer.count))

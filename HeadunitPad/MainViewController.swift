@@ -13,7 +13,7 @@ class MainViewController: UIViewController {
 
     // MARK: - Properties
 
-    private let connectionManager = ConnectionManager()
+    private let connectionManager = ConnectionManager.shared
     private let videoRenderer = H264VideoRendererView()
     private let audioPlayer = PCMAudioPlayer()
     private var videoWatchdogTimer: Timer?
@@ -208,6 +208,7 @@ class MainViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        HeadUnitScreenConfig.shared.videoFitMode = ProjectionSettings.videoFitMode
         setupUI()
         setupConstraints()
         connectionManager.delegate = self
@@ -217,15 +218,17 @@ class MainViewController: UIViewController {
 
         let tap = UITapGestureRecognizer(target: self, action: #selector(dismissKeyboard))
         tap.cancelsTouchesInView = false
-        view.addGestureRecognizer(tap)
+        tap.delaysTouchesBegan = false
+        tap.delaysTouchesEnded = false
+        homeScrollView.addGestureRecognizer(tap)
 
         videoRenderer.onFrameDisplayed = { [weak self] in
             guard let self else { return }
             self.hasReceivedFirstVideoFrame = true
             self.lastVideoFrameTs = Date().timeIntervalSince1970
         }
-        TrackpadInputBridge.shared.setTouchSender { [weak self] pointers, action, actionIndex in
-            self?.connectionManager.sendTouchEvent(pointers: pointers, action: action, actionIndex: actionIndex)
+        TrackpadInputBridge.shared.setTouchSender { pointers, action, actionIndex in
+            ConnectionManager.shared.sendTouchEvent(pointers: pointers, action: action, actionIndex: actionIndex)
         }
         HeadUnitScreenConfig.shared.onMarginsDivergedDetailed = { [weak self] left, top, right, bottom in
             self?.connectionManager.sendUpdateUiConfigRequest(left: left, top: top, right: right, bottom: bottom)
@@ -239,6 +242,12 @@ class MainViewController: UIViewController {
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
+        touchOverlayView.frame = videoContainerView.bounds
+        touchOverlayView.isUserInteractionEnabled = true
+        if !videoContainerView.isHidden {
+            videoContainerView.bringSubviewToFront(touchOverlayView)
+            videoContainerView.bringSubviewToFront(floatingDisconnectButton)
+        }
         let screen = view.window?.screen ?? UIScreen.main
         let screenBounds = screen.bounds
         let nativeScale = screen.nativeScale
@@ -363,7 +372,7 @@ class MainViewController: UIViewController {
             touchOverlayView.bottomAnchor.constraint(equalTo: videoContainerView.bottomAnchor),
 
             floatingDisconnectButton.topAnchor.constraint(equalTo: videoContainerView.safeAreaLayoutGuide.topAnchor, constant: 12),
-            floatingDisconnectButton.leadingAnchor.constraint(equalTo: videoContainerView.safeAreaLayoutGuide.leadingAnchor, constant: 12),
+            floatingDisconnectButton.trailingAnchor.constraint(equalTo: videoContainerView.safeAreaLayoutGuide.trailingAnchor, constant: -12),
             floatingDisconnectButton.widthAnchor.constraint(equalToConstant: 44),
             floatingDisconnectButton.heightAnchor.constraint(equalToConstant: 44)
         ])
@@ -380,12 +389,15 @@ class MainViewController: UIViewController {
                 print("MainViewController: Touch action=\(action) pointers=\(mappedPointers.count) actionIndex=\(actionIndex)")
             }
 
-            self.connectionManager.sendTouchEvent(pointers: mappedPointers, action: action, actionIndex: actionIndex)
+            ConnectionManager.shared.sendTouchEvent(pointers: mappedPointers, action: action, actionIndex: actionIndex)
         }
 
         let twoFingerDoubleTap = UITapGestureRecognizer(target: self, action: #selector(handleTwoFingerDoubleTap))
         twoFingerDoubleTap.numberOfTouchesRequired = 2
         twoFingerDoubleTap.numberOfTapsRequired = 2
+        twoFingerDoubleTap.delaysTouchesBegan = false
+        twoFingerDoubleTap.delaysTouchesEnded = false
+        twoFingerDoubleTap.cancelsTouchesInView = false
         touchOverlayView.addGestureRecognizer(twoFingerDoubleTap)
 
         videoContainerView.isHidden = true
@@ -693,12 +705,6 @@ class MainViewController: UIViewController {
                 connectionManager.requestVideoRecovery()
             }
             return
-        }
-
-        if now - lastVideoFrameTs > 6.0, now - lastVideoRecoveryTs > 2.0 {
-            lastVideoRecoveryTs = now
-            print("MainViewController: Video watchdog detected frame stall, requesting recovery")
-            connectionManager.requestVideoRecovery()
         }
     }
 
@@ -1308,10 +1314,7 @@ extension MainViewController: ConnectionManagerDelegate {
 
     func connectionManager(_ manager: ConnectionManager, didReceiveVideoData data: Data) {
         VideoFrameBus.shared.publish(frame: data)
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            self.videoRenderer.enqueueAnnexBFrame(data)
-        }
+        videoRenderer.enqueueAnnexBFrame(data)
     }
 
     func connectionManager(_ manager: ConnectionManager, didReceiveAudioData data: Data, on channel: UInt8) {

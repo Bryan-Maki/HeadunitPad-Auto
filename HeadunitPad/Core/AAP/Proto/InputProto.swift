@@ -92,6 +92,13 @@ public struct ProtoTouchEvent: ProtoCodable, Equatable {
         public static let press = PointerAction.touchActionDown
         public static let release = PointerAction.touchActionUp
         public static let drag = PointerAction.touchActionMove
+        public static let down = PointerAction.touchActionDown
+        public static let up = PointerAction.touchActionUp
+        public static let move = PointerAction.touchActionMove
+        public static let moved = PointerAction.touchActionMove
+        public static let cancel = PointerAction.touchActionCancel
+        public static let pointerDown = PointerAction.touchActionPointerDown
+        public static let pointerUp = PointerAction.touchActionPointerUp
     }
 
     public struct Pointer: ProtoCodable, Equatable {
@@ -143,9 +150,7 @@ public struct ProtoTouchEvent: ProtoCodable, Equatable {
         for ptr in pointerData {
             writer.writeMessage(fieldNumber: 1, message: ptr)
         }
-        if let idx = actionIndex {
-            writer.writeUInt32(fieldNumber: 2, value: idx)
-        }
+        writer.writeUInt32(fieldNumber: 2, value: actionIndex ?? 0)
         writer.writeEnum(fieldNumber: 3, value: action.rawValue)
     }
 

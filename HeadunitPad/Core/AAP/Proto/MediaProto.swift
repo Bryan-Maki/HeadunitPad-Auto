@@ -114,7 +114,7 @@ public struct MediaAck: ProtoCodable, Equatable {
     public var ack: UInt32?
     public var receiveTimestampNs: [UInt64]
 
-    public init(sessionId: Int32 = 0, ack: UInt32? = nil, receiveTimestampNs: [UInt64] = []) {
+    public init(sessionId: Int32 = 0, ack: UInt32? = 1, receiveTimestampNs: [UInt64] = []) {
         self.sessionId = sessionId
         self.ack = ack
         self.receiveTimestampNs = receiveTimestampNs
@@ -122,7 +122,7 @@ public struct MediaAck: ProtoCodable, Equatable {
 
     public func encode(to writer: inout ProtoWriter) {
         writer.writeInt32(fieldNumber: 1, value: sessionId)
-        if let ack = ack { writer.writeUInt32(fieldNumber: 2, value: ack) }
+        writer.writeUInt32(fieldNumber: 2, value: ack ?? 1)
         for ts in receiveTimestampNs {
             writer.writeUInt64(fieldNumber: 3, value: ts)
         }

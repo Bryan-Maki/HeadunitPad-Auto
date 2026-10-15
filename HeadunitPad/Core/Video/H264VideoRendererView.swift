@@ -59,8 +59,8 @@ public class H264VideoRendererView: UIView {
     private var pendingFrames: [Data] = []
     private var isProcessingFrame = false
 
-    private let maxPendingFrames = 4
-    private let maxPendingEssentialFrames = 12
+    private let maxPendingFrames = 30
+    private let maxPendingEssentialFrames = 60
 
     private var hasDecodedKeyframe = false
     private let diagnosticsLock = NSLock()
@@ -331,28 +331,53 @@ public class H264VideoRendererView: UIView {
             updateDiagnostics { $0.activeCodec = isHevc ? "HEVC (H.265)" : "H.264 (AVC)" }
         }
 
-        // Scan parameter sets and keyframe status
+        // Scan parameter sets, slice NALUs, and keyframe status
         var extractedVPS: Data?
         var extractedSPS: Data?
         var extractedPPS: Data?
         var nalTypeInts: [Int] = []
+        var accessUnitNALs: [Data] = []
+        var hasVclSlice = false
 
         if isHevc {
             for nal in nalUnits {
                 guard let first = nal.first else { continue }
                 let nalType = Int((first & 0x7E) >> 1)
                 nalTypeInts.append(nalType)
-                if nalType == 32 { extractedVPS = nal }
-                if nalType == 33 { extractedSPS = nal }
-                if nalType == 34 { extractedPPS = nal }
+                if nalType == 32 {
+                    extractedVPS = nal
+                } else if nalType == 33 {
+                    extractedSPS = nal
+                } else if nalType == 34 {
+                    extractedPPS = nal
+                } else if nalType == 35 {
+                    // AUD - skip in HVCC sample buffer
+                    continue
+                } else {
+                    accessUnitNALs.append(nal)
+                    if (0...21).contains(nalType) {
+                        hasVclSlice = true
+                    }
+                }
             }
         } else {
             for nal in nalUnits {
                 guard let first = nal.first else { continue }
                 let nalType = Int(first & 0x1F)
                 nalTypeInts.append(nalType)
-                if nalType == 7 { extractedSPS = nal }
-                if nalType == 8 { extractedPPS = nal }
+                if nalType == 7 {
+                    extractedSPS = nal
+                } else if nalType == 8 {
+                    extractedPPS = nal
+                } else if nalType == 9 {
+                    // AUD - skip in AVCC sample buffer
+                    continue
+                } else {
+                    accessUnitNALs.append(nal)
+                    if (1...5).contains(nalType) {
+                        hasVclSlice = true
+                    }
+                }
             }
         }
 
@@ -412,6 +437,11 @@ public class H264VideoRendererView: UIView {
             return
         }
 
+        // Pure parameter-set configuration packet (e.g. 0x0001 SPS/PPS): formatDescription is ready, no VCL slice to decode.
+        guard hasVclSlice, !accessUnitNALs.isEmpty else {
+            return
+        }
+
         // Drop predictive frames until first keyframe arrives
         if !hasDecodedKeyframe {
             guard isKeyframe else {
@@ -454,8 +484,8 @@ public class H264VideoRendererView: UIView {
             break
         }
 
-        // Package into AVCC / HVCC 4-byte length prefix sample buffer
-        let lengthSampleData = makeLengthPrefixedSample(from: nalUnits)
+        // Package all video NALUs of this Access Unit (e.g. SEI + multiple Slices) into one 4-byte length-prefixed sample buffer
+        let lengthSampleData = makeLengthPrefixedSample(from: accessUnitNALs)
         guard !lengthSampleData.isEmpty else { return }
 
         guard let sampleBuffer = makeSampleBuffer(data: lengthSampleData, formatDescription: formatDesc) else {

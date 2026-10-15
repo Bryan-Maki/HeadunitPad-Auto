@@ -8,12 +8,16 @@ final class TouchInputView: UIView {
 
     override init(frame: CGRect) {
         super.init(frame: frame)
+        isUserInteractionEnabled = true
         isMultipleTouchEnabled = true
+        isExclusiveTouch = false
     }
 
     required init?(coder: NSCoder) {
         super.init(coder: coder)
+        isUserInteractionEnabled = true
         isMultipleTouchEnabled = true
+        isExclusiveTouch = false
     }
 
     private func sortedPointers() -> [(id: Int, point: CGPoint)] {

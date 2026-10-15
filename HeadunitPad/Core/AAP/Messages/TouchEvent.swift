@@ -9,7 +9,7 @@ import Foundation
 
 public final class AapTouchEventMessage {
     public static func make(
-        timestampNs: UInt64,
+        timestampNs: UInt64 = UInt64(DispatchTime.now().uptimeNanoseconds / 1000),
         action: ProtoTouchEvent.PointerAction,
         actionIndex: Int,
         pointers: [(id: Int, x: Int, y: Int)]
@@ -38,6 +38,20 @@ public final class AapTouchEventMessage {
             channel: Int(Channel.ID_INP),
             type: Int(InputMsgType.event.rawValue),
             proto: inputReport
+        )
+    }
+
+    public static func make(
+        timestampUs: UInt64,
+        action: ProtoTouchEvent.PointerAction,
+        actionIndex: Int,
+        pointers: [(id: Int, x: Int, y: Int)]
+    ) -> AapMessage {
+        return make(
+            timestampNs: timestampUs,
+            action: action,
+            actionIndex: actionIndex,
+            pointers: pointers
         )
     }
 }

@@ -12,6 +12,7 @@
 
 import XCTest
 import UIKit
+import AVFoundation
 @testable import HeadunitPad
 
 final class Phase5SystemIntegrationTests: XCTestCase {
@@ -219,5 +220,82 @@ final class Phase5SystemIntegrationTests: XCTestCase {
             XCTAssertTrue(touchView.isUserInteractionEnabled)
             XCTAssertTrue(touchView.isMultipleTouchEnabled)
         }
+    }
+
+    // MARK: - 7. Touch Event Zero-Field Encoding, MediaAck Session=0 & PCM Float32 Conversion
+
+    func testTouchEventEncodingAlwaysWritesZeroFields() {
+        let msg = AapTouchEventMessage.make(
+            timestampNs: 0,
+            action: .down,
+            actionIndex: 0,
+            pointers: [(id: 0, x: 0, y: 0)]
+        )
+
+        let bytes = [UInt8](msg.payload)
+        // InputReport field 1 (timestamp = 0) -> [0x08, 0x00]
+        XCTAssertTrue(bytes.starts(with: [0x08, 0x00]), "InputReport must always write timestamp field 1 even when 0")
+        // InputReport field 3 (touch_event) tag is 0x1A
+        XCTAssertTrue(bytes.contains(0x1A), "InputReport must encode touch_event at field 3 (wire tag 0x1A)")
+
+        // Pointer message must explicitly encode x=0 (0x08, 0x00), y=0 (0x10, 0x00), pointer_id=0 (0x18, 0x00)
+        let expectedPointerBytes: [UInt8] = [0x0A, 0x06, 0x08, 0x00, 0x10, 0x00, 0x18, 0x00]
+        XCTAssertNotNil(
+            bytes.firstRange(of: expectedPointerBytes),
+            "TouchEvent Pointer must explicitly write x=0, y=0, and pointer_id=0 ([0x18, 0x00])"
+        )
+
+        // TouchEvent must explicitly encode action_index=0 (0x10, 0x00) and action=ACTION_DOWN (0x18, 0x00)
+        let expectedActionTail: [UInt8] = [0x10, 0x00, 0x18, 0x00]
+        XCTAssertTrue(
+            bytes.suffix(4).elementsEqual(expectedActionTail),
+            "TouchEvent must explicitly write action_index=0 ([0x10, 0x00]) and action=0 ([0x18, 0x00])"
+        )
+    }
+
+    func testMediaAckAlwaysWritesSessionZero() {
+        let mediaAck = MediaAck(sessionId: 0, ack: 1)
+        let encoded = mediaAck.serializedData()
+        let bytes = [UInt8](encoded)
+
+        XCTAssertGreaterThanOrEqual(bytes.count, 4, "MediaAck with sessionId=0 must be at least 4 bytes")
+        XCTAssertEqual(Array(bytes.prefix(4)), [0x08, 0x00, 0x10, 0x01], "MediaAck must never omit session=0")
+
+        let defaultAck = MediaAck(sessionId: 0).serializedData()
+        XCTAssertEqual([UInt8](defaultAck), [0x08, 0x00, 0x10, 0x01])
+    }
+
+    func testPCMAudioPlayerInt16ToFloat32Conversion() {
+        let samples: [Int16] = [16384, -16384, 32767, -32768]
+        var pcmData = Data(capacity: samples.count * MemoryLayout<Int16>.size)
+        for sample in samples {
+            var le = sample.littleEndian
+            withUnsafeBytes(of: &le) { pcmData.append(contentsOf: $0) }
+        }
+
+        let player = PCMAudioPlayer()
+        guard let buffer = player.enqueuePCMData(pcmData, sampleRate: 48000, channels: 2) else {
+            XCTFail("Expected non-nil Float32 AVAudioPCMBuffer")
+            return
+        }
+
+        XCTAssertEqual(buffer.format.commonFormat, .pcmFormatFloat32)
+        XCTAssertFalse(buffer.format.isInterleaved, "AVAudioPCMBuffer must use standard non-interleaved Float32 format")
+        XCTAssertEqual(buffer.format.sampleRate, 48000)
+        XCTAssertEqual(buffer.format.channelCount, 2)
+        XCTAssertEqual(buffer.frameLength, 2)
+
+        guard let floatChannels = buffer.floatChannelData else {
+            XCTFail("Expected non-nil floatChannelData")
+            return
+        }
+
+        // Frame 0: L = 16384 / 32768 = 0.5, R = -16384 / 32768 = -0.5
+        XCTAssertEqual(floatChannels[0][0], 0.5, accuracy: 0.0001)
+        XCTAssertEqual(floatChannels[1][0], -0.5, accuracy: 0.0001)
+
+        // Frame 1: L = 32767 / 32768, R = -32768 / 32768 = -1.0
+        XCTAssertEqual(floatChannels[0][1], Float(32767.0 / 32768.0), accuracy: 0.0001)
+        XCTAssertEqual(floatChannels[1][1], -1.0, accuracy: 0.0001)
     }
 }

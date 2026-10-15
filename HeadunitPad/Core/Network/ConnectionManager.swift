@@ -61,6 +61,7 @@ extension ConnectionManagerDelegate {
 }
 
 class ConnectionManager {
+    static let shared = ConnectionManager()
     weak var delegate: ConnectionManagerDelegate?
 
     private let discovery = Discovery()
@@ -239,12 +240,10 @@ class ConnectionManager {
     }
 
     func sendTouchEvent(x: Int, y: Int, action: TouchAction) {
-        guard state == .running else { return }
         aapTransport?.sendTouchEvent(x: x, y: y, action: action)
     }
 
     func sendTouchEvent(pointers: [(id: Int, x: Int, y: Int)], action: TouchAction, actionIndex: Int) {
-        guard state == .running else { return }
         aapTransport?.sendTouchEvent(pointers: pointers, action: action, actionIndex: actionIndex)
     }
 

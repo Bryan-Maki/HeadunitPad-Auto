@@ -17,7 +17,7 @@ public enum AudioSinkCodecPolicy {
             return .pcm
         case 2: // MEDIA_CODEC_AUDIO_AAC_LC
             return .aacLc
-        case 3: // MEDIA_CODEC_AUDIO_AAC_LC_ADTS
+        case 3, 4: // MEDIA_CODEC_AUDIO_AAC_LC_ADTS
             return .aacLcAdts
         default:
             return nil

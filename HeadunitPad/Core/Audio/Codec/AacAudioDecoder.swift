@@ -71,6 +71,17 @@ public final class AacAudioDecoder {
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
         watchdog.inputWaiting(nowMs: nowMs)
 
+        // Strip ADTS header (7 or 9 bytes) if present
+        let rawAac: Data
+        if aacData.count > 7, aacData[0] == 0xFF, (aacData[1] & 0xF0) == 0xF0 {
+            let protectionAbsent = (aacData[1] & 0x01) != 0
+            let headerLen = protectionAbsent ? 7 : 9
+            guard aacData.count > headerLen else { return nil }
+            rawAac = aacData.subdata(in: headerLen..<aacData.count)
+        } else {
+            rawAac = aacData
+        }
+
         // AAC-LC decodes into 1024 frames per packet
         let outputFrames: UInt32 = 1024
         let bytesPerFrame = UInt32(channels * 2) // 16-bit PCM
@@ -80,9 +91,18 @@ public final class AacAudioDecoder {
         struct InputState {
             var data: Data
             var bytesConsumed: Int
+            var packetDesc: AudioStreamPacketDescription
         }
 
-        var state = InputState(data: aacData, bytesConsumed: 0)
+        var state = InputState(
+            data: rawAac,
+            bytesConsumed: 0,
+            packetDesc: AudioStreamPacketDescription(
+                mStartOffset: 0,
+                mVariableFramesInPacket: 0,
+                mDataByteSize: UInt32(rawAac.count)
+            )
+        )
 
         let inputCallback: AudioConverterComplexInputDataProc = { (
             converter,
@@ -114,14 +134,13 @@ public final class AacAudioDecoder {
             ioData.pointee.mBuffers.mDataByteSize = UInt32(remaining)
             ioData.pointee.mBuffers.mData = rawBuffer
 
+            statePtr.pointee.packetDesc = AudioStreamPacketDescription(
+                mStartOffset: 0,
+                mVariableFramesInPacket: 0,
+                mDataByteSize: UInt32(remaining)
+            )
             if let outDesc = outDataPacketDescription {
-                let descPtr = UnsafeMutablePointer<AudioStreamPacketDescription>.allocate(capacity: 1)
-                descPtr.initialize(to: AudioStreamPacketDescription(
-                    mStartOffset: 0,
-                    mVariableFramesInPacket: 0,
-                    mDataByteSize: UInt32(remaining)
-                ))
-                outDesc.pointee = descPtr
+                outDesc.pointee = withUnsafeMutablePointer(to: &statePtr.pointee.packetDesc) { $0 }
             }
 
             statePtr.pointee.bytesConsumed += remaining
