@@ -1445,7 +1445,7 @@ class MainViewController: UIViewController {
         let ssidField = UITextField()
         ssidField.borderStyle = .roundedRect
         ssidField.placeholder = "Wi-Fi SSID (e.g. AndroidAuto-Hotspot)"
-        ssidField.text = ProjectionSettings.wifiSsid.isEmpty ? (NetworkAddresses.currentWifiSsid() ?? "AndroidAuto-Headunit") : ProjectionSettings.wifiSsid
+        ssidField.text = ProjectionSettings.wifiSsid.isEmpty ? "AndroidAuto-Headunit" : ProjectionSettings.wifiSsid
 
         let passField = UITextField()
         passField.borderStyle = .roundedRect
