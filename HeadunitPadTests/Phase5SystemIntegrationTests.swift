@@ -765,21 +765,41 @@ final class Phase5SystemIntegrationTests: XCTestCase {
         let connection = MockByteConnection()
         let transport = AapTransport(connection: connection, handshakeProfile: .network)
 
-        // First send: should emit packet
-        transport.sendNightModeEvent(isNight: false, force: false)
-        XCTAssertEqual(connection.sentPackets.count, 1)
+        // 1. Channel open request on sensor channel (Channel.ID_SEN = 1)
+        let openMsg = AapMessage(channel: Channel.ID_SEN, flags: 0x03, type: AapMessageType.CHANNEL_OPEN_REQUEST.rawValue, payload: Data([0x08, 0x01]))
+        transport.handleMessage(openMsg)
+
+        // 2. Sensor 10 start request (NIGHT) -> inserts sensor 10, sets running, sends response (0x8002) and initial event (0x8003)
+        let sensor10Req = AapMessage(channel: Channel.ID_SEN, flags: 0x03, type: 0x8001, payload: Data([0x08, 0x0a]))
+        transport.handleMessage(sensor10Req)
+
+        func waitQueue() {
+            let exp = expectation(description: "Wait for processingQueue async night mode event")
+            DispatchQueue.global().asyncAfter(deadline: .now() + 0.05) {
+                exp.fulfill()
+            }
+            wait(for: [exp], timeout: 1.0)
+        }
+
+        waitQueue()
+        let initialCount = connection.sentPackets.count
+        XCTAssertGreaterThanOrEqual(initialCount, 2, "Sensor start response + initial night mode event must be sent")
 
         // Duplicate send with same value and force: false: should be deduplicated
-        transport.sendNightModeEvent(isNight: false, force: false)
-        XCTAssertEqual(connection.sentPackets.count, 1, "Duplicate night mode event must be suppressed")
+        let currentNight = ProjectionSettings.effectiveIsNightMode()
+        transport.sendNightModeEvent(isNight: currentNight, force: false)
+        waitQueue()
+        XCTAssertEqual(connection.sentPackets.count, initialCount, "Duplicate night mode event must be suppressed")
 
         // Send with force: true: should send even if value is identical
-        transport.sendNightModeEvent(isNight: false, force: true)
-        XCTAssertEqual(connection.sentPackets.count, 2, "Forced night mode event must be transmitted")
+        transport.sendNightModeEvent(isNight: currentNight, force: true)
+        waitQueue()
+        XCTAssertEqual(connection.sentPackets.count, initialCount + 1, "Forced night mode event must be transmitted")
 
         // Send with different value: should send
-        transport.sendNightModeEvent(isNight: true, force: false)
-        XCTAssertEqual(connection.sentPackets.count, 3)
+        transport.sendNightModeEvent(isNight: !currentNight, force: false)
+        waitQueue()
+        XCTAssertEqual(connection.sentPackets.count, initialCount + 2, "Different night mode value must be transmitted")
     }
 
     func testDefaultSettingsValuesAndWifiCredentials() {

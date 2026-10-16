@@ -130,6 +130,9 @@ public final class HeadUnitScreenConfig {
         fitMode: VideoFitMode = .fillMargin,
         requestedResolution: ResolutionPreset = .auto
     ) {
+        self.isResolutionLocked = false
+        self.customNegotiatedWidth = nil
+        self.customNegotiatedHeight = nil
         self.videoFitMode = fitMode
         self.density = scale
         switch ProjectionSettings.orientation {

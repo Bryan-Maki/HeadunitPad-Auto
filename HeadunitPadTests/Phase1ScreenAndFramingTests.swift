@@ -553,6 +553,7 @@ final class Phase1ScreenAndFramingTests: XCTestCase {
         XCTAssertEqual(ResolutionPreset.r3840x2160.protoType(portrait: true), ._2160x3840)
 
         let config = HeadUnitScreenConfig.shared
+        config.clearCustomNegotiatedResolution()
         config.initScreen(width: 1640, height: 2360, requestedResolution: .r1920x1080)
 
         XCTAssertTrue(config.isPortraitDisplay, "Portrait dimensions should report isPortraitDisplay == true")
