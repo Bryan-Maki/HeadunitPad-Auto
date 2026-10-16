@@ -70,7 +70,7 @@ class MainViewController: UIViewController {
 
     private lazy var connectButton: UIButton = {
         var config = UIButton.Configuration.filled()
-        config.title = "Wireless: Scan for Devices"
+        config.title = "Scan for Headunit Server (Port 5277)"
         config.image = UIImage(systemName: "wifi")
         config.imagePadding = 8
         config.cornerStyle = .large
@@ -101,33 +101,6 @@ class MainViewController: UIViewController {
         button.translatesAutoresizingMaskIntoConstraints = false
         button.addTarget(self, action: #selector(settingsButtonTapped), for: .touchUpInside)
         button.isHidden = true
-        return button
-    }()
-
-    private lazy var floatingSettingsButton: UIButton = {
-        var config = UIButton.Configuration.plain()
-        config.image = UIImage(systemName: "gearshape.fill")
-        config.baseForegroundColor = UIColor.white.withAlphaComponent(0.85)
-        let button = UIButton(configuration: config)
-        button.backgroundColor = UIColor.black.withAlphaComponent(0.35)
-        button.layer.cornerRadius = 22
-        button.layer.masksToBounds = true
-        button.translatesAutoresizingMaskIntoConstraints = false
-        button.addTarget(self, action: #selector(settingsButtonTapped), for: .touchUpInside)
-        button.isHidden = true
-        return button
-    }()
-
-    private lazy var wirelessSetupButton: UIButton = {
-        var config = UIButton.Configuration.tinted()
-        config.title = "Wireless Setup (QR / Bluetooth Bind)"
-        config.image = UIImage(systemName: "qrcode")
-        config.imagePadding = 8
-        config.cornerStyle = .large
-        config.buttonSize = .medium
-        let button = UIButton(configuration: config)
-        button.translatesAutoresizingMaskIntoConstraints = false
-        button.addTarget(self, action: #selector(wirelessSetupButtonTapped), for: .touchUpInside)
         return button
     }()
 
@@ -201,6 +174,41 @@ class MainViewController: UIViewController {
         label.font = .systemFont(ofSize: 13, weight: .medium)
         label.textColor = .tertiaryLabel
         label.textAlignment = .center
+        label.translatesAutoresizingMaskIntoConstraints = false
+        return label
+    }()
+
+    private lazy var serverGuideContainer: UIView = {
+        let v = UIView()
+        v.backgroundColor = UIColor.secondarySystemBackground.withAlphaComponent(0.85)
+        v.layer.cornerRadius = 14
+        v.layer.borderWidth = 1.0
+        v.layer.borderColor = UIColor.separator.cgColor
+        v.translatesAutoresizingMaskIntoConstraints = false
+        return v
+    }()
+
+    private lazy var serverGuideTitleLabel: UILabel = {
+        let label = UILabel()
+        label.text = "How to Start Head Unit Server on Android"
+        label.font = UIFont.systemFont(ofSize: 13, weight: .semibold)
+        label.textColor = .label
+        label.numberOfLines = 0
+        label.translatesAutoresizingMaskIntoConstraints = false
+        return label
+    }()
+
+    private lazy var serverGuideBodyLabel: UILabel = {
+        let label = UILabel()
+        label.text = """
+        1. On your Android phone, open Settings → Connected devices → Connection preferences → Android Auto.
+        2. Scroll to the bottom and tap "Version" 10 times to enable Developer Mode, then confirm with "OK".
+        3. Tap the top-right "⋮" menu and select "Start head unit server".
+        4. Turn on your phone's Personal Hotspot, connect this iPad to the hotspot Wi-Fi, then tap Direct Connect or Scan above.
+        """
+        label.font = UIFont.systemFont(ofSize: 12, weight: .regular)
+        label.textColor = .secondaryLabel
+        label.numberOfLines = 0
         label.translatesAutoresizingMaskIntoConstraints = false
         return label
     }()
@@ -435,7 +443,9 @@ class MainViewController: UIViewController {
         homeContentView.addSubview(directConnectContainer)
         homeContentView.addSubview(orDividerLabel)
         homeContentView.addSubview(connectButton)
-        homeContentView.addSubview(wirelessSetupButton)
+        serverGuideContainer.addSubview(serverGuideTitleLabel)
+        serverGuideContainer.addSubview(serverGuideBodyLabel)
+        homeContentView.addSubview(serverGuideContainer)
         homeContentView.addSubview(activityIndicator)
         homeContentView.addSubview(settingsButton)
         homeContentView.addSubview(disconnectButton)
@@ -444,7 +454,6 @@ class MainViewController: UIViewController {
 
         view.addSubview(videoContainerView)
         view.addSubview(homeScrollView)
-        view.addSubview(floatingSettingsButton)
 
         NSLayoutConstraint.activate([
             videoRenderer.leadingAnchor.constraint(equalTo: videoContainerView.leadingAnchor),
@@ -532,11 +541,19 @@ class MainViewController: UIViewController {
             connectButton.widthAnchor.constraint(equalToConstant: connectControlWidth),
             connectButton.heightAnchor.constraint(equalToConstant: 48),
 
-            // Wireless Setup / QR Pairing Button
-            wirelessSetupButton.centerXAnchor.constraint(equalTo: homeContentView.centerXAnchor),
-            wirelessSetupButton.topAnchor.constraint(equalTo: connectButton.bottomAnchor, constant: 12),
-            wirelessSetupButton.widthAnchor.constraint(equalToConstant: connectControlWidth),
-            wirelessSetupButton.heightAnchor.constraint(equalToConstant: 44),
+            // Server Guide Container
+            serverGuideContainer.centerXAnchor.constraint(equalTo: homeContentView.centerXAnchor),
+            serverGuideContainer.topAnchor.constraint(equalTo: connectButton.bottomAnchor, constant: 20),
+            serverGuideContainer.widthAnchor.constraint(equalToConstant: connectControlWidth),
+
+            serverGuideTitleLabel.topAnchor.constraint(equalTo: serverGuideContainer.topAnchor, constant: 14),
+            serverGuideTitleLabel.leadingAnchor.constraint(equalTo: serverGuideContainer.leadingAnchor, constant: 16),
+            serverGuideTitleLabel.trailingAnchor.constraint(equalTo: serverGuideContainer.trailingAnchor, constant: -16),
+
+            serverGuideBodyLabel.topAnchor.constraint(equalTo: serverGuideTitleLabel.bottomAnchor, constant: 8),
+            serverGuideBodyLabel.leadingAnchor.constraint(equalTo: serverGuideContainer.leadingAnchor, constant: 16),
+            serverGuideBodyLabel.trailingAnchor.constraint(equalTo: serverGuideContainer.trailingAnchor, constant: -16),
+            serverGuideBodyLabel.bottomAnchor.constraint(equalTo: serverGuideContainer.bottomAnchor, constant: -14),
 
             // Disconnect Button
             disconnectButton.centerXAnchor.constraint(equalTo: homeContentView.centerXAnchor),
@@ -546,17 +563,11 @@ class MainViewController: UIViewController {
 
             // Activity Indicator
             activityIndicator.centerXAnchor.constraint(equalTo: homeContentView.centerXAnchor),
-            activityIndicator.topAnchor.constraint(equalTo: wirelessSetupButton.bottomAnchor, constant: 16),
+            activityIndicator.topAnchor.constraint(equalTo: serverGuideContainer.bottomAnchor, constant: 16),
 
             // Settings Button
             settingsButton.trailingAnchor.constraint(equalTo: homeContentView.safeAreaLayoutGuide.trailingAnchor, constant: -16),
             settingsButton.topAnchor.constraint(equalTo: homeContentView.safeAreaLayoutGuide.topAnchor, constant: 12),
-
-            // Floating Settings Button (During projection)
-            floatingSettingsButton.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16),
-            floatingSettingsButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 16),
-            floatingSettingsButton.widthAnchor.constraint(equalToConstant: 44),
-            floatingSettingsButton.heightAnchor.constraint(equalToConstant: 44),
 
             homeContentView.bottomAnchor.constraint(greaterThanOrEqualTo: activityIndicator.bottomAnchor, constant: 48)
         ])
@@ -580,9 +591,7 @@ class MainViewController: UIViewController {
             videoContainerView.isHidden = true
             homeScrollView.isHidden = false
             view.bringSubviewToFront(homeScrollView)
-            floatingSettingsButton.isHidden = true
-            wirelessSetupButton.isHidden = false
-            wirelessSetupButton.isEnabled = true
+            serverGuideContainer.isHidden = false
             connectionManager.screenConfig.clearCustomNegotiatedResolution()
             videoRenderer.reset()
             audioPlayer.reset()
@@ -610,8 +619,7 @@ class MainViewController: UIViewController {
             videoContainerView.isHidden = true
             homeScrollView.isHidden = false
             view.bringSubviewToFront(homeScrollView)
-            floatingSettingsButton.isHidden = true
-            wirelessSetupButton.isHidden = true
+            serverGuideContainer.isHidden = true
             settingsButton.isHidden = false
             titleLabel.isHidden = false
             subtitleLabel.isHidden = false
@@ -631,8 +639,7 @@ class MainViewController: UIViewController {
             videoContainerView.isHidden = true
             homeScrollView.isHidden = false
             view.bringSubviewToFront(homeScrollView)
-            floatingSettingsButton.isHidden = true
-            wirelessSetupButton.isHidden = true
+            serverGuideContainer.isHidden = true
             settingsButton.isHidden = false
             titleLabel.isHidden = false
             subtitleLabel.isHidden = false
@@ -652,8 +659,7 @@ class MainViewController: UIViewController {
             videoContainerView.isHidden = true
             homeScrollView.isHidden = false
             view.bringSubviewToFront(homeScrollView)
-            floatingSettingsButton.isHidden = true
-            wirelessSetupButton.isHidden = true
+            serverGuideContainer.isHidden = true
             settingsButton.isHidden = false
             titleLabel.isHidden = false
             subtitleLabel.isHidden = false
@@ -673,8 +679,7 @@ class MainViewController: UIViewController {
             videoContainerView.isHidden = true
             homeScrollView.isHidden = false
             view.bringSubviewToFront(homeScrollView)
-            floatingSettingsButton.isHidden = true
-            wirelessSetupButton.isHidden = true
+            serverGuideContainer.isHidden = true
             settingsButton.isHidden = false
             titleLabel.isHidden = false
             subtitleLabel.isHidden = false
@@ -694,9 +699,7 @@ class MainViewController: UIViewController {
             homeScrollView.isHidden = true
             videoContainerView.isHidden = false
             view.bringSubviewToFront(videoContainerView)
-            floatingSettingsButton.isHidden = false
-            view.bringSubviewToFront(floatingSettingsButton)
-            wirelessSetupButton.isHidden = true
+            serverGuideContainer.isHidden = true
             activityIndicator.stopAnimating()
             syncVideoAndTouchGeometry()
             videoRenderer.applyGeometry()
@@ -708,8 +711,7 @@ class MainViewController: UIViewController {
             videoContainerView.isHidden = true
             homeScrollView.isHidden = false
             view.bringSubviewToFront(homeScrollView)
-            floatingSettingsButton.isHidden = true
-            wirelessSetupButton.isHidden = true
+            serverGuideContainer.isHidden = true
             audioPlayer.reset()
             settingsButton.isHidden = false
             titleLabel.isHidden = false
@@ -730,9 +732,7 @@ class MainViewController: UIViewController {
             videoContainerView.isHidden = true
             homeScrollView.isHidden = false
             view.bringSubviewToFront(homeScrollView)
-            floatingSettingsButton.isHidden = true
-            wirelessSetupButton.isHidden = false
-            wirelessSetupButton.isEnabled = true
+            serverGuideContainer.isHidden = false
             audioPlayer.reset()
             settingsButton.isHidden = false
             titleLabel.isHidden = false
@@ -753,16 +753,9 @@ class MainViewController: UIViewController {
     }
 
     private func updateConnectButtonTitle() {
-        let title: String
-        switch ProjectionSettings.connectionMode {
-        case .nativeWpp:
-            title = "Auto Scan (WPP & Hotspot)"
-        case .hotspotServer:
-            title = "Scan Headunit Server (Port 5277)"
-        case .manualIp:
-            title = "Direct Connect (Port 5277)"
-        }
-        connectButton.configuration?.title = title
+        var config = connectButton.configuration
+        config?.title = "Scan for Headunit Server (Port 5277)"
+        connectButton.configuration = config
     }
 
     private func startVideoWatchdog() {
@@ -828,11 +821,7 @@ class MainViewController: UIViewController {
 
     @objc private func connectButtonTapped() {
         view.endEditing(true)
-        if ProjectionSettings.connectionMode == .manualIp {
-            directConnectButtonTapped()
-        } else {
-            connectionManager.startDiscovery()
-        }
+        connectionManager.startDiscovery()
     }
 
     @objc private func disconnectButtonTapped() {
@@ -853,7 +842,6 @@ class MainViewController: UIViewController {
         let gpsSource = ProjectionSettings.gpsSource.title
         let dpi = ProjectionSettings.dpi
         let effectiveDpi = ProjectionSettings.effectiveDpi
-        let connectionMode = ProjectionSettings.connectionMode.title
         let autoReconnect = ProjectionSettings.autoReconnect ? "On" : "Off"
         let codec = ProjectionSettings.videoCodecPreference.title
         let audioCodec = ProjectionSettings.audioCodecPreference.title
@@ -861,17 +849,9 @@ class MainViewController: UIViewController {
 
         let alert = UIAlertController(
             title: "Settings",
-            message: "Changes apply on next connection.\nMode: \(connectionMode)\nAuto reconnect: \(autoReconnect)\nVideo: \(codec)\nAudio Codec: \(audioCodec)\nAudio Output: \(audioTarget)\nOrientation: \(orientation)\nResolution: \(resolution)\nFPS: \(fps)\(fps != effectiveFps ? " (effective: \(effectiveFps))" : "")\nDPI: \(dpi)\(dpi != effectiveDpi ? " (effective: \(effectiveDpi))" : "")\nFit: \(ProjectionSettings.videoFitMode.title)\nPosition: \(ProjectionSettings.driverPosition == .left ? "LHD" : "RHD")\nGPS: \(gpsSource)",
+            message: "Changes apply on next connection.\nAuto reconnect: \(autoReconnect)\nVideo: \(codec)\nAudio Codec: \(audioCodec)\nAudio Output: \(audioTarget)\nOrientation: \(orientation)\nResolution: \(resolution)\nFPS: \(fps)\(fps != effectiveFps ? " (effective: \(effectiveFps))" : "")\nDPI: \(dpi)\(dpi != effectiveDpi ? " (effective: \(effectiveDpi))" : "")\nFit: \(ProjectionSettings.videoFitMode.title)\nPosition: \(ProjectionSettings.driverPosition == .left ? "LHD" : "RHD")\nGPS: \(gpsSource)",
             preferredStyle: .actionSheet
         )
-
-        alert.addAction(UIAlertAction(title: "Connection Mode", style: .default) { [weak self] _ in
-            self?.presentConnectionModeMenu()
-        })
-
-        alert.addAction(UIAlertAction(title: "Wireless Setup (QR / Bluetooth Bind)", style: .default) { [weak self] _ in
-            self?.presentWirelessSetupModal()
-        })
 
         let autoReconnectTitle = ProjectionSettings.autoReconnect ? "Auto Reconnect: On" : "Auto Reconnect: Off"
         alert.addAction(UIAlertAction(title: autoReconnectTitle, style: .default) { [weak self] _ in
@@ -954,27 +934,6 @@ class MainViewController: UIViewController {
         }
 
         alert.addAction(UIAlertAction(title: "Close", style: .cancel))
-        configurePopoverSource(for: alert)
-        present(alert, animated: true)
-    }
-
-    private func presentConnectionModeMenu() {
-        let alert = UIAlertController(title: "Connection Mode", message: nil, preferredStyle: .actionSheet)
-
-        for option in ProjectionConnectionMode.allCases {
-            let title = option == ProjectionSettings.connectionMode ? "\(option.title) (Current)" : option.title
-            alert.addAction(UIAlertAction(title: title, style: .default) { [weak self] _ in
-                ProjectionSettings.connectionMode = option
-                self?.updateConnectButtonTitle()
-                self?.updateUIForConnectionState(self?.connectionManager.state ?? .disconnected)
-                self?.presentSettingsMenu()
-            })
-        }
-
-        alert.addAction(UIAlertAction(title: "Back", style: .cancel) { [weak self] _ in
-            self?.presentSettingsMenu()
-        })
-
         configurePopoverSource(for: alert)
         present(alert, animated: true)
     }
@@ -1391,264 +1350,10 @@ class MainViewController: UIViewController {
 
     private func configurePopoverSource(for alert: UIAlertController) {
         if let popover = alert.popoverPresentationController {
-            let src = (connectionManager.state == .running) ? floatingSettingsButton : settingsButton
-            popover.sourceView = src
-            popover.sourceRect = src.bounds
+            popover.sourceView = settingsButton
+            popover.sourceRect = settingsButton.bounds
             popover.permittedArrowDirections = [.up, .down]
         }
-    }
-
-    @objc private func wirelessSetupButtonTapped() {
-        presentWirelessSetupModal()
-    }
-
-    private func presentWirelessSetupModal() {
-        let setupVC = UIViewController()
-        setupVC.title = "Wireless AA Setup & Pair"
-        setupVC.view.backgroundColor = .systemBackground
-
-        let scrollView = UIScrollView()
-        scrollView.translatesAutoresizingMaskIntoConstraints = false
-        scrollView.alwaysBounceVertical = true
-
-        let contentView = UIView()
-        contentView.translatesAutoresizingMaskIntoConstraints = false
-        scrollView.addSubview(contentView)
-        setupVC.view.addSubview(scrollView)
-
-        let segmentedControl = UISegmentedControl(items: [
-            "Phone Hotspot / Helper (5288)",
-            "Native QR (Router / Car AP)"
-        ])
-        segmentedControl.selectedSegmentIndex = 0
-        segmentedControl.translatesAutoresizingMaskIntoConstraints = false
-
-        let hintLabel = UILabel()
-        hintLabel.font = .systemFont(ofSize: 13, weight: .regular)
-        hintLabel.textColor = .secondaryLabel
-        hintLabel.numberOfLines = 0
-        hintLabel.textAlignment = .left
-        hintLabel.translatesAutoresizingMaskIntoConstraints = false
-
-        let qrContainer = UIView()
-        qrContainer.backgroundColor = .secondarySystemBackground
-        qrContainer.layer.cornerRadius = 12
-        qrContainer.layer.masksToBounds = true
-        qrContainer.layer.borderWidth = 1
-        qrContainer.layer.borderColor = UIColor.separator.cgColor
-        qrContainer.translatesAutoresizingMaskIntoConstraints = false
-
-        let qrImageView = UIImageView()
-        qrImageView.contentMode = .scaleAspectFit
-        qrImageView.backgroundColor = .white
-        qrImageView.translatesAutoresizingMaskIntoConstraints = false
-        qrContainer.addSubview(qrImageView)
-
-        let qrNoticeLabel = UILabel()
-        qrNoticeLabel.font = .systemFont(ofSize: 13, weight: .medium)
-        qrNoticeLabel.textColor = .systemOrange
-        qrNoticeLabel.numberOfLines = 0
-        qrNoticeLabel.textAlignment = .center
-        qrNoticeLabel.translatesAutoresizingMaskIntoConstraints = false
-        qrNoticeLabel.isHidden = true
-        qrContainer.addSubview(qrNoticeLabel)
-
-        let stackView = UIStackView()
-        stackView.axis = .vertical
-        stackView.spacing = 12
-        stackView.alignment = .fill
-        stackView.translatesAutoresizingMaskIntoConstraints = false
-
-        let ssidField = UITextField()
-        ssidField.borderStyle = .roundedRect
-        ssidField.placeholder = "Wi-Fi / Hotspot SSID"
-        ssidField.text = ProjectionSettings.wifiSsid
-
-        let passField = UITextField()
-        passField.borderStyle = .roundedRect
-        passField.placeholder = "Wi-Fi / Hotspot Password"
-        passField.text = ProjectionSettings.wifiPasskey
-
-        let bssidField = UITextField()
-        bssidField.borderStyle = .roundedRect
-        bssidField.placeholder = "Router BSSID (MAC, e.g. 12:34:56:78:9a:bc)"
-        bssidField.text = ProjectionSettings.wifiBssid
-
-        let btMacField = UITextField()
-        btMacField.borderStyle = .roundedRect
-        btMacField.placeholder = "Connected Bluetooth MAC (e.g. 11:22:33:44:55:66)"
-        btMacField.text = ProjectionSettings.bluetoothMac
-
-        let currentIp = NetworkAddresses.stationIpv4() ?? NetworkAddresses.currentHotspotGatewayIpv4() ?? "192.168.43.2"
-        let ipLabel = UILabel()
-        ipLabel.text = "iPad IP: \(currentIp):5288  |  WPP: 5299"
-        ipLabel.font = .monospacedDigitSystemFont(ofSize: 13, weight: .medium)
-        ipLabel.textColor = .secondaryLabel
-        ipLabel.textAlignment = .center
-
-        func makeRow(label: String, field: UITextField) -> UIStackView {
-            let container = UIStackView()
-            container.axis = .vertical
-            container.spacing = 4
-            let lbl = UILabel()
-            lbl.text = label
-            lbl.font = .systemFont(ofSize: 12, weight: .semibold)
-            lbl.textColor = .secondaryLabel
-            container.addArrangedSubview(lbl)
-            container.addArrangedSubview(field)
-            return container
-        }
-
-        let ssidRow = makeRow(label: "Wi-Fi / Hotspot SSID", field: ssidField)
-        let passRow = makeRow(label: "Wi-Fi / Hotspot Password", field: passField)
-        let bssidRow = makeRow(label: "Router BSSID (MAC Address)", field: bssidField)
-        let btMacRow = makeRow(label: "Bluetooth MAC Address", field: btMacField)
-
-        stackView.addArrangedSubview(ssidRow)
-        stackView.addArrangedSubview(passRow)
-        stackView.addArrangedSubview(bssidRow)
-        stackView.addArrangedSubview(btMacRow)
-        stackView.addArrangedSubview(ipLabel)
-
-        contentView.addSubview(segmentedControl)
-        contentView.addSubview(hintLabel)
-        contentView.addSubview(qrContainer)
-        contentView.addSubview(stackView)
-
-        func updateQr() {
-            let s = ssidField.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            let p = passField.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            let b = bssidField.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            let bt = btMacField.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-
-            if segmentedControl.selectedSegmentIndex == 0 {
-                // Mode 0: Phone Hotspot / Helper
-                hintLabel.text = "当手机开启个人热点（iPad 连接手机热点）时，手机处于 AP 模式，无法使用原生 AA 扫码连接。请使用以下方式自动免 5277 连接：\n① 在手机安装 Headunit Revived Wireless Helper 扫下方二维码，蓝牙连接后即可自动推送至本机 \(currentIp):5288；\n② 或在手机开启 5277 开发者服务由本机自动连接。"
-                bssidRow.isHidden = true
-                btMacRow.isHidden = true
-
-                let encodedSsid = s.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? s
-                let encodedPass = p.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? p
-                let uri = "wirelesshelper://config?ssid=\(encodedSsid)&pass=\(encodedPass)"
-                qrImageView.image = QrCodeGenerator.generateQrCode(content: uri, size: 240)
-                qrImageView.isHidden = false
-                qrNoticeLabel.isHidden = true
-            } else {
-                // Mode 1: Native QR (Router / Car AP)
-                hintLabel.text = "适用于 iPad 与手机处于同一路由器 Wi-Fi、随身 Wi-Fi 或蜂窝 iPad 热点环境。请输入真实 Router BSSID 与已连接车载/iPad的真实蓝牙 MAC 地址："
-                bssidRow.isHidden = false
-                btMacRow.isHidden = false
-
-                let snapshot = ProjectionQrSnapshot(
-                    ssid: s.isEmpty ? nil : s,
-                    passkey: p.isEmpty ? nil : p,
-                    bssid: b.isEmpty ? nil : b,
-                    ip: currentIp,
-                    listeningPort: 5299,
-                    bluetoothMac: bt.isEmpty ? nil : bt,
-                    bluetoothName: "HeadunitPad"
-                )
-                let decision = ProjectionQrPolicy.decide(snapshot: snapshot)
-                switch decision {
-                case .show(let uri):
-                    qrImageView.image = QrCodeGenerator.generateQrCode(content: uri, size: 240)
-                    qrImageView.isHidden = false
-                    qrNoticeLabel.isHidden = true
-                case .refuse(let refusal):
-                    qrImageView.image = nil
-                    qrImageView.isHidden = true
-                    qrNoticeLabel.isHidden = false
-                    let reasonDesc: String
-                    switch refusal {
-                    case .noCredentials:
-                        reasonDesc = "请填写 Wi-Fi SSID 和密码"
-                    case .noBssid:
-                        reasonDesc = "请输入合法的路由器 BSSID (MAC 地址)"
-                    case .noBluetoothIdentity:
-                        reasonDesc = "请输入已连接的真实车载或 iPad 蓝牙 MAC 地址（不能使用占位符 AA:BB:CC:DD:EE:FF）"
-                    case .dongleIdentity:
-                        reasonDesc = "蓝牙名称不能包含 Dongle 关键字"
-                    case .noAddress:
-                        reasonDesc = "未获取到有效的本机 IP 地址"
-                    default:
-                        reasonDesc = "\(refusal)"
-                    }
-                    qrNoticeLabel.text = "⚠️ 无法生成原生配对二维码\n\(reasonDesc)\n请完善下方配置后自动生成。"
-                }
-            }
-        }
-
-        segmentedControl.addAction(UIAction { _ in updateQr() }, for: .valueChanged)
-
-        [ssidField, passField, bssidField, btMacField].forEach { tf in
-            tf.font = .systemFont(ofSize: 14)
-            tf.autocorrectionType = .no
-            tf.autocapitalizationType = .none
-            tf.addAction(UIAction { _ in updateQr() }, for: .editingChanged)
-        }
-
-        updateQr()
-
-        NSLayoutConstraint.activate([
-            scrollView.topAnchor.constraint(equalTo: setupVC.view.safeAreaLayoutGuide.topAnchor),
-            scrollView.leadingAnchor.constraint(equalTo: setupVC.view.leadingAnchor),
-            scrollView.trailingAnchor.constraint(equalTo: setupVC.view.trailingAnchor),
-            scrollView.bottomAnchor.constraint(equalTo: setupVC.view.bottomAnchor),
-
-            contentView.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor),
-            contentView.leadingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.leadingAnchor),
-            contentView.trailingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.trailingAnchor),
-            contentView.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor),
-            contentView.widthAnchor.constraint(equalTo: scrollView.frameLayoutGuide.widthAnchor),
-
-            segmentedControl.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 16),
-            segmentedControl.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
-            segmentedControl.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
-
-            hintLabel.topAnchor.constraint(equalTo: segmentedControl.bottomAnchor, constant: 14),
-            hintLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
-            hintLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
-
-            qrContainer.topAnchor.constraint(equalTo: hintLabel.bottomAnchor, constant: 16),
-            qrContainer.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
-            qrContainer.widthAnchor.constraint(equalToConstant: 240),
-            qrContainer.heightAnchor.constraint(equalToConstant: 240),
-
-            qrImageView.topAnchor.constraint(equalTo: qrContainer.topAnchor),
-            qrImageView.leadingAnchor.constraint(equalTo: qrContainer.leadingAnchor),
-            qrImageView.trailingAnchor.constraint(equalTo: qrContainer.trailingAnchor),
-            qrImageView.bottomAnchor.constraint(equalTo: qrContainer.bottomAnchor),
-
-            qrNoticeLabel.leadingAnchor.constraint(equalTo: qrContainer.leadingAnchor, constant: 16),
-            qrNoticeLabel.trailingAnchor.constraint(equalTo: qrContainer.trailingAnchor, constant: -16),
-            qrNoticeLabel.centerYAnchor.constraint(equalTo: qrContainer.centerYAnchor),
-
-            stackView.topAnchor.constraint(equalTo: qrContainer.bottomAnchor, constant: 16),
-            stackView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 24),
-            stackView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -24),
-            stackView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -24)
-        ])
-
-        setupVC.navigationItem.rightBarButtonItem = UIBarButtonItem(title: "Save & Done", style: .done, target: nil, action: nil)
-        setupVC.navigationItem.rightBarButtonItem?.primaryAction = UIAction { [weak setupVC, weak ssidField, weak passField, weak bssidField, weak btMacField] _ in
-            if let s = ssidField?.text?.trimmingCharacters(in: .whitespacesAndNewlines) {
-                ProjectionSettings.wifiSsid = s
-            }
-            if let p = passField?.text?.trimmingCharacters(in: .whitespacesAndNewlines) {
-                ProjectionSettings.wifiPasskey = p
-            }
-            if let b = bssidField?.text?.trimmingCharacters(in: .whitespacesAndNewlines) {
-                ProjectionSettings.wifiBssid = b
-            }
-            if let bt = btMacField?.text?.trimmingCharacters(in: .whitespacesAndNewlines) {
-                ProjectionSettings.bluetoothMac = bt
-            }
-            setupVC?.dismiss(animated: true)
-        }
-
-        let nav = UINavigationController(rootViewController: setupVC)
-        nav.modalPresentationStyle = .formSheet
-        present(nav, animated: true)
     }
 
 }

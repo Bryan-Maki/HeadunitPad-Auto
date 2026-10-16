@@ -72,7 +72,6 @@ class ConnectionManager {
     private let tcpHandler = TcpHandler()
     private let wirelessHelperServer = WirelessHelperServer()
     private let legacyAapServer = WirelessHelperServer()
-    private let wppServer = WppTcpServer()
     private let arbiter = ConnectionArbiter()
     // TeardownGuard is used via its static methods (e.g. TeardownGuard.runThenClose(...))
     private let playbackSnapshot = ReconnectPlaybackSnapshot()
@@ -112,14 +111,8 @@ class ConnectionManager {
         discovery.delegate = self
         wirelessHelperServer.delegate = self
         legacyAapServer.delegate = self
-        wppServer.delegate = self
         wirelessHelperServer.start(port: 5288, enableBonjour: true)
         legacyAapServer.start(port: 5000, enableBonjour: false)
-        wppServer.start(port: 5299)
-        wppServer.onRawAapConnectionDetected = { [weak self] connection, initialData in
-            let host = Self.hostString(from: connection.endpoint)
-            self?.acceptIncomingAapConnection(connection, initialData: initialData, remoteHost: host)
-        }
         installAapTransport(connection: tcpHandler)
         microphoneCapture.onPCMData = { [weak self] data in
             self?.aapTransport?.sendMicrophoneAudioData(data)
@@ -167,7 +160,6 @@ class ConnectionManager {
 
         wirelessHelperServer.start(port: 5288, enableBonjour: true)
         legacyAapServer.start(port: 5000, enableBonjour: false)
-        wppServer.start(port: 5299)
         discovery.startScan(ports: [Discovery.headunitPort])
     }
 
@@ -241,9 +233,6 @@ class ConnectionManager {
                 self.updateStatus("Ready to connect")
                 if !self.wirelessHelperServer.isRunning {
                     self.wirelessHelperServer.start(port: 5288, enableBonjour: true)
-                }
-                if !self.wppServer.isRunning {
-                    self.wppServer.start(port: 5299)
                 }
             },
             close: { [weak self] in
@@ -588,9 +577,6 @@ extension ConnectionManager: AapTransportDelegate {
         if !wirelessHelperServer.isRunning {
             wirelessHelperServer.start(port: 5288, enableBonjour: true)
         }
-        if !wppServer.isRunning {
-            wppServer.start(port: 5299)
-        }
 
         consecutiveStarvedSessions = VideoStarvationPolicy.nextStreak(
             current: consecutiveStarvedSessions,
@@ -659,7 +645,6 @@ extension ConnectionManager {
 
 extension ConnectionManager: WirelessHelperServerDelegate {
     func wirelessHelperServer(_ server: WirelessHelperServer, didAccept connection: NWConnection, remoteHost: String?, initialData: Data) {
-        wppServer.notifyTcpSessionUp()
         acceptIncomingAapConnection(connection, initialData: initialData, remoteHost: remoteHost)
     }
 
@@ -670,23 +655,5 @@ extension ConnectionManager: WirelessHelperServerDelegate {
             updateStatus(error.localizedDescription)
             scheduleReconnectIfNeeded(reason: "Wireless Helper listener failed")
         }
-    }
-}
-
-extension ConnectionManager: WppTcpServerDelegate {
-    func wppTcpServer(_ server: WppTcpServer, didCompleteHandshakeFor clientIp: String) {
-        print("ConnectionManager: WPP Handshake completed successfully with \(clientIp)")
-        updateStatus("WPP Handshake completed with \(clientIp). Awaiting phone connection...")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) { [weak self] in
-            guard let self = self else { return }
-            if self.state == .discovering || self.state == .waitingForWirelessHelper {
-                print("ConnectionManager: No inbound AAP connection received after WPP, attempting fallback connect to \(clientIp):5277")
-                self.connect(to: clientIp)
-            }
-        }
-    }
-
-    func wppTcpServer(_ server: WppTcpServer, didFailWith error: Error) {
-        print("ConnectionManager: WPP server session error: \(error.localizedDescription)")
     }
 }

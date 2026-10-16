@@ -291,8 +291,11 @@ public enum ProjectionSettings {
 
     public static var connectionMode: ProjectionConnectionMode {
         get {
+            guard defaults.object(forKey: connectionModeKey) != nil else {
+                return .hotspotServer
+            }
             let value = defaults.integer(forKey: connectionModeKey)
-            return ProjectionConnectionMode(rawValue: value) ?? .auto
+            return ProjectionConnectionMode(rawValue: value) ?? .hotspotServer
         }
         set {
             defaults.set(newValue.rawValue, forKey: connectionModeKey)

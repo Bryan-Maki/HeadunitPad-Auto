@@ -234,4 +234,16 @@
 - **跨方向旋转自适应与触控对齐**：
   - 消除 `MainViewController` 中使用 H.264 SPS 宏块对齐高度（1088）覆盖握手高度（1080）引发的边距畸变 Bug。
   - `HeadUnitScreenConfig.getMargins()` 增加跨方向旋转保护，当分辨率锁定且屏幕旋转导致方向不匹配时，保留已协商边距，避免畸变裁切；`checkAndNotifyMarginDivergence()` 增加方向不匹配拦截。
-  - `TouchCoordinateMapper` 在 `.fill` / `.fillMargin` 发生跨方向旋转降级为 `.resizeAspect` 时，增加黑边偏移扣除算法，确保竖屏状态下触控坐标 100% 精确对齐。
+  - `TouchCoordinateMapper` 在 `.fill` / `.fillMargin` 发生跨方向旋转降级为 `.resizeAspect` 时，增加黑边偏移扣除算法，确保竖屏状态下触控坐标 100% 精确对齐。
+
+### Product Simplification & UI Experience Hardening (2026-10-16)
+- **移除前端 QR / 原生 WPP 冗余入口**：
+  - 将 `ProjectionSettings.connectionMode` 默认回退值统一设为 `.hotspotServer`，专注于最稳定可靠的手机 `Port 5277 Head Unit Server` 直连与自动扫描链路。
+  - 从主界面 `MainViewController` 中彻底移除 `wirelessSetupButton` 与 `presentWirelessSetupModal` 扫码弹窗；从设置菜单中移除 `Connection Mode` 与 `Wireless Setup` 项；保留底层 `QR/` 与 `WPP/` 模块及枚举定义以确保 CI 单元测试 100% 编译与执行通过。
+  - 停用 `ConnectionManager` 中的 `wppServer (5299)` 默认常驻启动，避免不必要的端口占用与后台会话竞争。
+- **投屏画面 100% 纯净无遮挡**：
+  - 彻底删除主视图层级上的悬浮设置按钮（`floatingSettingsButton`）及其布局约束与显隐控制代码。
+  - 仅保留挂载在 `homeContentView` 上的主页面设置按钮（`settingsButton`），进入 Android Auto（`.running`）投屏后随主页面自动全屏隐藏，杜绝投屏画面右上角的任何控件遮挡。
+- **新增手机端 Head Unit Server 英文新手引导卡片**：
+  - 在主页面 `connectButton` 正下方新增圆角卡片 `serverGuideContainer`（`How to Start Head Unit Server on Android`），以清晰地道的 4 步英文指引引导用户：开启 Android Auto 开发者模式、启动 `Head unit server`、开启手机个人热点并连接 iPad。
+  - 仅在 `.disconnected` 与 `.error` 状态下展示，连接中与投屏状态下自动隐藏，保证界面清爽高效。
