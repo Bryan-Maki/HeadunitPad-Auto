@@ -685,7 +685,7 @@ class AapTransport {
         // outer cap so a stalled write cannot leave the disconnect hanging.
         send(message: .userSelectionByebyeRequest) { [weak self] error in
             guard let self else { return }
-            AppLog.w("Byebye write finished, error=\(error.map(String.init(describing:)) ?? "none", tag: "AapTransport")")
+            AppLog.w("Byebye write finished, error=\(error.map(String.init(describing:)) ?? "none")", tag: "AapTransport")
             self.gracefulDisconnectLock.lock()
             self.gracefulDisconnectWriteFlushed = error == nil
             self.gracefulDisconnectLock.unlock()
@@ -1248,7 +1248,7 @@ class AapTransport {
             mediaSource: source,
             playbackSeconds: seconds
         )
-        AppLog.i("MPB status state=\(stateValue.map(String.init) ?? "-", tag: "AapTransport") source='\(source ?? "")' seconds=\(seconds.map(String.init) ?? "-")")
+        AppLog.i("MPB status state=\(stateValue.map(String.init) ?? "-") source='\(source ?? "")' seconds=\(seconds.map(String.init) ?? "-")", tag: "AapTransport")
         delegate?.aapTransport(self, didReceivePlaybackStatus: status)
     }
 
@@ -1263,7 +1263,7 @@ class AapTransport {
             durationSeconds: ProtoWire.extractFirstVarint(from: payload, fieldNumber: 6),
             albumArt: ProtoWire.extractFirstBytes(from: payload, fieldNumber: 4)
         )
-        AppLog.i("MPB metadata title='\(metadata.title ?? "", tag: "AapTransport")' artist='\(metadata.artist ?? "")' album='\(metadata.album ?? "")' artBytes=\(metadata.albumArt?.count ?? 0)")
+        AppLog.i("MPB metadata title='\(metadata.title ?? "")' artist='\(metadata.artist ?? "")' album='\(metadata.album ?? "")' artBytes=\(metadata.albumArt?.count ?? 0)", tag: "AapTransport")
         delegate?.aapTransport(self, didReceiveMediaMetadata: metadata)
     }
 
@@ -1271,7 +1271,7 @@ class AapTransport {
         switch message.type {
         case 0x8003: // NavigationStatus.MsgType.STATUS
             let status = ProtoWire.extractFirstVarint(from: message.payload, fieldNumber: 1)
-            AppLog.i("NAV status=\(status.map(String.init) ?? "-", tag: "AapTransport")")
+            AppLog.i("NAV status=\(status.map(String.init) ?? "-")", tag: "AapTransport")
 
         case 0x8004: // NavigationStatus.MsgType.NEXTTURNDETAILS
             let road = ProtoWire.extractFirstString(from: message.payload, fieldNumber: 1) ?? ""
@@ -1282,19 +1282,19 @@ class AapTransport {
 
             let sideName = navSideName(side)
             let eventName = navEventName(nextTurn)
-            AppLog.i("NAV detail road='\(road)' side=\(sideName)(\(side)) next=\(eventName)(\(nextTurn)) turnNo=\(turnNumber.map(String.init) ?? "-", tag: "AapTransport") angle=\(turnAngle.map(String.init) ?? "-")")
+            AppLog.i("NAV detail road='\(road)' side=\(sideName)(\(side)) next=\(eventName)(\(nextTurn)) turnNo=\(turnNumber.map(String.init) ?? "-") angle=\(turnAngle.map(String.init) ?? "-")", tag: "AapTransport")
 
         case 0x8005: // NavigationStatus.MsgType.NEXTTURNDISTANCEANDTIME
             let distance = ProtoWire.extractFirstVarint(from: message.payload, fieldNumber: 1)
             let time = ProtoWire.extractFirstVarint(from: message.payload, fieldNumber: 2)
-            AppLog.i("NAV distance/time distanceM=\(distance.map(String.init) ?? "-", tag: "AapTransport") etaSec=\(time.map(String.init) ?? "-")")
+            AppLog.i("NAV distance/time distanceM=\(distance.map(String.init) ?? "-") etaSec=\(time.map(String.init) ?? "-")", tag: "AapTransport")
 
         default:
             let road = ProtoWire.extractFirstString(from: message.payload, fieldNumber: 1)
             let f1 = ProtoWire.extractFirstVarint(from: message.payload, fieldNumber: 1)
             let f2 = ProtoWire.extractFirstVarint(from: message.payload, fieldNumber: 2)
             let f3 = ProtoWire.extractFirstVarint(from: message.payload, fieldNumber: 3)
-            AppLog.w("NAV unknown type=\(message.type) size=\(message.payload.count) road='\(road ?? "", tag: "AapTransport")' f1=\(f1.map(String.init) ?? "-") f2=\(f2.map(String.init) ?? "-") f3=\(f3.map(String.init) ?? "-")")
+            AppLog.w("NAV unknown type=\(message.type) size=\(message.payload.count) road='\(road ?? "")' f1=\(f1.map(String.init) ?? "-") f2=\(f2.map(String.init) ?? "-") f3=\(f3.map(String.init) ?? "-")", tag: "AapTransport")
         }
     }
 
