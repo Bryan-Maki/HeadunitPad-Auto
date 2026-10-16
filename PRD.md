@@ -333,4 +333,23 @@
   - `ConnectionManager` 在断连释放 `aapTransport` 前持久化保留 `lastSessionDiagnosticLines`；`LogExporter.generateFullReport()` 新增 `--- CONNECTION & AAP DIAGNOSTICS ---` 板块，完整导出握手与全通道 trace。
 - **全新 App Icon 应用图标集成**：
   - 将 AppIcon 转换为标准 1024x1024 24-bit RGB（无 Alpha 透明通道）PNG 格式，更新 `Contents.json` 包含 universal、dark 和 tinted 规格，彻底杜绝 `actool` 编译警告与提交黑底问题。
+
+### Rotation Aspect Distortion Fix via Zero-Disconnect 0x8009 Margin Reflow (2026-10-16)
+- **方案 C 零断连 0x8009 跨方向动态 Margin 重排与 1:1 满屏裁剪**：
+  - 修复 `HeadUnitScreenConfig.getMargins()` 与 `checkAndNotifyMarginDivergence()`：放开 `.fillMargin` 模式在 `isResolutionLocked` 下跨方向旋转（例如 1920x1080 底层编码流在 3:4 竖屏 iPad 旋转）时的动态边距计算门禁，精准算出竖屏有效视口 `810x1080`（`widthMargin = 1110, heightMargin = 0`），使有效视口比例与屏幕比例（0.75）完全一致，保持 1:1 正方形像素无损满屏显示。
+  - 触发 `onMarginsDivergedDetailed` 动态向手机发送 `UpdateUiConfigRequest (0x8009)`，驱动手机 Gearhead 内部布局即时重排适配竖屏，零断连、零闪烁、触控坐标零漂移。
+  - 优化 `Auto`（`.system`）方向下的初始推荐 DPI：当协商分辨率短边为 1080p 时钳制推荐 DPI `<= 160`（720p 钳制 `<= 120`，1440p 钳制 `<= 210`），确保旋转至 810px 窄边时拥有充足 dp 宽度展示 Coolwalk 舒展卡片布局。
+- **消除 `viewWillTransition` 篡改分辨率与自锁重连 Bug**：
+  - 彻底删除在旋转回调中调用 `clearCustomNegotiatedResolution()`、`clearAnnouncedMargins()`、`initScreen(...)` 及 `orientationReconnectTimer` 强行重连的代码，杜绝分辨率被反向篡改为竖屏引发 4.21:1 畸变拉伸的致命 Bug。
+  - 仅在旋转动画 alongside 及 completion 中调用 `updateDimensions` 与 `syncVideoAndTouchGeometry()` + `videoRenderer.applyGeometry()`，平滑过渡。
+- **物理级 SPS 真实视频流尺寸防变形兜底**：
+  - 在 `H264VideoRendererView` 的 `GeometryCache` 中引入 `streamSize: CGSize`；当实际解码流的横竖方向与配置的 `codecWidth x codecHeight` 相反时，强制走 `.resizeAspect` 等比缩放，彻底杜绝任何极端情况下画面被拉长或压扁。
+  - 接收到新 SPS 参数集时触发主线程 `applyGeometry()` 确保尺寸即时同步。
+- **修复 `reconnectForOrientationChange()` 解锁时机与延迟**：
+  - 将分辨率与边距清空移至 `requestGracefulDisconnect` 回调完成、旧连接断开之后执行，避免被自身 `isResolutionLocked` 检查拦截；重连延迟调整为稳态 `0.65s`。
+- **HUD 视口与编码分辨率双重显式显示**：
+  - 当存在 Margin 裁剪时，Performance Overlay 实时显示有效视口与编码分辨率（例如 `810x1080 (1920x1080)`），清晰呈现裁剪视口状态。
+- **单元测试验证**：
+  - 在 `Phase1ScreenAndFramingTests` 中新增跨方向动态 Margin 计算、1:1 视口比例、0x8009 边距分发与系统方向 DPI 钳制的全套断言。
+
 

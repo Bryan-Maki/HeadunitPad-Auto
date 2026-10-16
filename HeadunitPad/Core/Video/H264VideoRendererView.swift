@@ -118,6 +118,7 @@ public class H264VideoRendererView: UIView {
         let codecH: Int
         let marginW: Int
         let marginH: Int
+        let streamSize: CGSize
     }
     private var lastAppliedGeometry: GeometryCache?
 
@@ -192,10 +193,22 @@ public class H264VideoRendererView: UIView {
 
         let screenConfig = HeadUnitScreenConfig.shared
         let fitMode = self.fitMode
-        let codecW = self.codecWidth > 0 ? self.codecWidth : screenConfig.getNegotiatedWidth()
-        let codecH = self.codecHeight > 0 ? self.codecHeight : screenConfig.getNegotiatedHeight()
-        let marginW = self.widthMargin
-        let marginH = self.heightMargin
+        var codecW = self.codecWidth > 0 ? self.codecWidth : screenConfig.getNegotiatedWidth()
+        var codecH = self.codecHeight > 0 ? self.codecHeight : screenConfig.getNegotiatedHeight()
+        var marginW = self.widthMargin
+        var marginH = self.heightMargin
+
+        let streamSize = lastNotifiedVideoSize
+        if streamSize.width > 0 && streamSize.height > 0 {
+            let streamIsLandscape = streamSize.width > streamSize.height
+            let configCodecIsLandscape = codecW > codecH
+            if streamIsLandscape != configCodecIsLandscape {
+                codecW = Int(streamSize.width)
+                codecH = Int(streamSize.height)
+                marginW = 0
+                marginH = 0
+            }
+        }
 
         let currentGeom = GeometryCache(
             bounds: viewBounds,
@@ -203,7 +216,8 @@ public class H264VideoRendererView: UIView {
             codecW: codecW,
             codecH: codecH,
             marginW: marginW,
-            marginH: marginH
+            marginH: marginH,
+            streamSize: streamSize
         )
         if lastAppliedGeometry == currentGeom {
             return
@@ -534,7 +548,9 @@ public class H264VideoRendererView: UIView {
                 if resolved != lastNotifiedVideoSize {
                     lastNotifiedVideoSize = resolved
                     DispatchQueue.main.async { [weak self] in
-                        self?.onVideoSizeResolved?(resolved)
+                        guard let self = self else { return }
+                        self.onVideoSizeResolved?(resolved)
+                        self.applyGeometry()
                     }
                 }
             }

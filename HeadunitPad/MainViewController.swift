@@ -371,63 +371,27 @@ class MainViewController: UIViewController {
 
     override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
         super.viewWillTransition(to: size, with: coordinator)
-        let wasResolutionLocked = HeadUnitScreenConfig.shared.isResolutionLocked
-        let wasCodecPortrait = HeadUnitScreenConfig.shared.negotiatedHeight > HeadUnitScreenConfig.shared.negotiatedWidth
+
         coordinator.animate(alongsideTransition: { [weak self] _ in
             guard let self = self else { return }
-            let screen = self.view.window?.screen ?? UIScreen.main
-            let nativeScale = screen.nativeScale
-            let w: Int
-            let h: Int
-            switch ProjectionSettings.orientation {
-            case .landscape:
-                w = Int((max(size.width, size.height) * nativeScale).rounded())
-                h = Int((min(size.width, size.height) * nativeScale).rounded())
-            case .portrait:
-                w = Int((min(size.width, size.height) * nativeScale).rounded())
-                h = Int((max(size.width, size.height) * nativeScale).rounded())
-            case .system:
-                w = Int((size.width * nativeScale).rounded())
-                h = Int((size.height * nativeScale).rounded())
-            }
+            let scale = UIScreen.main.scale
+            let w = Int(size.width * scale)
+            let h = Int(size.height * scale)
             if w > 0 && h > 0 {
-                if ProjectionSettings.orientation == .system && wasResolutionLocked && ((h > w) != wasCodecPortrait) {
-                    HeadUnitScreenConfig.shared.clearCustomNegotiatedResolution()
-                    HeadUnitScreenConfig.shared.clearAnnouncedMargins()
-                    HeadUnitScreenConfig.shared.initScreen(
-                        width: w,
-                        height: h,
-                        fitMode: ProjectionSettings.videoFitMode,
-                        requestedResolution: ProjectionSettings.resolution
-                    )
-                    self.connectionManager.screenConfig.initScreen(
-                        width: w,
-                        height: h,
-                        fitMode: ProjectionSettings.videoFitMode,
-                        requestedResolution: ProjectionSettings.resolution
-                    )
-                } else {
-                    _ = HeadUnitScreenConfig.shared.updateDimensions(width: w, height: h)
-                }
+                _ = HeadUnitScreenConfig.shared.updateDimensions(width: w, height: h)
             }
             self.syncVideoAndTouchGeometry()
+            self.videoRenderer.applyGeometry()
         }, completion: { [weak self] _ in
             guard let self = self else { return }
-            self.videoRenderer.applyGeometry()
-            self.syncVideoAndTouchGeometry()
-            let screen = self.view.window?.screen ?? UIScreen.main
-            let nativeScale = screen.nativeScale
-            let currentW = Int((self.view.bounds.width * nativeScale).rounded())
-            let currentH = Int((self.view.bounds.height * nativeScale).rounded())
-            let isNowPortrait = currentH > currentW
-            if ProjectionSettings.orientation == .system && (isNowPortrait != wasCodecPortrait) {
-                if self.connectionManager.state == .running {
-                    self.orientationReconnectTimer?.invalidate()
-                    self.orientationReconnectTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: false) { [weak self] _ in
-                        self?.connectionManager.reconnectForOrientationChange()
-                    }
-                }
+            let scale = UIScreen.main.scale
+            let w = Int(self.view.bounds.width * scale)
+            let h = Int(self.view.bounds.height * scale)
+            if w > 0 && h > 0 {
+                _ = HeadUnitScreenConfig.shared.updateDimensions(width: w, height: h)
             }
+            self.syncVideoAndTouchGeometry()
+            self.videoRenderer.applyGeometry()
         })
     }
 
@@ -1135,7 +1099,15 @@ class MainViewController: UIViewController {
                 self.syncVideoAndTouchGeometry()
 
                 let newIsPortrait = HeadUnitScreenConfig.shared.isPortraitDisplay
-                if oldIsPortrait != newIsPortrait, (self.connectionManager.state == .running || self.connectionManager.state == .handshaking) {
+                if self.connectionManager.state != .running && self.connectionManager.state != .handshaking {
+                    HeadUnitScreenConfig.shared.clearCustomNegotiatedResolution()
+                    HeadUnitScreenConfig.shared.clearAnnouncedMargins()
+                    HeadUnitScreenConfig.shared.initScreen(
+                        width: w,
+                        height: h,
+                        fitMode: ProjectionSettings.videoFitMode,
+                        requestedResolution: ProjectionSettings.resolution
+                    )
                     self.connectionManager.screenConfig.clearCustomNegotiatedResolution()
                     self.connectionManager.screenConfig.clearAnnouncedMargins()
                     self.connectionManager.screenConfig.initScreen(
@@ -1144,6 +1116,7 @@ class MainViewController: UIViewController {
                         fitMode: ProjectionSettings.videoFitMode,
                         requestedResolution: ProjectionSettings.resolution
                     )
+                } else if oldIsPortrait != newIsPortrait {
                     self.connectionManager.reconnectForOrientationChange()
                 }
 
@@ -1529,7 +1502,11 @@ class MainViewController: UIViewController {
         let pcmMs = audioPlayer.mediaBufferDepthMs
         let kf = videoRenderer.keyframeRepairs
         let drop = videoRenderer.droppedFrames
-        let resText = "\(videoRenderer.codecWidth)x\(videoRenderer.codecHeight)"
+        let activeW = max(1, videoRenderer.codecWidth - videoRenderer.widthMargin)
+        let activeH = max(1, videoRenderer.codecHeight - videoRenderer.heightMargin)
+        let resText = (videoRenderer.widthMargin > 0 || videoRenderer.heightMargin > 0)
+            ? "\(activeW)x\(activeH) (\(videoRenderer.codecWidth)x\(videoRenderer.codecHeight))"
+            : "\(videoRenderer.codecWidth)x\(videoRenderer.codecHeight)"
 
         let snapshot = PerformanceSnapshot(
             fps: fps,

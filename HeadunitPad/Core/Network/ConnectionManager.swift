@@ -256,7 +256,29 @@ class ConnectionManager {
                 self.activeConnection = nil
                 self.aapTransport = nil
                 self.state = .disconnected
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+
+                let screen = UIScreen.main
+                let scale = screen.nativeScale
+                let w = Int((screen.bounds.width * scale).rounded())
+                let h = Int((screen.bounds.height * scale).rounded())
+                HeadUnitScreenConfig.shared.clearCustomNegotiatedResolution()
+                HeadUnitScreenConfig.shared.clearAnnouncedMargins()
+                HeadUnitScreenConfig.shared.initScreen(
+                    width: w,
+                    height: h,
+                    fitMode: ProjectionSettings.videoFitMode,
+                    requestedResolution: ProjectionSettings.resolution
+                )
+                self.screenConfig.clearCustomNegotiatedResolution()
+                self.screenConfig.clearAnnouncedMargins()
+                self.screenConfig.initScreen(
+                    width: w,
+                    height: h,
+                    fitMode: ProjectionSettings.videoFitMode,
+                    requestedResolution: ProjectionSettings.resolution
+                )
+
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.65) {
                     self.connect(to: targetDevice, userInitiated: true)
                 }
             }

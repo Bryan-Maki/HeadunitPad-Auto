@@ -309,12 +309,12 @@ public final class HeadUnitScreenConfig {
         let isDisplayPortrait = screenHeightPx > screenWidthPx
         let isCodecPortrait = codecH > codecW
 
-        // When resolution is locked during active streaming and the user rotates the iPad
-        // across orientations (e.g. landscape stream on portrait screen or vice versa),
-        // do NOT crop >50% of the codec canvas into the opposite aspect ratio.
-        // Preserve the last announced margins (or 0,0) so H264VideoRendererView's
-        // isMismatched branch cleanly letterboxes (.resizeAspect) without disconnecting.
-        if isResolutionLocked && (isDisplayPortrait != isCodecPortrait) {
+        // In .fillMargin mode, allow dynamic cross-orientation margin calculation
+        // (e.g. 1920x1080 -> 810x1080 with widthMargin=1110 on 3:4 portrait iPad,
+        // or 1080x1920 -> 1080x810 with heightMargin=1110 on 4:3 landscape iPad)
+        // so Gearhead dynamically reflows the UI via UpdateUiConfigRequest (0x8009)
+        // without dropping the 5277 connection or stretching pixels!
+        if videoFitMode != .fillMargin && isResolutionLocked && (isDisplayPortrait != isCodecPortrait) {
             let safeW = announcedWidthMargin >= 0 ? announcedWidthMargin : 0
             let safeH = announcedHeightMargin >= 0 ? announcedHeightMargin : 0
             return (safeW, safeH)
@@ -403,7 +403,18 @@ public final class HeadUnitScreenConfig {
         let (activeW, activeH) = activeSize()
         let visibleW = max(1, activeW - getWidthMargin())
         let visibleH = max(1, activeH - getHeightMargin())
-        return AnnouncedDensityPolicy.recommendedDpi(activeW: visibleW, activeH: visibleH, panelW: screenWidthPx, panelH: screenHeightPx)
+        var autoVal = AnnouncedDensityPolicy.recommendedDpi(activeW: visibleW, activeH: visibleH, panelW: screenWidthPx, panelH: screenHeightPx)
+        if ProjectionSettings.orientation == .system {
+            let shortEdge = min(activeW, activeH)
+            if shortEdge >= 1440 {
+                autoVal = min(autoVal, 210)
+            } else if shortEdge >= 1080 {
+                autoVal = min(autoVal, 160)
+            } else if shortEdge >= 720 {
+                autoVal = min(autoVal, 120)
+            }
+        }
+        return autoVal
     }
 
     public func densityDecision(requestedDpi: Int = 160) -> AnnouncedDensityPolicy.Decision {
@@ -418,7 +429,17 @@ public final class HeadUnitScreenConfig {
         let (activeW, activeH) = activeSize()
         let visibleW = max(1, activeW - getWidthMargin())
         let visibleH = max(1, activeH - getHeightMargin())
-        let autoVal = AnnouncedDensityPolicy.recommendedDpi(activeW: visibleW, activeH: visibleH, panelW: screenWidthPx, panelH: screenHeightPx)
+        var autoVal = AnnouncedDensityPolicy.recommendedDpi(activeW: visibleW, activeH: visibleH, panelW: screenWidthPx, panelH: screenHeightPx)
+        if ProjectionSettings.orientation == .system {
+            let shortEdge = min(activeW, activeH)
+            if shortEdge >= 1440 {
+                autoVal = min(autoVal, 210)
+            } else if shortEdge >= 1080 {
+                autoVal = min(autoVal, 160)
+            } else if shortEdge >= 720 {
+                autoVal = min(autoVal, 120)
+            }
+        }
         return AnnouncedDensityPolicy.Decision(announced: autoVal, requested: 0, reason: .automatic)
     }
 
@@ -443,7 +464,7 @@ public final class HeadUnitScreenConfig {
 
     public func checkAndNotifyMarginDivergence() {
         let (codecW, codecH) = activeSize()
-        if isResolutionLocked && ((screenHeightPx > screenWidthPx) != (codecH > codecW)) {
+        if videoFitMode != .fillMargin && isResolutionLocked && ((screenHeightPx > screenWidthPx) != (codecH > codecW)) {
             return
         }
 

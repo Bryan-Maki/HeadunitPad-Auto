@@ -570,4 +570,77 @@ final class Phase1ScreenAndFramingTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(marginW, 0)
         XCTAssertGreaterThanOrEqual(marginH, 0)
     }
+
+    func testFillMarginCrossOrientationDynamicMarginCalculation() {
+        let config = HeadUnitScreenConfig.shared
+        config.clearCustomNegotiatedResolution()
+        config.clearAnnouncedMargins()
+        config.videoFitMode = .fillMargin
+        config.negotiatedWidth = 1920
+        config.negotiatedHeight = 1080
+        config.isResolutionLocked = true
+
+        // Simulate iPad rotated to portrait: 1620x2160 (3:4 ratio)
+        var divergedMargins: (left: Int, top: Int, right: Int, bottom: Int)?
+        config.onMarginsDivergedDetailed = { l, t, r, b in
+            divergedMargins = (l, t, r, b)
+        }
+
+        let updated = config.updateDimensions(width: 1620, height: 2160)
+        XCTAssertTrue(updated)
+
+        // Codec dimensions must remain locked at 1920x1080
+        XCTAssertEqual(config.negotiatedWidth, 1920)
+        XCTAssertEqual(config.negotiatedHeight, 1080)
+        XCTAssertEqual(config.screenWidthPx, 1620)
+        XCTAssertEqual(config.screenHeightPx, 2160)
+
+        // In .fillMargin, margins must dynamically adapt to 3:4 portrait
+        // screenAspect = 1620/2160 = 0.75, activeH = 1080, activeW = 1080 * 0.75 = 810
+        // widthMargin = 1920 - 810 = 1110, heightMargin = 0
+        let (marginW, marginH) = config.getMargins()
+        XCTAssertEqual(marginW, 1110, "Width margin should crop 1920 to 810 for 3:4 aspect ratio")
+        XCTAssertEqual(marginH, 0, "Height margin should be 0")
+
+        let activeW = 1920 - marginW
+        let activeH = 1080 - marginH
+        let activeAspect = Double(activeW) / Double(activeH)
+        let screenAspect = Double(1620) / Double(2160)
+        XCTAssertEqual(activeAspect, screenAspect, accuracy: 0.001, "Active viewport must exactly match screen aspect ratio for 1:1 square pixels")
+
+        // Divergence callback should have fired with symmetric horizontal margins
+        XCTAssertNotNil(divergedMargins)
+        XCTAssertEqual(divergedMargins?.left, 555)
+        XCTAssertEqual(divergedMargins?.right, 555)
+        XCTAssertEqual(divergedMargins?.top, 0)
+        XCTAssertEqual(divergedMargins?.bottom, 0)
+
+        // Reset
+        config.clearCustomNegotiatedResolution()
+        config.clearAnnouncedMargins()
+        config.onMarginsDivergedDetailed = nil
+    }
+
+    func testSystemOrientationDensityClamping() {
+        let config = HeadUnitScreenConfig.shared
+        config.clearCustomNegotiatedResolution()
+        let prevOrientation = ProjectionSettings.orientation
+        defer { ProjectionSettings.orientation = prevOrientation }
+
+        ProjectionSettings.orientation = .system
+        config.negotiatedWidth = 1920
+        config.negotiatedHeight = 1080
+        _ = config.updateDimensions(width: 1620, height: 2160)
+
+        let density = config.announcedDensity
+        XCTAssertLessThanOrEqual(density, 160, "Auto density under system orientation for 1080p must be clamped to <= 160 dpi")
+
+        config.negotiatedWidth = 1280
+        config.negotiatedHeight = 720
+        let density720 = config.announcedDensity
+        XCTAssertLessThanOrEqual(density720, 120, "Auto density under system orientation for 720p must be clamped to <= 120 dpi")
+
+        config.clearCustomNegotiatedResolution()
+    }
 }
+
