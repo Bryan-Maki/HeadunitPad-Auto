@@ -440,6 +440,14 @@ final class Phase5SystemIntegrationTests: XCTestCase {
 
     func testCustomDpiOverridesDefaultModelDpiInServiceDiscovery() {
         let config = HeadUnitScreenConfig.shared
+        let prevOrientation = ProjectionSettings.orientation
+        defer {
+            ProjectionSettings.orientation = prevOrientation
+            config.customDpi = nil
+            ProjectionSettings.resetDpiToDefault()
+        }
+
+        ProjectionSettings.orientation = .landscape
         config.initScreen(width: 2360, height: 1640, scale: 2.0, fitMode: .fillMargin, requestedResolution: .r1920x1080)
 
         // 1. Without custom DPI, iPad Air default recommended DPI in 1080p is 180
@@ -475,10 +483,6 @@ final class Phase5SystemIntegrationTests: XCTestCase {
         // 4. Test explicit config.customDpi override
         config.customDpi = 240
         XCTAssertEqual(config.announcedDensity, 240)
-
-        // Clean up
-        config.customDpi = nil
-        ProjectionSettings.resetDpiToDefault()
     }
 
     func testVideoRendererAndTouchOverlayShareIdenticalMargins() {

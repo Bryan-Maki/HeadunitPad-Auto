@@ -575,10 +575,23 @@ final class Phase1ScreenAndFramingTests: XCTestCase {
         let config = HeadUnitScreenConfig.shared
         config.clearCustomNegotiatedResolution()
         config.clearAnnouncedMargins()
+
+        let prevOrientation = ProjectionSettings.orientation
+        defer {
+            ProjectionSettings.orientation = prevOrientation
+            config.clearCustomNegotiatedResolution()
+            config.clearAnnouncedMargins()
+            config.onMarginsDivergedDetailed = nil
+        }
+
+        ProjectionSettings.orientation = .system
         config.videoFitMode = .fillMargin
         config.negotiatedWidth = 1920
         config.negotiatedHeight = 1080
         config.isResolutionLocked = true
+
+        // Simulate initial landscape announced margins before rotation (e.g. 480 on 4:3 panel)
+        config.recordAnnouncedMargins(widthMargin: 480, heightMargin: 0)
 
         // Simulate iPad rotated to portrait: 1620x2160 (3:4 ratio)
         var divergedMargins: (left: Int, top: Int, right: Int, bottom: Int)?
@@ -614,11 +627,6 @@ final class Phase1ScreenAndFramingTests: XCTestCase {
         XCTAssertEqual(divergedMargins?.right, 555)
         XCTAssertEqual(divergedMargins?.top, 0)
         XCTAssertEqual(divergedMargins?.bottom, 0)
-
-        // Reset
-        config.clearCustomNegotiatedResolution()
-        config.clearAnnouncedMargins()
-        config.onMarginsDivergedDetailed = nil
     }
 
     func testSystemOrientationDensityClamping() {
