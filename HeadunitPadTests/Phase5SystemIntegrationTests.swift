@@ -609,14 +609,15 @@ final class Phase5SystemIntegrationTests: XCTestCase {
     }
 
     func testWirelessListenerReusesRunningSocketOnRepeatedStart() {
+        let testPort: UInt16 = 5388
         let server = WirelessHelperServer()
         XCTAssertFalse(server.isRunning)
 
-        server.start(port: 5288, enableBonjour: false)
+        server.start(port: testPort, enableBonjour: false)
 
         let exp = expectation(description: "Server isRunning")
         DispatchQueue.global().async {
-            for _ in 0..<20 {
+            for _ in 0..<30 {
                 if server.isRunning {
                     exp.fulfill()
                     break
@@ -629,7 +630,7 @@ final class Phase5SystemIntegrationTests: XCTestCase {
         XCTAssertTrue(server.isRunning)
 
         // Repeated start on the same port should keep isRunning = true without tearing down
-        server.start(port: 5288, enableBonjour: false)
+        server.start(port: testPort, enableBonjour: false)
         XCTAssertTrue(server.isRunning, "Repeated start should not tear down running listener")
 
         server.stop()
