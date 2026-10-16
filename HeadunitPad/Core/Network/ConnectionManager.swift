@@ -262,7 +262,7 @@ class ConnectionManager {
         if isPassiveInbound {
             print("ConnectionManager: Passive inbound connection, waiting for phone to reconnect via WirelessHelper")
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-                self?.transitionToWaitingForWirelessHelper()
+                self?.startDiscovery()
             }
         } else {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
