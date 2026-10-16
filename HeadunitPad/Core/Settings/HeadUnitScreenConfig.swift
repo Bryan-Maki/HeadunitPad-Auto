@@ -238,6 +238,7 @@ public final class HeadUnitScreenConfig {
     public func clearCustomNegotiatedResolution() {
         customNegotiatedWidth = nil
         customNegotiatedHeight = nil
+        isResolutionLocked = false
     }
 
     private func updateNegotiatedResolutionType(w: Int, h: Int) {

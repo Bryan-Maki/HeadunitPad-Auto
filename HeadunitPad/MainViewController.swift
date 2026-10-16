@@ -104,6 +104,33 @@ class MainViewController: UIViewController {
         return button
     }()
 
+    private lazy var floatingSettingsButton: UIButton = {
+        var config = UIButton.Configuration.plain()
+        config.image = UIImage(systemName: "gearshape.fill")
+        config.baseForegroundColor = UIColor.white.withAlphaComponent(0.85)
+        let button = UIButton(configuration: config)
+        button.backgroundColor = UIColor.black.withAlphaComponent(0.35)
+        button.layer.cornerRadius = 22
+        button.layer.masksToBounds = true
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.addTarget(self, action: #selector(settingsButtonTapped), for: .touchUpInside)
+        button.isHidden = true
+        return button
+    }()
+
+    private lazy var wirelessSetupButton: UIButton = {
+        var config = UIButton.Configuration.tinted()
+        config.title = "Wireless Setup (QR / Bluetooth Bind)"
+        config.image = UIImage(systemName: "qrcode")
+        config.imagePadding = 8
+        config.cornerStyle = .large
+        config.buttonSize = .medium
+        let button = UIButton(configuration: config)
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.addTarget(self, action: #selector(wirelessSetupButtonTapped), for: .touchUpInside)
+        return button
+    }()
+
     private let homeScrollView: UIScrollView = {
         let scrollView = UIScrollView()
         scrollView.translatesAutoresizingMaskIntoConstraints = false
@@ -315,10 +342,8 @@ class MainViewController: UIViewController {
             self.syncVideoAndTouchGeometry()
         }, completion: { [weak self] _ in
             guard let self = self else { return }
-            if HeadUnitScreenConfig.shared.isPortraitDisplay != oldIsPortrait {
-                HeadUnitScreenConfig.shared.clearCustomNegotiatedResolution()
-                self.connectionManager.reconnectForSettingsChange()
-            }
+            self.videoRenderer.applyGeometry()
+            self.syncVideoAndTouchGeometry()
         })
     }
 
@@ -413,6 +438,7 @@ class MainViewController: UIViewController {
         homeContentView.addSubview(directConnectContainer)
         homeContentView.addSubview(orDividerLabel)
         homeContentView.addSubview(connectButton)
+        homeContentView.addSubview(wirelessSetupButton)
         homeContentView.addSubview(activityIndicator)
         homeContentView.addSubview(settingsButton)
         homeContentView.addSubview(disconnectButton)
@@ -421,6 +447,7 @@ class MainViewController: UIViewController {
 
         view.addSubview(videoContainerView)
         view.addSubview(homeScrollView)
+        view.addSubview(floatingSettingsButton)
 
         NSLayoutConstraint.activate([
             videoRenderer.leadingAnchor.constraint(equalTo: videoContainerView.leadingAnchor),
@@ -480,7 +507,7 @@ class MainViewController: UIViewController {
 
             // Direct Connect Container
             directConnectContainer.centerXAnchor.constraint(equalTo: homeContentView.centerXAnchor),
-            directConnectContainer.topAnchor.constraint(equalTo: statusLabel.bottomAnchor, constant: 28),
+            directConnectContainer.topAnchor.constraint(equalTo: statusLabel.bottomAnchor, constant: 20),
             directConnectContainer.widthAnchor.constraint(equalToConstant: connectControlWidth),
 
             directIpLabel.topAnchor.constraint(equalTo: directConnectContainer.topAnchor, constant: 14),
@@ -508,6 +535,12 @@ class MainViewController: UIViewController {
             connectButton.widthAnchor.constraint(equalToConstant: connectControlWidth),
             connectButton.heightAnchor.constraint(equalToConstant: 48),
 
+            // Wireless Setup / QR Pairing Button
+            wirelessSetupButton.centerXAnchor.constraint(equalTo: homeContentView.centerXAnchor),
+            wirelessSetupButton.topAnchor.constraint(equalTo: connectButton.bottomAnchor, constant: 12),
+            wirelessSetupButton.widthAnchor.constraint(equalToConstant: connectControlWidth),
+            wirelessSetupButton.heightAnchor.constraint(equalToConstant: 44),
+
             // Disconnect Button
             disconnectButton.centerXAnchor.constraint(equalTo: homeContentView.centerXAnchor),
             disconnectButton.topAnchor.constraint(equalTo: statusLabel.bottomAnchor, constant: 36),
@@ -516,11 +549,17 @@ class MainViewController: UIViewController {
 
             // Activity Indicator
             activityIndicator.centerXAnchor.constraint(equalTo: homeContentView.centerXAnchor),
-            activityIndicator.topAnchor.constraint(equalTo: connectButton.bottomAnchor, constant: 20),
+            activityIndicator.topAnchor.constraint(equalTo: wirelessSetupButton.bottomAnchor, constant: 16),
 
             // Settings Button
             settingsButton.trailingAnchor.constraint(equalTo: homeContentView.safeAreaLayoutGuide.trailingAnchor, constant: -16),
             settingsButton.topAnchor.constraint(equalTo: homeContentView.safeAreaLayoutGuide.topAnchor, constant: 12),
+
+            // Floating Settings Button (During projection)
+            floatingSettingsButton.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16),
+            floatingSettingsButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 16),
+            floatingSettingsButton.widthAnchor.constraint(equalToConstant: 44),
+            floatingSettingsButton.heightAnchor.constraint(equalToConstant: 44),
 
             homeContentView.bottomAnchor.constraint(greaterThanOrEqualTo: activityIndicator.bottomAnchor, constant: 48)
         ])
@@ -544,6 +583,9 @@ class MainViewController: UIViewController {
             videoContainerView.isHidden = true
             homeScrollView.isHidden = false
             view.bringSubviewToFront(homeScrollView)
+            floatingSettingsButton.isHidden = true
+            wirelessSetupButton.isHidden = false
+            wirelessSetupButton.isEnabled = true
             connectionManager.screenConfig.clearCustomNegotiatedResolution()
             videoRenderer.reset()
             audioPlayer.reset()
@@ -571,6 +613,8 @@ class MainViewController: UIViewController {
             videoContainerView.isHidden = true
             homeScrollView.isHidden = false
             view.bringSubviewToFront(homeScrollView)
+            floatingSettingsButton.isHidden = true
+            wirelessSetupButton.isHidden = true
             settingsButton.isHidden = false
             titleLabel.isHidden = false
             subtitleLabel.isHidden = false
@@ -590,6 +634,8 @@ class MainViewController: UIViewController {
             videoContainerView.isHidden = true
             homeScrollView.isHidden = false
             view.bringSubviewToFront(homeScrollView)
+            floatingSettingsButton.isHidden = true
+            wirelessSetupButton.isHidden = true
             settingsButton.isHidden = false
             titleLabel.isHidden = false
             subtitleLabel.isHidden = false
@@ -609,6 +655,8 @@ class MainViewController: UIViewController {
             videoContainerView.isHidden = true
             homeScrollView.isHidden = false
             view.bringSubviewToFront(homeScrollView)
+            floatingSettingsButton.isHidden = true
+            wirelessSetupButton.isHidden = true
             settingsButton.isHidden = false
             titleLabel.isHidden = false
             subtitleLabel.isHidden = false
@@ -628,6 +676,8 @@ class MainViewController: UIViewController {
             videoContainerView.isHidden = true
             homeScrollView.isHidden = false
             view.bringSubviewToFront(homeScrollView)
+            floatingSettingsButton.isHidden = true
+            wirelessSetupButton.isHidden = true
             settingsButton.isHidden = false
             titleLabel.isHidden = false
             subtitleLabel.isHidden = false
@@ -647,6 +697,9 @@ class MainViewController: UIViewController {
             homeScrollView.isHidden = true
             videoContainerView.isHidden = false
             view.bringSubviewToFront(videoContainerView)
+            floatingSettingsButton.isHidden = false
+            view.bringSubviewToFront(floatingSettingsButton)
+            wirelessSetupButton.isHidden = true
             activityIndicator.stopAnimating()
             syncVideoAndTouchGeometry()
             videoRenderer.applyGeometry()
@@ -658,6 +711,8 @@ class MainViewController: UIViewController {
             videoContainerView.isHidden = true
             homeScrollView.isHidden = false
             view.bringSubviewToFront(homeScrollView)
+            floatingSettingsButton.isHidden = true
+            wirelessSetupButton.isHidden = true
             audioPlayer.reset()
             settingsButton.isHidden = false
             titleLabel.isHidden = false
@@ -678,6 +733,9 @@ class MainViewController: UIViewController {
             videoContainerView.isHidden = true
             homeScrollView.isHidden = false
             view.bringSubviewToFront(homeScrollView)
+            floatingSettingsButton.isHidden = true
+            wirelessSetupButton.isHidden = false
+            wirelessSetupButton.isEnabled = true
             audioPlayer.reset()
             settingsButton.isHidden = false
             titleLabel.isHidden = false
@@ -814,6 +872,10 @@ class MainViewController: UIViewController {
             self?.presentConnectionModeMenu()
         })
 
+        alert.addAction(UIAlertAction(title: "Wireless Setup (QR / Bluetooth Bind)", style: .default) { [weak self] _ in
+            self?.presentWirelessSetupModal()
+        })
+
         let autoReconnectTitle = ProjectionSettings.autoReconnect ? "Auto Reconnect: On" : "Auto Reconnect: Off"
         alert.addAction(UIAlertAction(title: autoReconnectTitle, style: .default) { [weak self] _ in
             ProjectionSettings.autoReconnect.toggle()
@@ -841,10 +903,6 @@ class MainViewController: UIViewController {
             self?.presentDrivingPositionMenu()
         })
 
-        alert.addAction(UIAlertAction(title: "Coolwalk Split-Screen & DPI Preview", style: .default) { [weak self] _ in
-            self?.presentDpiPreviewModal()
-        })
-
         alert.addAction(UIAlertAction(title: "Orientation", style: .default) { [weak self] _ in
             self?.presentOrientationMenu()
         })
@@ -861,9 +919,9 @@ class MainViewController: UIViewController {
             self?.presentFpsMenu()
         })
 
-        let dpiTitle = ProjectionSettings.isAutoDpi ? "DPI: Auto (\(ProjectionSettings.effectiveDpi))" : "DPI: Custom (\(ProjectionSettings.dpi))"
-        alert.addAction(UIAlertAction(title: dpiTitle, style: .default) { [weak self] _ in
-            self?.presentDpiMenu()
+        let dpiModeStr = ProjectionSettings.isAutoDpi ? "Auto (\(ProjectionSettings.effectiveDpi))" : "\(ProjectionSettings.dpi)"
+        alert.addAction(UIAlertAction(title: "DPI (UI Scale): \(dpiModeStr)", style: .default) { [weak self] _ in
+            self?.presentDpiPreviewModal()
         })
 
         let isCellular = ProjectionSettings.supportsCellularIpad()
@@ -976,11 +1034,8 @@ class MainViewController: UIViewController {
                     h = Int((self.view.bounds.height * nativeScale).rounded())
                 }
                 _ = HeadUnitScreenConfig.shared.updateDimensions(width: w, height: h)
+                self.videoRenderer.applyGeometry()
                 self.syncVideoAndTouchGeometry()
-                if HeadUnitScreenConfig.shared.isPortraitDisplay != oldIsPortrait {
-                    HeadUnitScreenConfig.shared.clearCustomNegotiatedResolution()
-                    self.connectionManager.reconnectForSettingsChange()
-                }
                 self.presentSettingsMenu()
             })
         }
@@ -1102,45 +1157,6 @@ class MainViewController: UIViewController {
         present(alert, animated: true)
     }
 
-    private func presentDpiMenu() {
-        let alert = UIAlertController(
-            title: "DPI",
-            message: "Enter custom DPI (\(ProjectionSettings.minDpi)-\(ProjectionSettings.maxDpi)) or choose Auto Match iPad.",
-            preferredStyle: .alert
-        )
-
-        alert.addTextField { textField in
-            textField.keyboardType = .numberPad
-            textField.placeholder = "\(ProjectionSettings.recommendedDpiForCurrentDevice())"
-            textField.text = "\(ProjectionSettings.effectiveDpi)"
-        }
-
-        alert.addAction(UIAlertAction(title: "Save Custom", style: .default) { [weak self, weak alert] _ in
-            guard let raw = alert?.textFields?.first?.text,
-                  let value = Int(raw) else {
-                self?.presentSettingsMenu()
-                return
-            }
-
-            ProjectionSettings.isAutoDpi = false
-            ProjectionSettings.dpi = value
-            self?.connectionManager.screenConfig.customDpi = value
-            self?.presentSettingsMenu()
-        })
-
-        let rec = ProjectionSettings.recommendedDpiForCurrentDevice()
-        alert.addAction(UIAlertAction(title: "Auto Match iPad (\(rec))", style: .default) { [weak self] _ in
-            ProjectionSettings.resetDpiToDefault()
-            self?.connectionManager.screenConfig.customDpi = nil
-            self?.presentSettingsMenu()
-        })
-
-        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel) { [weak self] _ in
-            self?.presentSettingsMenu()
-        })
-
-        present(alert, animated: true)
-    }
 
     private func presentGpsMenu() {
         let alert = UIAlertController(title: "GPS Source", message: nil, preferredStyle: .actionSheet)
@@ -1378,10 +1394,176 @@ class MainViewController: UIViewController {
 
     private func configurePopoverSource(for alert: UIAlertController) {
         if let popover = alert.popoverPresentationController {
-            popover.sourceView = settingsButton
-            popover.sourceRect = settingsButton.bounds
+            let src = (connectionManager.state == .running) ? floatingSettingsButton : settingsButton
+            popover.sourceView = src
+            popover.sourceRect = src.bounds
             popover.permittedArrowDirections = [.up, .down]
         }
+    }
+
+    @objc private func wirelessSetupButtonTapped() {
+        presentWirelessSetupModal()
+    }
+
+    private func presentWirelessSetupModal() {
+        let setupVC = UIViewController()
+        setupVC.title = "Wireless AA Setup & Pair"
+        setupVC.view.backgroundColor = .systemBackground
+
+        let scrollView = UIScrollView()
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.alwaysBounceVertical = true
+
+        let contentView = UIView()
+        contentView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.addSubview(contentView)
+        setupVC.view.addSubview(scrollView)
+
+        let hintLabel = UILabel()
+        hintLabel.text = "Scan this QR code with your Android phone's Camera or Google Lens to configure Android Auto wireless connection, or customize credentials below."
+        hintLabel.font = .systemFont(ofSize: 14, weight: .regular)
+        hintLabel.textColor = .secondaryLabel
+        hintLabel.numberOfLines = 0
+        hintLabel.textAlignment = .center
+        hintLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        let qrImageView = UIImageView()
+        qrImageView.contentMode = .scaleAspectFit
+        qrImageView.backgroundColor = .white
+        qrImageView.layer.cornerRadius = 12
+        qrImageView.layer.masksToBounds = true
+        qrImageView.layer.borderWidth = 1
+        qrImageView.layer.borderColor = UIColor.separator.cgColor
+        qrImageView.translatesAutoresizingMaskIntoConstraints = false
+
+        let stackView = UIStackView()
+        stackView.axis = .vertical
+        stackView.spacing = 12
+        stackView.alignment = .fill
+        stackView.translatesAutoresizingMaskIntoConstraints = false
+
+        let ssidField = UITextField()
+        ssidField.borderStyle = .roundedRect
+        ssidField.placeholder = "Wi-Fi SSID (e.g. AndroidAuto-Hotspot)"
+        ssidField.text = ProjectionSettings.wifiSsid.isEmpty ? (NetworkAddresses.currentWifiSsid() ?? "AndroidAuto-Headunit") : ProjectionSettings.wifiSsid
+
+        let passField = UITextField()
+        passField.borderStyle = .roundedRect
+        passField.placeholder = "Wi-Fi Password / Passkey"
+        passField.text = ProjectionSettings.wifiPasskey.isEmpty ? "12345678" : ProjectionSettings.wifiPasskey
+
+        let bssidField = UITextField()
+        bssidField.borderStyle = .roundedRect
+        bssidField.placeholder = "BSSID (e.g. 02:00:00:00:00:00)"
+        bssidField.text = ProjectionSettings.wifiBssid.isEmpty ? "02:00:00:00:00:00" : ProjectionSettings.wifiBssid
+
+        let btMacField = UITextField()
+        btMacField.borderStyle = .roundedRect
+        btMacField.placeholder = "Bluetooth MAC (e.g. AA:BB:CC:DD:EE:FF)"
+        btMacField.text = ProjectionSettings.bluetoothMac.isEmpty ? "AA:BB:CC:DD:EE:FF" : ProjectionSettings.bluetoothMac
+
+        let currentIp = NetworkAddresses.stationIpv4() ?? "192.168.43.2"
+        let ipLabel = UILabel()
+        ipLabel.text = "iPad IP: \(currentIp)  |  WPP Port: 5299  |  AAP: 5288"
+        ipLabel.font = .monospacedDigitSystemFont(ofSize: 13, weight: .medium)
+        ipLabel.textColor = .secondaryLabel
+        ipLabel.textAlignment = .center
+
+        func updateQr() {
+            let s = ssidField.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let p = passField.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let b = bssidField.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let bt = btMacField.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+            let uri = ProjectionDeepLink.generateUri(
+                ssid: s.isEmpty ? "AndroidAuto-Headunit" : s,
+                passphrase: p.isEmpty ? "12345678" : p,
+                ipAddress: currentIp,
+                port: 5299,
+                bssid: b.isEmpty ? "02:00:00:00:00:00" : b,
+                bluetoothMac: bt.isEmpty ? "AA:BB:CC:DD:EE:FF" : bt
+            )
+            qrImageView.image = QrCodeGenerator.generateQrCode(content: uri, size: 240)
+        }
+        updateQr()
+
+        [ssidField, passField, bssidField, btMacField].forEach { tf in
+            tf.font = .systemFont(ofSize: 14)
+            tf.autocorrectionType = .no
+            tf.autocapitalizationType = .none
+            tf.addAction(UIAction { _ in updateQr() }, for: .editingChanged)
+        }
+
+        func makeRow(label: String, field: UITextField) -> UIView {
+            let container = UIStackView()
+            container.axis = .vertical
+            container.spacing = 4
+            let lbl = UILabel()
+            lbl.text = label
+            lbl.font = .systemFont(ofSize: 12, weight: .semibold)
+            lbl.textColor = .secondaryLabel
+            container.addArrangedSubview(lbl)
+            container.addArrangedSubview(field)
+            return container
+        }
+
+        stackView.addArrangedSubview(makeRow(label: "Wi-Fi SSID", field: ssidField))
+        stackView.addArrangedSubview(makeRow(label: "Wi-Fi Password", field: passField))
+        stackView.addArrangedSubview(makeRow(label: "Wi-Fi BSSID (MAC)", field: bssidField))
+        stackView.addArrangedSubview(makeRow(label: "Bluetooth MAC", field: btMacField))
+        stackView.addArrangedSubview(ipLabel)
+
+        contentView.addSubview(hintLabel)
+        contentView.addSubview(qrImageView)
+        contentView.addSubview(stackView)
+
+        NSLayoutConstraint.activate([
+            scrollView.topAnchor.constraint(equalTo: setupVC.view.safeAreaLayoutGuide.topAnchor),
+            scrollView.leadingAnchor.constraint(equalTo: setupVC.view.leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: setupVC.view.trailingAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: setupVC.view.bottomAnchor),
+
+            contentView.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor),
+            contentView.leadingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.leadingAnchor),
+            contentView.trailingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.trailingAnchor),
+            contentView.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor),
+            contentView.widthAnchor.constraint(equalTo: scrollView.frameLayoutGuide.widthAnchor),
+
+            hintLabel.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 16),
+            hintLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
+            hintLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
+
+            qrImageView.topAnchor.constraint(equalTo: hintLabel.bottomAnchor, constant: 16),
+            qrImageView.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
+            qrImageView.widthAnchor.constraint(equalToConstant: 220),
+            qrImageView.heightAnchor.constraint(equalToConstant: 220),
+
+            stackView.topAnchor.constraint(equalTo: qrImageView.bottomAnchor, constant: 16),
+            stackView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 24),
+            stackView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -24),
+            stackView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -24)
+        ])
+
+        setupVC.navigationItem.rightBarButtonItem = UIBarButtonItem(title: "Save & Done", style: .done, target: nil, action: nil)
+        setupVC.navigationItem.rightBarButtonItem?.primaryAction = UIAction { [weak setupVC, weak ssidField, weak passField, weak bssidField, weak btMacField] _ in
+            if let s = ssidField?.text?.trimmingCharacters(in: .whitespacesAndNewlines) {
+                ProjectionSettings.wifiSsid = s
+            }
+            if let p = passField?.text?.trimmingCharacters(in: .whitespacesAndNewlines) {
+                ProjectionSettings.wifiPasskey = p
+            }
+            if let b = bssidField?.text?.trimmingCharacters(in: .whitespacesAndNewlines) {
+                ProjectionSettings.wifiBssid = b
+            }
+            if let bt = btMacField?.text?.trimmingCharacters(in: .whitespacesAndNewlines) {
+                ProjectionSettings.bluetoothMac = bt
+            }
+            setupVC?.dismiss(animated: true)
+        }
+
+        let nav = UINavigationController(rootViewController: setupVC)
+        nav.modalPresentationStyle = .formSheet
+        present(nav, animated: true)
     }
 
 }

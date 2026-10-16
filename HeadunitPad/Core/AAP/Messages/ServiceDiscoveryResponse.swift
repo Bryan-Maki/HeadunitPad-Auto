@@ -56,6 +56,7 @@ public final class AapServiceDiscoveryResponseMessage {
         let densityDecision = screenConfig.densityDecision(requestedDpi: effectiveRequestedDpi)
         let par = screenConfig.getPixelAspectRatioE4()
 
+        screenConfig.isResolutionLocked = true
         screenConfig.recordAnnouncedMargins(widthMargin: phoneWidthMargin, heightMargin: phoneHeightMargin)
         screenConfig.recordAnnouncedCanvas()
 

@@ -22,8 +22,6 @@ public final class AudioSinkAnnouncementPolicy {
             return [.pcm]
         case .aac:
             return [.aacLc, .aacLcAdts]
-        case .auto:
-            return [.aacLc, .aacLcAdts, .pcm]
         }
     }
 }

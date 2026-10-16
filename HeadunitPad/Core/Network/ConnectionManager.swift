@@ -257,15 +257,30 @@ class ConnectionManager {
         let ip = device.ip
         let port = device.port
         print("ConnectionManager: Reconnecting for settings change to \(ip):\(port)")
+        let isPassiveInbound = (port == 5000 || port == 5288 || port != 5277)
         disconnect()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            self?.connect(to: ip, port: port)
+        if isPassiveInbound {
+            print("ConnectionManager: Passive inbound connection, waiting for phone to reconnect via WirelessHelper")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                self?.transitionToWaitingForWirelessHelper()
+            }
+        } else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                self?.connect(to: ip, port: port)
+            }
         }
     }
 
     public func updateNightMode(userInterfaceStyle: UIUserInterfaceStyle? = nil) {
         let isNight = ProjectionSettings.effectiveIsNightMode(userInterfaceStyle: userInterfaceStyle)
-        aapTransport?.sendNightModeEvent(isNight: isNight)
+        aapTransport?.sendNightModeEvent(isNight: isNight, force: true)
+        let cfg = screenConfig
+        let left = cfg.getLeftMargin()
+        let top = cfg.getTopMargin()
+        let right = cfg.getRightMargin()
+        let bottom = cfg.getBottomMargin()
+        let theme: Int32 = isNight ? 2 : 1
+        sendUpdateUiConfigRequest(left: left, top: top, right: right, bottom: bottom, uiTheme: theme)
     }
 
     func send(_ data: Data) {
@@ -311,8 +326,8 @@ class ConnectionManager {
         aapTransport?.sendMediaKeyEvent(keyCode: keyCode)
     }
 
-    func sendUpdateUiConfigRequest(left: Int, top: Int, right: Int, bottom: Int) {
-        aapTransport?.sendUpdateUiConfigRequest(left: left, top: top, right: right, bottom: bottom)
+    func sendUpdateUiConfigRequest(left: Int, top: Int, right: Int, bottom: Int, uiTheme: Int32? = nil) {
+        aapTransport?.sendUpdateUiConfigRequest(left: left, top: top, right: right, bottom: bottom, uiTheme: uiTheme)
     }
 
     func diagnosticLines() -> [String] {
@@ -614,7 +629,6 @@ extension ConnectionManager {
         }
 
         discovery.stopScan()
-        wppServer.stop()
         wirelessHelperServer.stop()
         legacyAapServer.stop()
 

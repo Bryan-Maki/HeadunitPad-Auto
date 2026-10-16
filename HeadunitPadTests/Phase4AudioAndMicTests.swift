@@ -82,18 +82,14 @@ final class Phase4AudioAndMicTests: XCTestCase {
     func testAudioSinkAnnouncementPolicy() {
         let policy = AudioSinkAnnouncementPolicy()
 
-        // Auto mode should prefer AAC
-        let autoCodecs = policy.supportedCodecs(for: .auto, channel: 3)
-        XCTAssertTrue(autoCodecs.contains(.aacLc))
-        XCTAssertTrue(autoCodecs.contains(.pcm))
+        // AAC mode
+        let aacCodecs = policy.supportedCodecs(for: .aac, channel: 3)
+        XCTAssertTrue(aacCodecs.contains(.aacLc))
+        XCTAssertTrue(aacCodecs.contains(.aacLcAdts))
 
         // PCM only mode
         let pcmCodecs = policy.supportedCodecs(for: .pcm, channel: 3)
         XCTAssertEqual(pcmCodecs, [.pcm])
-
-        // AAC mode
-        let aacCodecs = policy.supportedCodecs(for: .aac, channel: 3)
-        XCTAssertTrue(aacCodecs.contains(.aacLc))
     }
 
     // MARK: - 2. Ducking Envelope & Soft Clipper

@@ -43,7 +43,7 @@ public enum ProjectionOrientation: Int, CaseIterable {
         switch self {
         case .landscape: return "Landscape"
         case .portrait: return "Portrait"
-        case .system: return "Auto (Follow System)"
+        case .system: return "Auto"
         }
     }
 }
@@ -52,12 +52,14 @@ public enum NightModeSetting: Int, CaseIterable {
     case auto = 0
     case day = 1
     case night = 2
+    case system = 3
 
     public var title: String {
         switch self {
-        case .auto: return "Auto (Follow iPad / Sunset)"
-        case .day: return "Always Day"
-        case .night: return "Always Night"
+        case .auto: return "Auto (Time 07:00-19:00)"
+        case .day: return "Day (Always Light)"
+        case .night: return "Night (Always Dark)"
+        case .system: return "System (Follow iPad)"
         }
     }
 }
@@ -83,13 +85,11 @@ public enum ProjectionConnectionMode: Int, CaseIterable {
 // VideoCodecPreference is defined in CodecTypeSelectionPolicy.swift (String, codec semantics).
 
 public enum AudioCodecPreference: Int, CaseIterable {
-    case auto = 0
     case aac = 1
     case pcm = 2
 
     public var title: String {
         switch self {
-        case .auto: return "Auto (AAC-LC / PCM)"
         case .aac: return "AAC-LC"
         case .pcm: return "PCM (Uncompressed)"
         }
@@ -134,6 +134,10 @@ public enum ProjectionSettings {
     private static let audioCodecPreferenceKey = "projection-audio-codec-preference"
     private static let audioOutputTargetKey = "projection-audio-output-target"
     private static let nightModeKey = "projection-night-mode"
+    private static let wifiSsidKey = "projection-wifi-ssid"
+    private static let wifiPasskeyKey = "projection-wifi-passkey"
+    private static let wifiBssidKey = "projection-wifi-bssid"
+    private static let bluetoothMacKey = "projection-bt-mac"
 
     private static let autoDpiKey = "projection-auto-dpi"
 
@@ -240,8 +244,9 @@ public enum ProjectionSettings {
 
     public static var orientation: ProjectionOrientation {
         get {
+            guard defaults.object(forKey: orientationKey) != nil else { return .system }
             let value = defaults.integer(forKey: orientationKey)
-            return ProjectionOrientation(rawValue: value) ?? .landscape
+            return ProjectionOrientation(rawValue: value) ?? .system
         }
         set {
             defaults.set(newValue.rawValue, forKey: orientationKey)
@@ -250,6 +255,7 @@ public enum ProjectionSettings {
 
     public static var nightMode: NightModeSetting {
         get {
+            guard defaults.object(forKey: nightModeKey) != nil else { return .auto }
             let val = defaults.integer(forKey: nightModeKey)
             return NightModeSetting(rawValue: val) ?? .auto
         }
@@ -265,15 +271,21 @@ public enum ProjectionSettings {
         case .night:
             return true
         case .auto:
-            let style = userInterfaceStyle ?? UITraitCollection.current.userInterfaceStyle
-            if style == .dark {
-                return true
-            }
             let hour = Calendar.current.component(.hour, from: Date())
-            if hour >= 19 || hour < 7 {
-                return true
+            return hour >= 19 || hour < 7
+        case .system:
+            let style: UIUserInterfaceStyle
+            if let userInterfaceStyle = userInterfaceStyle {
+                style = userInterfaceStyle
+            } else if Thread.isMainThread {
+                style = UIApplication.shared.connectedScenes
+                    .compactMap { $0 as? UIWindowScene }
+                    .flatMap { $0.windows }
+                    .first(where: { $0.isKeyWindow })?.traitCollection.userInterfaceStyle ?? UITraitCollection.current.userInterfaceStyle
+            } else {
+                style = UITraitCollection.current.userInterfaceStyle
             }
-            return false
+            return style == .dark
         }
     }
 
@@ -313,8 +325,11 @@ public enum ProjectionSettings {
 
     public static var videoCodecPreference: VideoCodecPreference {
         get {
-            let raw = defaults.string(forKey: videoCodecPreferenceKey) ?? VideoCodecPreference.auto.rawValue
-            return VideoCodecPreference(rawValue: raw) ?? .auto
+            guard let raw = defaults.string(forKey: videoCodecPreferenceKey),
+                  let pref = VideoCodecPreference(rawValue: raw) else {
+                return .h264
+            }
+            return pref
         }
         set {
             defaults.set(newValue.rawValue, forKey: videoCodecPreferenceKey)
@@ -323,12 +338,47 @@ public enum ProjectionSettings {
 
     public static var audioCodecPreference: AudioCodecPreference {
         get {
-            let val = defaults.integer(forKey: audioCodecPreferenceKey)
-            return AudioCodecPreference(rawValue: val) ?? .auto
+            guard let raw = defaults.object(forKey: audioCodecPreferenceKey) as? Int,
+                  let pref = AudioCodecPreference(rawValue: raw) else {
+                return .aac
+            }
+            return pref
         }
         set {
             defaults.set(newValue.rawValue, forKey: audioCodecPreferenceKey)
         }
+    }
+
+    public static var wifiSsid: String {
+        get { defaults.string(forKey: wifiSsidKey) ?? "" }
+        set { defaults.set(newValue, forKey: wifiSsidKey) }
+    }
+
+    public static var wifiPasskey: String {
+        get { defaults.string(forKey: wifiPasskeyKey) ?? "" }
+        set { defaults.set(newValue, forKey: wifiPasskeyKey) }
+    }
+
+    public static var wifiBssid: String {
+        get { defaults.string(forKey: wifiBssidKey) ?? "02:00:00:00:00:00" }
+        set { defaults.set(newValue, forKey: wifiBssidKey) }
+    }
+
+    public static var bluetoothMac: String {
+        get { defaults.string(forKey: bluetoothMacKey) ?? "" }
+        set {
+            let formatted = newValue.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
+            defaults.set(formatted, forKey: bluetoothMacKey)
+        }
+    }
+
+    public static func resetToDefaults() {
+        orientation = .system
+        videoCodecPreference = .h264
+        audioCodecPreference = .aac
+        audioOutputTarget = .ipad
+        nightMode = .auto
+        resetDpiToDefault()
     }
 
     public static var audioOutputTarget: AudioOutputTarget {

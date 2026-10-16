@@ -642,7 +642,7 @@ final class Phase5SystemIntegrationTests: XCTestCase {
         let prevNight = ProjectionSettings.nightMode
         defer { ProjectionSettings.nightMode = prevNight }
 
-        XCTAssertEqual(NightModeSetting.allCases.count, 3)
+        XCTAssertEqual(NightModeSetting.allCases.count, 4)
 
         ProjectionSettings.nightMode = .night
         XCTAssertTrue(ProjectionSettings.effectiveIsNightMode())
@@ -650,9 +650,15 @@ final class Phase5SystemIntegrationTests: XCTestCase {
         ProjectionSettings.nightMode = .day
         XCTAssertFalse(ProjectionSettings.effectiveIsNightMode())
 
-        ProjectionSettings.nightMode = .auto
+        ProjectionSettings.nightMode = .system
         XCTAssertTrue(ProjectionSettings.effectiveIsNightMode(userInterfaceStyle: .dark))
         XCTAssertFalse(ProjectionSettings.effectiveIsNightMode(userInterfaceStyle: .light))
+
+        ProjectionSettings.nightMode = .auto
+        let cal = Calendar.current
+        let hour = cal.component(.hour, from: Date())
+        let expectedAutoNight = (hour < 7 || hour >= 19)
+        XCTAssertEqual(ProjectionSettings.effectiveIsNightMode(), expectedAutoNight)
 
         final class MockConnection: ByteStreamConnection {
             weak var delegate: ByteStreamConnectionDelegate?
@@ -722,5 +728,82 @@ final class Phase5SystemIntegrationTests: XCTestCase {
         let actions3 = session.on(event: .messageReceived(type: WppMessageType.pingRequest.rawValue, status: nil, rawPayload: pingPayload))
         XCTAssertEqual(session.stage, .holding)
         XCTAssertEqual(actions3, [.sendPingResponse(pingPayload)])
+    }
+
+    func testResolutionLockedPreventsDimensionResetDuringRotation() {
+        let config = HeadUnitScreenConfig.shared
+        config.negotiatedWidth = 1920
+        config.negotiatedHeight = 1080
+        config.isResolutionLocked = true
+
+        // Simulate iPad rotating to portrait: container size changes to 1620x2160
+        _ = config.updateDimensions(width: 1620, height: 2160)
+
+        // Codec dimensions must remain locked at 1920x1080
+        XCTAssertEqual(config.negotiatedWidth, 1920)
+        XCTAssertEqual(config.negotiatedHeight, 1080)
+        XCTAssertEqual(config.containerWidth, 1620)
+        XCTAssertEqual(config.containerHeight, 2160)
+
+        // Clearing custom negotiated resolution unlocks resolution
+        config.clearCustomNegotiatedResolution()
+        XCTAssertFalse(config.isResolutionLocked)
+    }
+
+    func testNightModeDeduplicationAndForceFlag() {
+        final class MockByteConnection: ByteStreamConnection {
+            weak var delegate: ByteStreamConnectionDelegate?
+            var isConnected: Bool = true
+            var sentPackets: [Data] = []
+            func send(_ data: Data, completion: ((Error?) -> Void)?) {
+                sentPackets.append(data)
+                completion?(nil)
+            }
+            func disconnect() { isConnected = false }
+        }
+
+        let connection = MockByteConnection()
+        let transport = AapTransport(connection: connection, handshakeProfile: .network)
+
+        // First send: should emit packet
+        transport.sendNightModeEvent(isNight: false, force: false)
+        XCTAssertEqual(connection.sentPackets.count, 1)
+
+        // Duplicate send with same value and force: false: should be deduplicated
+        transport.sendNightModeEvent(isNight: false, force: false)
+        XCTAssertEqual(connection.sentPackets.count, 1, "Duplicate night mode event must be suppressed")
+
+        // Send with force: true: should send even if value is identical
+        transport.sendNightModeEvent(isNight: false, force: true)
+        XCTAssertEqual(connection.sentPackets.count, 2, "Forced night mode event must be transmitted")
+
+        // Send with different value: should send
+        transport.sendNightModeEvent(isNight: true, force: false)
+        XCTAssertEqual(connection.sentPackets.count, 3)
+    }
+
+    func testDefaultSettingsValuesAndWifiCredentials() {
+        XCTAssertEqual(ProjectionOrientation.system.title, "Auto")
+
+        let prevSsid = ProjectionSettings.wifiSsid
+        let prevPass = ProjectionSettings.wifiPasskey
+        let prevBssid = ProjectionSettings.wifiBssid
+        let prevBt = ProjectionSettings.bluetoothMac
+        defer {
+            ProjectionSettings.wifiSsid = prevSsid
+            ProjectionSettings.wifiPasskey = prevPass
+            ProjectionSettings.wifiBssid = prevBssid
+            ProjectionSettings.bluetoothMac = prevBt
+        }
+
+        ProjectionSettings.wifiSsid = "Test-AutoAA"
+        ProjectionSettings.wifiPasskey = "secret123"
+        ProjectionSettings.wifiBssid = "02:11:22:33:44:55"
+        ProjectionSettings.bluetoothMac = "11:22:33:44:55:66"
+
+        XCTAssertEqual(ProjectionSettings.wifiSsid, "Test-AutoAA")
+        XCTAssertEqual(ProjectionSettings.wifiPasskey, "secret123")
+        XCTAssertEqual(ProjectionSettings.wifiBssid, "02:11:22:33:44:55")
+        XCTAssertEqual(ProjectionSettings.bluetoothMac, "11:22:33:44:55:66")
     }
 }

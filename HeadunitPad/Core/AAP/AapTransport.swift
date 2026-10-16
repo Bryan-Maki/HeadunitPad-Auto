@@ -126,6 +126,7 @@ class AapTransport {
     private var consecutiveTlsEncryptFailures = 0
     private let maxConsecutiveTlsFailures = 6
     private var startedSensors: Set<UInt64> = []
+    private var lastSentNightMode: Bool? = nil
     private struct AapTraceEntry {
         let timestampMs: UInt64
         let direction: String
@@ -773,9 +774,12 @@ class AapTransport {
         send(message: message)
     }
 
-    public func sendNightModeEvent(isNight: Bool) {
+    public func sendNightModeEvent(isNight: Bool, force: Bool = false) {
         processingQueue.async { [weak self] in
             guard let self = self else { return }
+            guard self.state == .running, self.startedSensors.contains(10) else { return }
+            if !force && self.lastSentNightMode == isNight { return }
+            self.lastSentNightMode = isNight
             let batch = SensorBatch(nightMode: [SensorBatch.NightData(isNightMode: isNight)])
             var writer = ProtoWriter()
             batch.encode(to: &writer)
@@ -1381,12 +1385,6 @@ class AapTransport {
     }
 
     private func handleSensorMessage(_ message: AapMessage) {
-        if message.type == Int(AapMessageType.CHANNEL_OPEN_REQUEST.rawValue) {
-            sendChannelOpenResponse(on: message.channelUInt8)
-            sendNightModeEvent(isNight: ProjectionSettings.effectiveIsNightMode())
-            return
-        }
-
         // Sensors.SensorsMsgType.SENSOR_STARTREQUEST = 0x8001
         if message.type == 0x8001 {
             var reqSensorType: Int?
@@ -1402,7 +1400,7 @@ class AapTransport {
             }
             sendSensorStartResponse(on: message.channelUInt8)
             if reqSensorType == 10 {
-                sendNightModeEvent(isNight: ProjectionSettings.effectiveIsNightMode())
+                sendNightModeEvent(isNight: ProjectionSettings.effectiveIsNightMode(), force: true)
             }
             return
         }
@@ -1548,10 +1546,10 @@ class AapTransport {
         }
     }
 
-    func sendUpdateUiConfigRequest(left: Int, top: Int, right: Int, bottom: Int) {
+    func sendUpdateUiConfigRequest(left: Int, top: Int, right: Int, bottom: Int, uiTheme: Int32? = nil) {
         guard state == .running else { return }
-        let message = UpdateUiConfigRequest.make(left: left, top: top, right: right, bottom: bottom)
-        print("AapTransport: Sent UpdateUiConfigRequest left=\(left) top=\(top) right=\(right) bottom=\(bottom)")
+        let message = UpdateUiConfigRequest.make(left: left, top: top, right: right, bottom: bottom, uiTheme: uiTheme)
+        print("AapTransport: Sent UpdateUiConfigRequest left=\(left) top=\(top) right=\(right) bottom=\(bottom) uiTheme=\(String(describing: uiTheme))")
         send(message: message)
     }
 
@@ -1949,6 +1947,7 @@ enum ProtoWire {
                 setState(.running)
             }
             sendVideoFocusNotification(on: message.channelUInt8, reason: "video-start")
+            sendNightModeEvent(isNight: ProjectionSettings.effectiveIsNightMode(), force: true)
 
         case 0x8002: // Media.MsgType.MEDIA_MESSAGE_STOP
             break
@@ -2441,6 +2440,7 @@ extension AapTransport: ByteStreamConnectionDelegate {
         delayedVersionStartWorkItem = nil
         versionRetryWorkItem?.cancel()
         versionRetryWorkItem = nil
+        lastSentNightMode = nil
         tlsHandler.releaseSessionOnly()
         delegate?.aapTransportDidDisconnect(self)
     }

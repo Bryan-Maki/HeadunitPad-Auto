@@ -42,6 +42,7 @@ public final class WppTcpServer {
         var isTlsActive: Bool = false
         var tlsHandler: OpenSslTlsHandler?
         var probeWorkItem: DispatchWorkItem?
+        var isReceiving: Bool = false
 
         init(connection: NWConnection, session: WppHandshakeSession) {
             self.connection = connection
@@ -168,8 +169,11 @@ public final class WppTcpServer {
     }
 
     private func readNextChunk(_ client: ClientSession) {
+        if client.isReceiving { return }
+        client.isReceiving = true
         client.connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self, weak client] content, _, isComplete, error in
             guard let self = self, let client = client else { return }
+            client.isReceiving = false
 
             if let data = content, !data.isEmpty {
                 if !client.isTlsActive {
@@ -301,10 +305,13 @@ public final class WppTcpServer {
                 }
 
             case .sendInfoResponse:
+                let effectiveSsid = ProjectionSettings.wifiSsid.isEmpty ? ssid : ProjectionSettings.wifiSsid
+                let effectivePasskey = ProjectionSettings.wifiPasskey.isEmpty ? passkey : ProjectionSettings.wifiPasskey
+                let effectiveBssid = ProjectionSettings.wifiBssid.isEmpty ? bssid : ProjectionSettings.wifiBssid
                 let resp = WppMessages.infoResponse(
-                    ssid: ssid,
-                    key: passkey,
-                    bssid: bssid,
+                    ssid: effectiveSsid,
+                    key: effectivePasskey,
+                    bssid: effectiveBssid,
                     identity: .stable
                 )
                 if let framed = try? WppMessages.frame(resp, type: WppMessageType.infoResponse) {
