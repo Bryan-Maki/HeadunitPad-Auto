@@ -742,8 +742,8 @@ final class Phase5SystemIntegrationTests: XCTestCase {
         // Codec dimensions must remain locked at 1920x1080
         XCTAssertEqual(config.negotiatedWidth, 1920)
         XCTAssertEqual(config.negotiatedHeight, 1080)
-        XCTAssertEqual(config.containerWidth, 1620)
-        XCTAssertEqual(config.containerHeight, 2160)
+        XCTAssertEqual(config.screenWidthPx, 1620)
+        XCTAssertEqual(config.screenHeightPx, 2160)
 
         // Clearing custom negotiated resolution unlocks resolution
         config.clearCustomNegotiatedResolution()
