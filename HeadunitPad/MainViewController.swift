@@ -1130,7 +1130,13 @@ class MainViewController: UIViewController {
                 let newIsPortrait = HeadUnitScreenConfig.shared.isPortraitDisplay
                 if oldIsPortrait != newIsPortrait, (self.connectionManager.state == .running || self.connectionManager.state == .handshaking) {
                     self.connectionManager.screenConfig.clearCustomNegotiatedResolution()
-                    self.connectionManager.screenConfig.initScreen(displayRealWidth: w, displayRealHeight: h, displayDpi: ProjectionSettings.effectiveDpi)
+                    self.connectionManager.screenConfig.clearAnnouncedMargins()
+                    self.connectionManager.screenConfig.initScreen(
+                        width: w,
+                        height: h,
+                        fitMode: ProjectionSettings.videoFitMode,
+                        requestedResolution: ProjectionSettings.resolution
+                    )
                     self.connectionManager.reconnectForOrientationChange()
                 }
 
