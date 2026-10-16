@@ -180,13 +180,70 @@
 
 **Gate**：全部 4 种日夜切换模式及电子围栏触发正常；全屏 HUD 导航卡片与系统控制中心曲目封面显示正确；蓝牙键盘/方控按键可正常控制车机。
 
-### Phase 6 — Floating button, performance HUD, diagnostics & backup (P3)
+### Phase 6 — Performance HUD, diagnostics & backup (P3) [✅ 已完成 (100% 闭环收官)]
 
-1. 实现全局可拖拽半透明悬浮球 `FloatingButtonWindow` 与背景壁纸自定义。
-2. 实现实时性能监控图层 `PerformanceOverlayView` 与独立声道测试器 `AudioStreamTester`。
-3. 移植 `ConnectionIssueBannerPolicy`、`AppLog`、`LogExporter` 与 `SettingsBackupManager`。
+1. **投屏画面 100% 纯净无遮挡**：严格遵循纯净车机原则，投屏画面不添加任何常驻悬浮控制按钮。
+2. **实时性能监控图层 (`PerformanceOverlayView`)**：仅在用户在设置中开启 `Performance HUD: On` 时以穿透模式（`isUserInteractionEnabled = false`）显示在左上角，黄字等宽实时展示 RES、FPS、接收码率、解码延迟 (median/p95)、音频缓冲深度、关键帧修复 (PLI) 与丢包数。
+3. **独立多通道音频测试器 (`AudioStreamTester` & `AudioDiagnostics`)**：纯数学合成 16-bit LE PCM 正弦波与平滑线性淡入淡出包络，支持独立播放 Media (440Hz)、Guidance (587Hz)、System (880Hz) 音频，并支持自动化压音时序模拟测试。
+4. **连接故障诊断与横幅 (`ConnectionIssues` & `ConnectionIssueBannerPolicy`)**：智能归因连接失败根因并在主页呈现带解决建议的警告横幅，连接成功自动清除，支持用户主动关闭。
+5. **日志与配置备份 (`AppLog`、`LogExporter` & `SettingsBackupManager`)**：提供 4000 行循环日志缓冲、文件轮转、一键复制诊断报告（250KB 安全截断）以及全量设置项的 JSON 导入/导出/重置备份。
+6. **全量单元测试 (`Phase6DiagnosticsAndPolishTests`)**：全面覆盖 HUD 格式化、无交互穿透、音频波形合成与压音、连接故障过滤、日志轮转、设置备份导入及横竖屏 DPI 对称性。
 
-**Gate**：性能监控 HUD 各项指标实时刷新准确；声道测试器发声正常；日志导出与设置 JSON 备份/恢复闭环验证通过。
+**Gate**：性能监控 HUD 穿透显示且指标刷新准确；声道测试器发声与压音正常；日志导出与设置 JSON 备份/恢复闭环验证通过；全部 Phase 1-6 单元测试 100% 通过。
+
+---
+
+## 8. Test strategy
+
+### 8.1 Automated tests (`HeadunitPadTests`)
+
+- **协议分帧与重组测试**：验证 `AapMessageFraming` 与 `AapMessageReassembler` 对跨包分片、乱序及超大报文的重组准确性。
+- **屏幕几何与触控映射测试**：验证 `HeadUnitScreenConfig` 与 `TouchCoordinateMapper` 在 `Fit`、`FillMargin`、`Stretch` 及不同 DPI/分辨率下的坐标反算精度。
+- **视频解析与自愈测试**：验证 H.264/HEVC 参数集提取（SPS/PPS/VPS）、NAL 分片组装及丢包状态下 `KeyframeRepairTracker` 的状态机转换。
+- **音频缓冲与重采样测试**：验证 `AdaptivePcmBuffer` 水位调节、`MixerDuckingEnvelope` 增益曲线以及 `MicPcmDecimator` 48kHz 转 16kHz 输出长度与精度。
+- **看门狗与重连测试**：验证 `LinkGapMonitor`、`VideoStarvationPolicy` 与 `AutomaticReconnect` 的超时判定与重连触发逻辑。
+- **Phase 6 诊断与体验测试**：验证 HUD 格式化、测试音正弦波采样、连接故障横幅策略、日志导出截断与设置备份 JSON 容错。
+
+### 8.2 Physical device acceptance tests
+
+- 在未越狱的 iPad 真机上安装标准打包的 `.ipa`，配合 Android 手机在 Wi-Fi 局域网与手机个人热点两种环境下实测。
+- 验证 4:3 满屏显示、不同 DPI 下的 Coolwalk 分屏切换、HEVC 60fps 流畅度、导航压低音乐音量、语音助手收音、日夜模式自动切换、前后台恢复及断线重连。
+
+---
+
+## 9. Completion criteria
+
+只有同时满足以下所有条件方可宣告整体移植完成：
+
+- 所有 USB 与 TrollStore 私有特权代码已彻底清除，Xcode 编译与全部 XCTest 单元测试 100% 通过。
+- Phase 0 至 Phase 6 的所有功能模块均已对照 `open-headunit` 完成移植（核心业务与策略覆盖率达 80% 以上）。
+- iPad 真机无线连接下，满屏比例裁切、Coolwalk 分屏预览、HEVC 视频、AAC 多音轨混音压音、麦克风、定位、日夜模式、HUD 导航与外设按键全部通过实机验收。
+- 连续无线投屏播放至少 30 分钟、前后台切换及热点闪断重连测试零崩溃。
+- `README.md` 与工程文档已同步更新为最新的纯无线安装与使用指南。
+
+---
+
+## 10. Iteration & Hardening Changelog
+
+### Phase 6 Finalization & Core Wireless Hardening (2026-10-16)
+- **解决“重开 App 首次连接易失败 / 5277 Server 假死”根因**：
+  - `MainViewController.connectionManager(_:didDiscoverDevice:)` 移除重复弹窗与二次连接触发，消除把正在握手的第 1 条连接腰斩的竞态。
+  - `TcpHandler.adoptConnection` 同步触发 `delegate?.byteStreamConnectionDidConnect`，彻底消除首包被提前接收覆盖的竞态。
+  - `AapTransport` 首包 `VERSION_REQUEST` 延时由 500ms 缩短至 50ms（`initialVersionRequestDelay = 0.05`），重试间隔由 2.0s 优化为 1.2s；第 2 次无响应时触发 `aapTransportDidDetectSilentPeerOnInitialHandshake` 快速破冰机制。
+  - `ConnectionManager` 增加在途同端点去重（`SameEndpointConnectPolicy`）；增加对 5277 僵尸 Socket 的 0.25s 自动破冰重拨；增加 `disconnectForAppTermination()` 在 App 退出/断开时即刻发送 `ByeByeRequest`。
+- **Auto 模式横竖屏旋转自动切换竖屏分辨率与满屏比例，且触控 100% 零漂移**：
+  - 修复 `AnnouncedDensityPolicy` 竖屏 DPI 计算与 `huigMaxDpi` 长短边对称性。
+  - 升级 `H264VideoRendererView`：新增 `activeClipView` 独立裁切容器并开启 `clipsToBounds = true`，使用本地 `overscanLayerFrame` 与 `.resize` 填充，彻底消除因 `resizeAspect` 缩小造成的 25% 触控漂移，实现任何分辨率/边距下像素级零漂移。
+  - `MainViewController.viewWillTransition` 与 `presentOrientationMenu` 在 Auto 模式跨方向旋转时，自动重新初始化屏幕尺寸并触发平滑无感重握手，秒级完成原生竖屏/横屏切换。
+- **Phase 6 纯净版全量交付**：
+  - 零悬浮球纯净画面：投屏画面右上角 100% 纯净无遮挡。
+  - `PerformanceOverlayView`：仅在用户开启 `Performance HUD: On` 时以黄色等宽字体穿透显示（`isUserInteractionEnabled = false`），实时展示 RES、FPS、RX Mbps、DEC Latency (median/p95)、AUD Buffer、PLI、DROP。
+  - `AudioStreamTester`：纯数学合成 16-bit LE PCM 正弦波测试音（支持 Media 440Hz、Guidance 587Hz、System 880Hz 与导航压音序列）。
+  - `AudioDiagnostics`：64 条循环事件缓冲环，记录声道生命周期与压音事件。
+  - `ConnectionIssues` & `ConnectionIssueBannerPolicy`：自动记录连接失败根因并在主页提供可关闭的建议诊断横幅。
+  - `AppLog` & `LogExporter`：内存 4000 行缓冲环与文件轮转日志，一键生成诊断报告与剪贴板导出（250KB 安全截断）。
+  - `SettingsBackupManager`：全量配置 JSON 序列化导出、剪贴板一键恢复与恢复出厂设置。
+  - `Phase6DiagnosticsAndPolishTests`：全量 Phase 6 单元测试。
 
 ---
 

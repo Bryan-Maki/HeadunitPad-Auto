@@ -16,8 +16,18 @@ public struct DiscoveredDevice: Identifiable, Equatable {
     public let port: UInt16
     public let name: String?
 
+    public var ipAddress: String {
+        return ip
+    }
+
     public init(ip: String, port: UInt16, name: String? = nil) {
         self.ip = ip
+        self.port = port
+        self.name = name
+    }
+
+    public init(id: UUID = UUID(), name: String? = nil, ipAddress: String, port: UInt16 = 5277) {
+        self.ip = ipAddress
         self.port = port
         self.name = name
     }

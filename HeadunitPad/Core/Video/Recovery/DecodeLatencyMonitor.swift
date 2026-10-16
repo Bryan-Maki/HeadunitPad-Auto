@@ -69,6 +69,18 @@ public final class DecodeLatencyMonitor {
         return rep
     }
 
+    public func peekReport() -> Report? {
+        if count == 0 && implausible == 0 { return nil }
+        var valid = Array(samples[0..<count])
+        valid.sort()
+        return Report(
+            medianUs: Self.percentile(sorted: valid, percentile: 50),
+            p95Us: Self.percentile(sorted: valid, percentile: 95),
+            frames: count,
+            unusable: implausible
+        )
+    }
+
     public func reset() {
         count = 0
         next = 0

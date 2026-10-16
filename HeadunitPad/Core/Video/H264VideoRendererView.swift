@@ -128,6 +128,30 @@ public class H264VideoRendererView: UIView {
     private var concealmentWindowOpenedMs: Int64 = 0
     private var sessionHasRendered: Bool = false
 
+    // Real-time HUD performance properties
+    public private(set) var currentFps: Int = 0
+    private var fpsFrameCount: Int = 0
+    private var lastFpsTimestamp: TimeInterval = 0
+
+    public var droppedFrames: Int {
+        diagnosticsLock.lock()
+        defer { diagnosticsLock.unlock() }
+        return diagnostics.queueDrops + diagnostics.notReadyDrops + diagnostics.missingConfigDrops
+    }
+
+    public var keyframeRepairs: Int {
+        diagnosticsLock.lock()
+        defer { diagnosticsLock.unlock() }
+        return diagnostics.concealedFrames
+    }
+
+    public var decodeLatency: (medianMs: Double, p95Ms: Double) {
+        guard let rep = latencyMonitor.peekReport() else { return (0.0, 0.0) }
+        return (Double(rep.medianUs) / 1000.0, Double(rep.p95Us) / 1000.0)
+    }
+
+    private let activeClipView = UIView()
+
     override public init(frame: CGRect) {
         super.init(frame: frame)
         commonInit()
@@ -143,8 +167,11 @@ public class H264VideoRendererView: UIView {
         clipsToBounds = true
         isUserInteractionEnabled = false
         layer.masksToBounds = true
+        activeClipView.clipsToBounds = true
+        activeClipView.isUserInteractionEnabled = false
+        addSubview(activeClipView)
         displayLayer.videoGravity = .resize
-        layer.addSublayer(displayLayer)
+        activeClipView.layer.addSublayer(displayLayer)
         applyGeometry()
     }
 
@@ -201,21 +228,19 @@ public class H264VideoRendererView: UIView {
         let isMismatched = boundsLandscape != activeLandscape
 
         if marginW > 0 || marginH > 0 {
-            if isMismatched && (fitMode == .fill || fitMode == .fillMargin) {
-                displayLayer.videoGravity = .resizeAspect
-                displayLayer.frame = activeRect
-            } else {
-                let overscanFrame = ProjectionGeometryPolicy.overscanLayerFrame(
-                    activeRect: activeRect,
-                    codecW: codecW,
-                    codecH: codecH,
-                    activeW: activeW,
-                    activeH: activeH
-                )
-                displayLayer.videoGravity = .resize
-                displayLayer.frame = overscanFrame
-            }
+            activeClipView.frame = activeRect
+            let overscanFrame = ProjectionGeometryPolicy.overscanLayerFrame(
+                activeRect: CGRect(origin: .zero, size: activeRect.size),
+                codecW: codecW,
+                codecH: codecH,
+                activeW: activeW,
+                activeH: activeH
+            )
+            displayLayer.videoGravity = .resize
+            displayLayer.frame = overscanFrame
         } else {
+            activeClipView.frame = viewBounds
+            displayLayer.frame = activeClipView.bounds
             switch fitMode {
             case .contain, .fit:
                 displayLayer.videoGravity = .resizeAspect
@@ -617,6 +642,15 @@ public class H264VideoRendererView: UIView {
 
         notReadyStreak = 0
         displayLayer.enqueue(sampleBuffer)
+        let nowTime = CACurrentMediaTime()
+        fpsFrameCount += 1
+        if lastFpsTimestamp == 0 {
+            lastFpsTimestamp = nowTime
+        } else if nowTime - lastFpsTimestamp >= 1.0 {
+            currentFps = Int((Double(fpsFrameCount) / (nowTime - lastFpsTimestamp)).rounded())
+            fpsFrameCount = 0
+            lastFpsTimestamp = nowTime
+        }
         sessionHasRendered = true
         _ = keyframeRepairTracker.onFrameRendered(ptsUs: currentPts)
 

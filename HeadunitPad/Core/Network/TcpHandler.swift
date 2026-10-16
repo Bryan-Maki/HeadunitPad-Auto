@@ -35,18 +35,23 @@ class TcpHandler: ByteStreamConnection, @unchecked Sendable {
 
     init() {}
 
-    func adoptConnection(_ preparedConnection: NWConnection, host: String, port: UInt16) {
+    func adoptConnection(_ existingConnection: NWConnection, host: String, port: UInt16) {
         print("TcpHandler: adopting prepared connection for host=\(host), port=\(port)")
 
         disconnect()
-        connection = preparedConnection
+        connection = existingConnection
         setupStateHandler(host: host, port: port)
 
         isConnected = true
-        DispatchQueue.main.async {
-            self.delegate?.byteStreamConnectionDidConnect(self)
+        if Thread.isMainThread {
+            delegate?.byteStreamConnectionDidConnect(self)
+            startReceiving()
+        } else {
+            DispatchQueue.main.sync {
+                self.delegate?.byteStreamConnectionDidConnect(self)
+            }
+            startReceiving()
         }
-        startReceiving()
     }
 
     func acceptConnection(_ acceptedConnection: NWConnection, host: String, port: UInt16) {

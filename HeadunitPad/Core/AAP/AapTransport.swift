@@ -21,6 +21,7 @@ protocol AapTransportDelegate: AnyObject {
     func aapTransport(_ transport: AapTransport, didChangeState state: AapTransportState)
     func aapTransportDidDisconnect(_ transport: AapTransport)
     func aapTransportDidRequestExit(_ transport: AapTransport)
+    func aapTransportDidDetectSilentPeerOnInitialHandshake(_ transport: AapTransport)
 }
 
 extension AapTransportDelegate {
@@ -29,6 +30,7 @@ extension AapTransportDelegate {
     }
     func aapTransport(_ transport: AapTransport, didReceiveAudioCodecConfig data: Data, on channel: UInt8) {}
     func aapTransportDidRequestExit(_ transport: AapTransport) {}
+    func aapTransportDidDetectSilentPeerOnInitialHandshake(_ transport: AapTransport) {}
 }
 
 struct AapMediaMetadata {
@@ -80,8 +82,8 @@ class AapTransport {
     private var handshakeTimer: DispatchWorkItem?
     private let versionHandshakeTimeout: TimeInterval
     private let tlsHandshakeTimeout: TimeInterval = 15.0
-    var initialVersionRequestDelay: TimeInterval = 0.5
-    private let versionRetryInterval: TimeInterval = 2.0
+    var initialVersionRequestDelay: TimeInterval = 0.05
+    private let versionRetryInterval: TimeInterval = 1.2
     private let maxVersionRequestAttempts: Int
     private var versionRequestAttempts = 0
     private var versionRetryWorkItem: DispatchWorkItem?
@@ -391,6 +393,13 @@ class AapTransport {
 
         if versionRequestAttempts == 2 {
             triggerLauncherPokeIfNeeded()
+            if lastInboundMessageMs == 0 {
+                print("AapTransport: Silent peer detected on initial handshake attempt 2")
+                DispatchQueue.main.async { [weak self] in
+                    guard let self = self else { return }
+                    self.delegate?.aapTransportDidDetectSilentPeerOnInitialHandshake(self)
+                }
+            }
         }
 
         print("AapTransport: VERSION_REQUEST attempt \(versionRequestAttempts)/\(maxVersionRequestAttempts)")
@@ -620,7 +629,22 @@ class AapTransport {
         requestVideoRecoveryIfNeeded(reason: "new-display", ignoreRecentVideoGuard: true)
     }
 
-    func requestGracefulDisconnect(completion: @escaping () -> Void) {
+    public enum DisconnectReason: String {
+        case userSelection
+        case orientationChange
+        case error
+    }
+
+    public var currentRxMbps: Double {
+        return inboundRateMonitor.currentRxMbps()
+    }
+
+    func sendByeByeRequestImmediately() {
+        print("AapTransport: Sending immediate ByeByeRequest")
+        send(message: .userSelectionByebyeRequest)
+    }
+
+    func requestGracefulDisconnect(reason: DisconnectReason = .userSelection, completion: @escaping () -> Void) {
         guard state == .running else {
             DispatchQueue.main.async(execute: completion)
             return

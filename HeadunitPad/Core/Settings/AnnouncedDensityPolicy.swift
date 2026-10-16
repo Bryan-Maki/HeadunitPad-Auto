@@ -55,8 +55,9 @@ public enum AnnouncedDensityPolicy {
         let ph = panelH ?? Int((min(screenBounds.width, screenBounds.height) * UIScreen.main.nativeScale).rounded())
         let family = HeadUnitScreenConfig.detectModelFamily(panelW: pw, panelH: ph)
 
+        let shortSide = min(activeW, activeH)
         let baseDpi: Int
-        if activeH >= 1400 {
+        if shortSide >= 1400 {
             // ~1440p / 2K+
             switch family {
             case .ipadMini: baseDpi = 210
@@ -71,7 +72,7 @@ public enum AnnouncedDensityPolicy {
                 else if diagonalPt <= 1550 { baseDpi = 220 }
                 else { baseDpi = 240 }
             }
-        } else if activeH >= 1000 {
+        } else if shortSide >= 1000 {
             // ~1080p
             switch family {
             case .ipadMini: baseDpi = 160
@@ -108,8 +109,12 @@ public enum AnnouncedDensityPolicy {
     }
 
     public static func huigMaxDpi(w: Int, h: Int) -> Int {
-        if w <= 0 || h <= 0 { return fallbackDpi }
-        return min(w * 160 / huigMinWidthDp, h * 160 / huigMinHeightDp)
+        guard w > 0 && h > 0 else { return fallbackDpi }
+        let longSide = max(w, h)
+        let shortSide = min(w, h)
+        let maxByLong = (longSide * 160) / huigMinWidthDp
+        let maxByShort = (shortSide * 160) / huigMinHeightDp
+        return min(maxByLong, maxByShort)
     }
 
     public static func widescreenMaxDpi(codecWidth: Int) -> Int {

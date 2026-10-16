@@ -333,7 +333,17 @@ final class PCMAudioPlayer {
         }
     }
 
-    private func noteSpeechActivity() {
+    public var mediaBufferDepthMs: Int {
+        var depth = 0
+        audioQueue.sync {
+            if let stream = streams[Channel.ID_AUD] {
+                depth = stream.queuedFrames * 1000 / max(stream.sampleRate, 1)
+            }
+        }
+        return depth
+    }
+
+    public func noteSpeechActivity() {
         isSpeechActive = true
         duckingEnvelope.setSpeechActive(true)
         applyDuckingToMediaStream()

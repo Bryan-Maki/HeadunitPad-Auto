@@ -140,6 +140,7 @@ public enum ProjectionSettings {
     private static let bluetoothMacKey = "projection-bt-mac"
 
     private static let autoDpiKey = "projection-auto-dpi"
+    private static let showPerformanceOverlayKey = "projection-show-performance-overlay"
 
     public static let defaultDpi = 160
     public static let minDpi = 100
@@ -261,6 +262,15 @@ public enum ProjectionSettings {
         }
         set {
             defaults.set(newValue.rawValue, forKey: nightModeKey)
+        }
+    }
+
+    public static var showPerformanceOverlay: Bool {
+        get {
+            return defaults.bool(forKey: showPerformanceOverlayKey)
+        }
+        set {
+            defaults.set(newValue, forKey: showPerformanceOverlayKey)
         }
     }
 

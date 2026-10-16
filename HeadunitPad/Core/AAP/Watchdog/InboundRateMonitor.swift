@@ -94,4 +94,11 @@ public final class InboundRateMonitor {
         audioMessages = 0
         otherMessages = 0
     }
+
+    public func currentRxMbps(nowMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000)) -> Double {
+        guard started, windowStartMs > 0 else { return 0.0 }
+        let elapsedMs = max(nowMs - windowStartMs, 1)
+        let totalBytes = videoBytes + audioBytes + otherBytes
+        return (Double(totalBytes) * 8.0) / (Double(elapsedMs) * 1000.0)
+    }
 }

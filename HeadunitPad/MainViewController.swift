@@ -227,6 +227,53 @@ class MainViewController: UIViewController {
         return button
     }()
 
+    // MARK: - Phase 6 HUD & Diagnostics Properties
+    private let performanceOverlayView = PerformanceOverlayView()
+    private var performanceTimer: Timer?
+    private var orientationReconnectTimer: Timer?
+
+    private let connectionIssueBannerView: UIView = {
+        let v = UIView()
+        v.backgroundColor = UIColor.systemOrange.withAlphaComponent(0.15)
+        v.layer.cornerRadius = 12
+        v.layer.borderWidth = 1
+        v.layer.borderColor = UIColor.systemOrange.withAlphaComponent(0.4).cgColor
+        v.clipsToBounds = true
+        v.translatesAutoresizingMaskIntoConstraints = false
+        v.isHidden = true
+        return v
+    }()
+
+    private let connectionIssueTitleLabel: UILabel = {
+        let l = UILabel()
+        l.font = UIFont.systemFont(ofSize: 13, weight: .semibold)
+        l.textColor = .systemOrange
+        l.numberOfLines = 0
+        l.translatesAutoresizingMaskIntoConstraints = false
+        return l
+    }()
+
+    private let connectionIssueAdviceLabel: UILabel = {
+        let l = UILabel()
+        l.font = UIFont.systemFont(ofSize: 12, weight: .regular)
+        l.textColor = .secondaryLabel
+        l.numberOfLines = 0
+        l.translatesAutoresizingMaskIntoConstraints = false
+        return l
+    }()
+
+    private lazy var connectionIssueDismissButton: UIButton = {
+        let b = UIButton(type: .system)
+        b.setTitle("Dismiss", for: .normal)
+        b.titleLabel?.font = UIFont.systemFont(ofSize: 12, weight: .medium)
+        b.translatesAutoresizingMaskIntoConstraints = false
+        b.addTarget(self, action: #selector(dismissConnectionIssueBanner), for: .touchUpInside)
+        return b
+    }()
+
+    private var dismissedIssueEpochMs: Int64?
+    private var bannerZeroHeightConstraint: NSLayoutConstraint?
+
     // MARK: - Lifecycle
 
     override func viewDidLoad() {
@@ -318,12 +365,13 @@ class MainViewController: UIViewController {
         syncVideoAndTouchGeometry()
         if !videoContainerView.isHidden {
             videoContainerView.bringSubviewToFront(touchOverlayView)
+            videoContainerView.bringSubviewToFront(performanceOverlayView)
         }
     }
 
     override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
         super.viewWillTransition(to: size, with: coordinator)
-        let oldIsPortrait = HeadUnitScreenConfig.shared.isPortraitDisplay
+        let wasCodecPortrait = HeadUnitScreenConfig.shared.negotiatedHeight > HeadUnitScreenConfig.shared.negotiatedWidth
         coordinator.animate(alongsideTransition: { [weak self] _ in
             guard let self = self else { return }
             let screen = self.view.window?.screen ?? UIScreen.main
@@ -342,13 +390,37 @@ class MainViewController: UIViewController {
                 h = Int((size.height * nativeScale).rounded())
             }
             if w > 0 && h > 0 {
-                _ = HeadUnitScreenConfig.shared.updateDimensions(width: w, height: h)
+                if ProjectionSettings.orientation == .system && ((h > w) != wasCodecPortrait) {
+                    HeadUnitScreenConfig.shared.clearCustomNegotiatedResolution()
+                    HeadUnitScreenConfig.shared.clearAnnouncedMargins()
+                    HeadUnitScreenConfig.shared.initScreen(
+                        width: w,
+                        height: h,
+                        fitMode: ProjectionSettings.videoFitMode,
+                        requestedResolution: ProjectionSettings.resolution
+                    )
+                } else {
+                    _ = HeadUnitScreenConfig.shared.updateDimensions(width: w, height: h)
+                }
             }
             self.syncVideoAndTouchGeometry()
         }, completion: { [weak self] _ in
             guard let self = self else { return }
             self.videoRenderer.applyGeometry()
             self.syncVideoAndTouchGeometry()
+            let screen = self.view.window?.screen ?? UIScreen.main
+            let nativeScale = screen.nativeScale
+            let currentW = Int((self.view.bounds.width * nativeScale).rounded())
+            let currentH = Int((self.view.bounds.height * nativeScale).rounded())
+            let isNowPortrait = currentH > currentW
+            if ProjectionSettings.orientation == .system && (isNowPortrait != wasCodecPortrait) {
+                if self.connectionManager.state == .running || self.connectionManager.state == .handshaking {
+                    self.orientationReconnectTimer?.invalidate()
+                    self.orientationReconnectTimer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: false) { [weak self] _ in
+                        self?.connectionManager.reconnectForOrientationChange()
+                    }
+                }
+            }
         })
     }
 
@@ -430,8 +502,10 @@ class MainViewController: UIViewController {
 
         videoContainerView.addSubview(videoRenderer)
         videoContainerView.addSubview(touchOverlayView)
+        videoContainerView.addSubview(performanceOverlayView)
         videoRenderer.translatesAutoresizingMaskIntoConstraints = false
         touchOverlayView.translatesAutoresizingMaskIntoConstraints = false
+        performanceOverlayView.translatesAutoresizingMaskIntoConstraints = false
 
         directConnectContainer.addSubview(directIpLabel)
         directConnectContainer.addSubview(directIpTextField)
@@ -446,6 +520,12 @@ class MainViewController: UIViewController {
         serverGuideContainer.addSubview(serverGuideTitleLabel)
         serverGuideContainer.addSubview(serverGuideBodyLabel)
         homeContentView.addSubview(serverGuideContainer)
+
+        connectionIssueBannerView.addSubview(connectionIssueTitleLabel)
+        connectionIssueBannerView.addSubview(connectionIssueAdviceLabel)
+        connectionIssueBannerView.addSubview(connectionIssueDismissButton)
+        homeContentView.addSubview(connectionIssueBannerView)
+
         homeContentView.addSubview(activityIndicator)
         homeContentView.addSubview(settingsButton)
         homeContentView.addSubview(disconnectButton)
@@ -465,6 +545,9 @@ class MainViewController: UIViewController {
             touchOverlayView.trailingAnchor.constraint(equalTo: videoContainerView.trailingAnchor),
             touchOverlayView.topAnchor.constraint(equalTo: videoContainerView.topAnchor),
             touchOverlayView.bottomAnchor.constraint(equalTo: videoContainerView.bottomAnchor),
+
+            performanceOverlayView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 12),
+            performanceOverlayView.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 12),
         ])
 
         touchOverlayView.onTouch = { pointers, action, actionIndex in
@@ -555,6 +638,23 @@ class MainViewController: UIViewController {
             serverGuideBodyLabel.trailingAnchor.constraint(equalTo: serverGuideContainer.trailingAnchor, constant: -16),
             serverGuideBodyLabel.bottomAnchor.constraint(equalTo: serverGuideContainer.bottomAnchor, constant: -14),
 
+            // Connection Issue Banner View
+            connectionIssueBannerView.centerXAnchor.constraint(equalTo: homeContentView.centerXAnchor),
+            connectionIssueBannerView.topAnchor.constraint(equalTo: serverGuideContainer.bottomAnchor, constant: 16),
+            connectionIssueBannerView.widthAnchor.constraint(equalToConstant: connectControlWidth),
+
+            connectionIssueTitleLabel.topAnchor.constraint(equalTo: connectionIssueBannerView.topAnchor, constant: 12),
+            connectionIssueTitleLabel.leadingAnchor.constraint(equalTo: connectionIssueBannerView.leadingAnchor, constant: 14),
+            connectionIssueTitleLabel.trailingAnchor.constraint(equalTo: connectionIssueDismissButton.leadingAnchor, constant: -8),
+
+            connectionIssueDismissButton.centerYAnchor.constraint(equalTo: connectionIssueTitleLabel.centerYAnchor),
+            connectionIssueDismissButton.trailingAnchor.constraint(equalTo: connectionIssueBannerView.trailingAnchor, constant: -14),
+
+            connectionIssueAdviceLabel.topAnchor.constraint(equalTo: connectionIssueTitleLabel.bottomAnchor, constant: 6),
+            connectionIssueAdviceLabel.leadingAnchor.constraint(equalTo: connectionIssueBannerView.leadingAnchor, constant: 14),
+            connectionIssueAdviceLabel.trailingAnchor.constraint(equalTo: connectionIssueBannerView.trailingAnchor, constant: -14),
+            connectionIssueAdviceLabel.bottomAnchor.constraint(equalTo: connectionIssueBannerView.bottomAnchor, constant: -12),
+
             // Disconnect Button
             disconnectButton.centerXAnchor.constraint(equalTo: homeContentView.centerXAnchor),
             disconnectButton.topAnchor.constraint(equalTo: statusLabel.bottomAnchor, constant: 36),
@@ -563,7 +663,7 @@ class MainViewController: UIViewController {
 
             // Activity Indicator
             activityIndicator.centerXAnchor.constraint(equalTo: homeContentView.centerXAnchor),
-            activityIndicator.topAnchor.constraint(equalTo: serverGuideContainer.bottomAnchor, constant: 16),
+            activityIndicator.topAnchor.constraint(equalTo: connectionIssueBannerView.bottomAnchor, constant: 16),
 
             // Settings Button
             settingsButton.trailingAnchor.constraint(equalTo: homeContentView.safeAreaLayoutGuide.trailingAnchor, constant: -16),
@@ -571,6 +671,9 @@ class MainViewController: UIViewController {
 
             homeContentView.bottomAnchor.constraint(greaterThanOrEqualTo: activityIndicator.bottomAnchor, constant: 48)
         ])
+
+        bannerZeroHeightConstraint = connectionIssueBannerView.heightAnchor.constraint(equalToConstant: 0)
+        bannerZeroHeightConstraint?.isActive = true
     }
 
     override var prefersStatusBarHidden: Bool {
@@ -695,6 +798,7 @@ class MainViewController: UIViewController {
             setNeedsUpdateOfHomeIndicatorAutoHidden()
 
         case .running:
+            ConnectionIssueStore.shared.clearAll()
             startVideoWatchdog()
             homeScrollView.isHidden = true
             videoContainerView.isHidden = false
@@ -728,6 +832,14 @@ class MainViewController: UIViewController {
             setNeedsUpdateOfHomeIndicatorAutoHidden()
 
         case .error(let message):
+            let lower = message.lowercased()
+            if lower.contains("5277") || lower.contains("refused") {
+                ConnectionIssueStore.shared.raise(issue: .connectionRefused5277)
+            } else if lower.contains("tls") || lower.contains("handshake") {
+                ConnectionIssueStore.shared.raise(issue: .tlsHandshakeFailed)
+            } else {
+                ConnectionIssueStore.shared.raise(issue: .headunitServerNotAnswering)
+            }
             stopVideoWatchdog()
             videoContainerView.isHidden = true
             homeScrollView.isHidden = false
@@ -750,6 +862,9 @@ class MainViewController: UIViewController {
             setNeedsStatusBarAppearanceUpdate()
             setNeedsUpdateOfHomeIndicatorAutoHidden()
         }
+
+        updatePerformanceOverlayState()
+        updateConnectionIssueBanner()
     }
 
     private func updateConnectButtonTitle() {
@@ -920,6 +1035,25 @@ class MainViewController: UIViewController {
         }
         alert.addAction(gpsAction)
 
+        let hudTitle = ProjectionSettings.showPerformanceOverlay ? "Performance HUD: On" : "Performance HUD: Off"
+        alert.addAction(UIAlertAction(title: hudTitle, style: .default) { [weak self] _ in
+            ProjectionSettings.showPerformanceOverlay.toggle()
+            self?.updatePerformanceOverlayState()
+            self?.presentSettingsMenu()
+        })
+
+        alert.addAction(UIAlertAction(title: "Audio Stream Tester", style: .default) { [weak self] _ in
+            self?.presentAudioStreamTesterMenu()
+        })
+
+        alert.addAction(UIAlertAction(title: "Export / Share Logs", style: .default) { [weak self] _ in
+            self?.presentLogExportMenu()
+        })
+
+        alert.addAction(UIAlertAction(title: "Backup / Restore Settings", style: .default) { [weak self] _ in
+            self?.presentSettingsBackupMenu()
+        })
+
         alert.addAction(UIAlertAction(title: "Diagnostics", style: .default) { [weak self] _ in
             self?.presentDiagnostics()
         })
@@ -992,6 +1126,14 @@ class MainViewController: UIViewController {
                 _ = HeadUnitScreenConfig.shared.updateDimensions(width: w, height: h)
                 self.videoRenderer.applyGeometry()
                 self.syncVideoAndTouchGeometry()
+
+                let newIsPortrait = HeadUnitScreenConfig.shared.isPortraitDisplay
+                if oldIsPortrait != newIsPortrait, (self.connectionManager.state == .running || self.connectionManager.state == .handshaking) {
+                    self.connectionManager.screenConfig.clearCustomNegotiatedResolution()
+                    self.connectionManager.screenConfig.initScreen(displayRealWidth: w, displayRealHeight: h, displayDpi: ProjectionSettings.effectiveDpi)
+                    self.connectionManager.reconnectForOrientationChange()
+                }
+
                 self.presentSettingsMenu()
             })
         }
@@ -1348,6 +1490,194 @@ class MainViewController: UIViewController {
             + videoRenderer.diagnosticLines()
     }
 
+    // MARK: - Phase 6 Helper Methods
+
+    private func updatePerformanceOverlayState() {
+        let shouldShow = ProjectionSettings.showPerformanceOverlay && connectionManager.state == .running
+        performanceOverlayView.isHidden = !shouldShow
+        if shouldShow {
+            if performanceTimer == nil {
+                performanceTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+                    self?.refreshPerformanceOverlay()
+                }
+            }
+            refreshPerformanceOverlay()
+        } else {
+            performanceTimer?.invalidate()
+            performanceTimer = nil
+        }
+    }
+
+    private func refreshPerformanceOverlay() {
+        guard !performanceOverlayView.isHidden else { return }
+        let fps = videoRenderer.currentFps
+        let mbps = connectionManager.currentRxMbps
+        let lat = videoRenderer.decodeLatency
+        let pcmMs = audioPlayer.mediaBufferDepthMs
+        let kf = videoRenderer.keyframeRepairs
+        let drop = videoRenderer.droppedFrames
+        let resText = "\(videoRenderer.codecWidth)x\(videoRenderer.codecHeight)"
+
+        let snapshot = PerformanceSnapshot(
+            fps: fps,
+            rxMbps: mbps,
+            decodeMedianMs: lat.medianMs,
+            decodeP95Ms: lat.p95Ms,
+            audioBufferMs: pcmMs,
+            keyframeRepairs: kf,
+            droppedFrames: drop,
+            resolutionText: resText
+        )
+        performanceOverlayView.update(snapshot: snapshot)
+    }
+
+    private func updateConnectionIssueBanner() {
+        let standing = ConnectionIssueStore.shared.currentIssues()
+        let isConnected = (connectionManager.state == .running)
+        if let issue = ConnectionIssueBannerPolicy.bannerFor(
+            standing: standing,
+            sessionConnected: isConnected,
+            dismissedAtEpochMs: dismissedIssueEpochMs
+        ) {
+            connectionIssueTitleLabel.text = issue.issue.title
+            connectionIssueAdviceLabel.text = issue.issue.resolutionAdvice
+            connectionIssueBannerView.isHidden = false
+            bannerZeroHeightConstraint?.isActive = false
+        } else {
+            connectionIssueBannerView.isHidden = true
+            bannerZeroHeightConstraint?.isActive = true
+        }
+    }
+
+    @objc private func dismissConnectionIssueBanner() {
+        if let current = ConnectionIssueStore.shared.currentIssues().first {
+            dismissedIssueEpochMs = current.raisedAtEpochMs
+        } else {
+            dismissedIssueEpochMs = Int64(Date().timeIntervalSince1970 * 1000)
+        }
+        updateConnectionIssueBanner()
+    }
+
+    private func presentAudioStreamTesterMenu() {
+        let alert = UIAlertController(
+            title: "Audio Stream Tester",
+            message: "Generate synthetic 16-bit LE PCM tones to test playback channels and ducking.",
+            preferredStyle: .actionSheet
+        )
+
+        alert.addAction(UIAlertAction(title: "Play Media 440 Hz (1.0s)", style: .default) { _ in
+            AudioStreamTester.shared.playMediaTestTone()
+        })
+
+        alert.addAction(UIAlertAction(title: "Play Guidance 587 Hz (1.0s)", style: .default) { _ in
+            AudioStreamTester.shared.playGuidanceTestTone()
+        })
+
+        alert.addAction(UIAlertAction(title: "Play System 880 Hz (0.8s)", style: .default) { _ in
+            AudioStreamTester.shared.playSystemTestTone()
+        })
+
+        alert.addAction(UIAlertAction(title: "Run Ducking Sequence Test", style: .default) { _ in
+            AudioStreamTester.shared.playDuckingTestSequence()
+        })
+
+        alert.addAction(UIAlertAction(title: "Stop All Audio", style: .destructive) { [weak self] _ in
+            self?.audioPlayer.reset()
+        })
+
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        configurePopoverSource(for: alert)
+        present(alert, animated: true)
+    }
+
+    private func presentLogExportMenu() {
+        let alert = UIAlertController(
+            title: "Export / Share Logs",
+            message: "Session diagnostic logs & audit reports.",
+            preferredStyle: .actionSheet
+        )
+
+        alert.addAction(UIAlertAction(title: "Copy Log to Clipboard", style: .default) { _ in
+            let text = LogExporter.exportToClipboardText()
+            UIPasteboard.general.string = text
+            AppLog.i("Diagnostic log copied to clipboard (\(text.utf8.count) bytes)", tag: "MainViewController")
+        })
+
+        alert.addAction(UIAlertAction(title: "Share Log File (.txt)", style: .default) { [weak self] _ in
+            guard let self = self else { return }
+            if let fileUrl = LogExporter.exportToTemporaryFile() {
+                let activityVC = UIActivityViewController(activityItems: [fileUrl], applicationActivities: nil)
+                if let popover = activityVC.popoverPresentationController {
+                    popover.sourceView = self.settingsButton
+                    popover.sourceRect = self.settingsButton.bounds
+                }
+                self.present(activityVC, animated: true)
+            }
+        })
+
+        alert.addAction(UIAlertAction(title: "Clear In-Memory Logs", style: .destructive) { _ in
+            AppLog.shared.clear()
+        })
+
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        configurePopoverSource(for: alert)
+        present(alert, animated: true)
+    }
+
+    private func presentSettingsBackupMenu() {
+        let alert = UIAlertController(
+            title: "Backup / Restore Settings",
+            message: "Export settings to JSON or restore from clipboard / default.",
+            preferredStyle: .actionSheet
+        )
+
+        alert.addAction(UIAlertAction(title: "Copy Settings JSON to Clipboard", style: .default) { [weak self] _ in
+            guard let self = self else { return }
+            let json = SettingsBackupManager.exportToJson()
+            UIPasteboard.general.string = json
+            let ok = UIAlertController(title: "Settings Exported", message: "JSON settings copied to clipboard.", preferredStyle: .alert)
+            ok.addAction(UIAlertAction(title: "OK", style: .default))
+            self.present(ok, animated: true)
+        })
+
+        alert.addAction(UIAlertAction(title: "Restore Settings from Clipboard", style: .default) { [weak self] _ in
+            guard let self = self else { return }
+            guard let json = UIPasteboard.general.string, !json.isEmpty else {
+                let err = UIAlertController(title: "Restore Failed", message: "Clipboard does not contain JSON text.", preferredStyle: .alert)
+                err.addAction(UIAlertAction(title: "OK", style: .default))
+                self.present(err, animated: true)
+                return
+            }
+
+            do {
+                try SettingsBackupManager.importFromJson(json)
+                self.applyOrientationLock()
+                self.syncVideoAndTouchGeometry()
+                let ok = UIAlertController(title: "Settings Restored", message: "Preferences have been restored from clipboard.", preferredStyle: .alert)
+                ok.addAction(UIAlertAction(title: "OK", style: .default))
+                self.present(ok, animated: true)
+            } catch {
+                let err = UIAlertController(title: "Restore Error", message: error.localizedDescription, preferredStyle: .alert)
+                err.addAction(UIAlertAction(title: "OK", style: .default))
+                self.present(err, animated: true)
+            }
+        })
+
+        alert.addAction(UIAlertAction(title: "Reset Settings to Default", style: .destructive) { [weak self] _ in
+            guard let self = self else { return }
+            SettingsBackupManager.resetToDefaults()
+            self.applyOrientationLock()
+            self.syncVideoAndTouchGeometry()
+            let ok = UIAlertController(title: "Settings Reset", message: "All settings restored to factory defaults.", preferredStyle: .alert)
+            ok.addAction(UIAlertAction(title: "OK", style: .default))
+            self.present(ok, animated: true)
+        })
+
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        configurePopoverSource(for: alert)
+        present(alert, animated: true)
+    }
+
     private func configurePopoverSource(for alert: UIAlertController) {
         if let popover = alert.popoverPresentationController {
             popover.sourceView = settingsButton
@@ -1375,22 +1705,10 @@ extension MainViewController: ConnectionManagerDelegate {
     }
 
     func connectionManager(_ manager: ConnectionManager, didDiscoverDevice device: DiscoveredDevice) {
-        if manager.discoveredDevices.count == 1 {
-            statusLabel.text = "Found: \(device.displayName)"
-            statusLabel.textColor = .systemBlue
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.statusLabel.text = "Found: \(device.displayName), connecting..."
         }
-
-        let alert = UIAlertController(title: "Device Found",
-                                      message: "Would you like to connect to \(device.displayName)?",
-                                      preferredStyle: .alert)
-
-        alert.addAction(UIAlertAction(title: "Connect", style: .default) { [weak self] _ in
-            self?.connectionManager.connect(to: device)
-        })
-
-        alert.addAction(UIAlertAction(title: "Continue Scanning", style: .cancel))
-
-        present(alert, animated: true)
     }
 
     func connectionManager(_ manager: ConnectionManager, didReceiveVideoData data: Data) {

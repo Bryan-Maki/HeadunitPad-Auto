@@ -23,6 +23,7 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     }
 
     func sceneDidDisconnect(_ scene: UIScene) {
+        ConnectionManager.shared.disconnectForAppTermination()
     }
 
     func sceneDidBecomeActive(_ scene: UIScene) {
