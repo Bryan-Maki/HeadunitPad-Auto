@@ -320,4 +320,17 @@
 - **旋转自适应与触控对齐保护**：
   - `MainViewController.viewWillTransition` 记录 `wasResolutionLocked` 与 `wasCodecPortrait`，仅在连接处于 `.running` 状态且检测到屏幕方向与协商分辨率真正反转时才触发 `0.25s` 防抖重连，避免在握手阶段误触发重连。
 - **CI 测试套件 100% 绿色通行**：
-  - 更新 `HeadunitPadTests/Phase6DiagnosticsAndPolishTests.swift` 中的时序断言，全量单元测试（Phase 1 至 Phase 6）100% 通过。
+  - 更新 `HeadunitPadTests/Phase6DiagnosticsAndPolishTests.swift` 中的时序断言，全量单元测试（Phase 1 至 Phase 6）100% 通过。
+
+### 5277 Connection Handshake Fix & Diagnostic Trace Hardening & App Icon (2026-10-16)
+- **探活连接复用与 3.0s 静默双保险重拨**：
+  - 修复 `Discovery.probePort`：为探活连接补齐 Keepalive 与端口复用参数；探活成功后保存至 `preparedConnections` 供后续连接直接复用，避免重新 `connect` 引发 5277 单会话状态机挂死；为 `stopScan` 增加 `cancelPrepared: Bool = false` 参数，停止广播扫描时不误杀已探活成功的待连接 Socket。
+  - 在 `ConnectionManager.connect(to:userInitiated:)` 中优先提取 `preparedConnection` 并在 `TcpHandler.adoptConnection` 中以非阻塞主线程异步方式通知 delegate，杜绝 `sync` 死锁。
+  - 在 `AapTransport.sendVersionRequestWithRetry()` 中建立 3.0s 静默重拨双保险：首包 `0.5s` + 重试 `2.0s`（第 2 包在 2.5s 发出），若在 3.0s 时仍处于 `.waitingForVersion` 且未收到任何来自手机的 RX 报文，则立即触发 `aapTransportDidDetectSilentPeerOnInitialHandshake` 进行全新 TCP 重拨。
+- **全链路 AppLog 替换与 AAP 握手轨迹持久化**：
+  - 将 `Discovery.swift`、`TcpHandler.swift`、`ConnectionManager.swift`、`AapTransport.swift` 及 `OpenSslTlsHandler.swift` 中的全部 `print` 替换为分级结构化 `AppLog`（含 `tag: "Discovery"`、`tag: "TcpHandler"`、`tag: "ConnectionManager"`、`tag: "AapTransport"`、`tag: "OpenSslTls"`）。
+  - 在 `AapTransport.dumpRecentAapTrace` 中将最近 32 条全通道报文按 `[AapTrace]` 输出至 `AppLog.w(..., tag: "AapTrace")`；在 `videoDiagnosticLines` 中输出最近 20 条全通道报文轨迹。
+  - `ConnectionManager` 在断连释放 `aapTransport` 前持久化保留 `lastSessionDiagnosticLines`；`LogExporter.generateFullReport()` 新增 `--- CONNECTION & AAP DIAGNOSTICS ---` 板块，完整导出握手与全通道 trace。
+- **全新 App Icon 应用图标集成**：
+  - 将 AppIcon 转换为标准 1024x1024 24-bit RGB（无 Alpha 透明通道）PNG 格式，更新 `Contents.json` 包含 universal、dark 和 tinted 规格，彻底杜绝 `actool` 编译警告与提交黑底问题。
+

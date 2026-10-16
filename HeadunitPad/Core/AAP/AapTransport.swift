@@ -191,14 +191,14 @@ class AapTransport {
 
     private func setupReassembler() {
         reassembler.onDroppedVideoPayload = { [weak self] in
-            print("AapTransport: Reassembler dropped video fragment, requesting video recovery")
+            AppLog.w("Reassembler dropped video fragment, requesting video recovery", tag: "AapTransport")
             self?.requestVideoRecoveryIfNeeded(reason: "reassembler-dropped-video", ignoreRecentVideoGuard: false)
         }
         reassembler.onDroppedMediaData = { channel in
-            print("AapTransport: Reassembler dropped media data on channel \(channel)")
+            AppLog.w("Reassembler dropped media data on channel \(channel)", tag: "AapTransport")
         }
         reassembler.onDrop = { reason in
-            print("AapTransport: Reassembler dropped: \(reason)")
+            AppLog.w("Reassembler dropped: \(reason)", tag: "AapTransport")
         }
     }
 
@@ -209,7 +209,7 @@ class AapTransport {
 
     private func setupTls() {
         if tlsHandler.setup() {
-            print("AapTransport: OpenSSL TLS handler initialized")
+            AppLog.i("OpenSSL TLS handler initialized", tag: "AapTransport")
 
             let bundles = [Bundle.main, Bundle(for: AapTransport.self)]
             let candidateSubdirs: [String?] = [
@@ -234,25 +234,25 @@ class AapTransport {
             }
 
             guard let certPath, let keyPath else {
-                print("AapTransport: Certificate resources not found in app bundle")
+                AppLog.i("Certificate resources not found in app bundle", tag: "AapTransport")
                 return
             }
 
-            print("AapTransport: Using cert path: \(certPath)")
-            print("AapTransport: Using key path: \(keyPath)")
+            AppLog.i("Using cert path: \(certPath)", tag: "AapTransport")
+            AppLog.i("Using key path: \(keyPath)", tag: "AapTransport")
 
             if tlsHandler.loadCertificate(certPath: certPath, keyPath: keyPath) {
                 tlsIdentityReady = tlsHandler.hasClientIdentity()
-                print("AapTransport: Certificate loaded successfully, ready=\(tlsIdentityReady)")
+                AppLog.i("Certificate loaded successfully, ready=\(tlsIdentityReady)", tag: "AapTransport")
             } else {
                 tlsIdentityReady = false
-                print("AapTransport: Failed to load certificate")
+                AppLog.w("Failed to load certificate", tag: "AapTransport")
             }
         }
     }
 
     func startHandshake() {
-        print("AapTransport: Starting handshake")
+        AppLog.i("Starting handshake", tag: "AapTransport")
         bufferLock.lock()
         receiveBuffer.removeAll()
         encryptedReceiveBuffer.removeAll()
@@ -336,12 +336,12 @@ class AapTransport {
         let timer = DispatchWorkItem { [weak self] in
             guard let self = self else { return }
             if case .waitingForVersion = handshakeState, case .waitingForVersion = self.state {
-                print("AapTransport: Handshake timeout - no version response received")
+                AppLog.w("Handshake timeout - no version response received", tag: "AapTransport")
                 self.setState(.error("Handshake timeout - no response from Headunit Server"))
                 self.delegate?.aapTransportDidDisconnect(self)
             }
             if case .tlsHandshaking = handshakeState, case .tlsHandshaking = self.state {
-                print("AapTransport: TLS handshake timeout")
+                AppLog.w("TLS handshake timeout", tag: "AapTransport")
                 self.setState(.error("TLS handshake timeout"))
                 self.delegate?.aapTransportDidDisconnect(self)
             }
@@ -351,7 +351,7 @@ class AapTransport {
     }
 
     func setState(_ newState: AapTransportState) {
-        print("AapTransport: State changed from \(state) to \(newState)")
+        AppLog.i("State changed from \(state) to \(newState)", tag: "AapTransport")
         state = newState
         if newState == .running {
             didReachRunning = true
@@ -380,7 +380,7 @@ class AapTransport {
 
         let encoded = message.toData()
         let hex = encoded.map { String(format: "%02x", $0) }.joined(separator: " ")
-        print("AapTransport: Sending version request bytes=\(hex)")
+        AppLog.i("Sending version request bytes=\(hex)", tag: "AapTransport")
         sendRaw(encoded)
     }
 
@@ -393,9 +393,21 @@ class AapTransport {
 
         if versionRequestAttempts == 2 {
             triggerLauncherPokeIfNeeded()
+            handshakeQueue.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                guard let self = self, self.state == .waitingForVersion else { return }
+                let hasRxPacket: Bool = {
+                    self.aapTraceLock.lock()
+                    defer { self.aapTraceLock.unlock() }
+                    return self.lastAapTrace.contains { $0.direction == "RX" }
+                }()
+                if !hasRxPacket {
+                    AppLog.w("No VERSION_RESPONSE or RX packets after 3.0s, notifying delegate for fresh redial", tag: "AapTransport")
+                    self.delegate?.aapTransportDidDetectSilentPeerOnInitialHandshake(self)
+                }
+            }
         }
 
-        print("AapTransport: VERSION_REQUEST attempt \(versionRequestAttempts)/\(maxVersionRequestAttempts)")
+        AppLog.i("VERSION_REQUEST attempt \(versionRequestAttempts)/\(maxVersionRequestAttempts)", tag: "AapTransport")
         sendVersionRequest()
 
         guard versionRequestAttempts < maxVersionRequestAttempts else {
@@ -423,7 +435,7 @@ class AapTransport {
         }
 
         hasTriggeredLauncherPoke = true
-        print("AapTransport: No version response yet; poking Wifi Launcher at \(host):5289")
+        AppLog.i("No version response yet; poking Wifi Launcher at \(host):5289", tag: "AapTransport")
 
         let endpoint = NWEndpoint.hostPort(host: NWEndpoint.Host(host), port: NWEndpoint.Port(rawValue: 5289)!)
         let params = NWParameters.tcp
@@ -433,18 +445,18 @@ class AapTransport {
         let pokeQueue = DispatchQueue(label: "com.headunitpad.aap.launcher-poke", qos: .utility)
         let timeoutWorkItem = DispatchWorkItem {
             pokeConnection.cancel()
-            print("AapTransport: Wifi Launcher poke timeout")
+            AppLog.w("Wifi Launcher poke timeout", tag: "AapTransport")
         }
 
         pokeConnection.stateUpdateHandler = { state in
             switch state {
             case .ready:
-                print("AapTransport: Wifi Launcher poke connected")
+                AppLog.i("Wifi Launcher poke connected", tag: "AapTransport")
                 pokeQueue.asyncAfter(deadline: .now() + 0.25) {
                     pokeConnection.cancel()
                 }
             case .failed(let error):
-                print("AapTransport: Wifi Launcher poke failed: \(error)")
+                AppLog.w("Wifi Launcher poke failed: \(error)", tag: "AapTransport")
                 timeoutWorkItem.cancel()
             case .cancelled:
                 timeoutWorkItem.cancel()
@@ -466,7 +478,7 @@ class AapTransport {
             payload: statusData
         )
 
-        print("AapTransport: Sending status OK (plaintext)")
+        AppLog.i("Sending status OK (plaintext)", tag: "AapTransport")
         sendRaw(message.toData())
     }
 
@@ -505,7 +517,7 @@ class AapTransport {
         plain.append(message.payload)
 
         guard let encryptedPayload = tlsHandler.encrypt(data: plain) else {
-            print("AapTransport: Failed to encrypt message type=\(message.type)")
+            AppLog.w("Failed to encrypt message type=\(message.type)", tag: "AapTransport")
             registerTlsEncryptFailure(context: "message-type-\(message.type)")
             completion?(AapTransportError.encryptionFailed)
             return
@@ -526,7 +538,7 @@ class AapTransport {
         connection.send(packet) { [weak self] error in
             let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
             if let stallReport = self?.uplinkStallMonitor.onWriteCompleted(nowMs: nowMs) {
-                print("AapTransport: UplinkStall: \(stallReport)")
+                AppLog.w("UplinkStall: \(stallReport)", tag: "AapTransport")
             }
             completion?(error)
         }
@@ -592,6 +604,11 @@ class AapTransport {
             .map { entry in
                 "AAP video trace: \(entry.direction) flags=0x\(String(format: "%02x", entry.flags)) type=\(entry.type) bytes=\(entry.payloadSize)"
             }
+        let allTrace = lastAapTrace
+            .suffix(20)
+            .map { entry in
+                "AAP trace: \(entry.direction) ch=\(Channel.name(for: entry.channel))(\(entry.channel)) flags=0x\(String(format: "%02x", entry.flags)) type=\(entry.type) bytes=\(entry.payloadSize)"
+            }
         aapTraceLock.unlock()
         gracefulDisconnectLock.lock()
         let gracefulDisconnect = gracefulDisconnectDiagnostic
@@ -615,6 +632,11 @@ class AapTransport {
         } else {
             lines.append(contentsOf: videoTrace)
         }
+        if allTrace.isEmpty {
+            lines.append("AAP recent trace: None")
+        } else {
+            lines.append(contentsOf: allTrace)
+        }
         return lines
     }
 
@@ -633,7 +655,7 @@ class AapTransport {
     }
 
     func sendByeByeRequestImmediately() {
-        print("AapTransport: Sending immediate ByeByeRequest")
+        AppLog.i("Sending immediate ByeByeRequest", tag: "AapTransport")
         send(message: .userSelectionByebyeRequest)
     }
 
@@ -663,7 +685,7 @@ class AapTransport {
         // outer cap so a stalled write cannot leave the disconnect hanging.
         send(message: .userSelectionByebyeRequest) { [weak self] error in
             guard let self else { return }
-            print("AapTransport: Byebye write finished, error=\(error.map(String.init(describing:)) ?? "none")")
+            AppLog.w("Byebye write finished, error=\(error.map(String.init(describing:)) ?? "none", tag: "AapTransport")")
             self.gracefulDisconnectLock.lock()
             self.gracefulDisconnectWriteFlushed = error == nil
             self.gracefulDisconnectLock.unlock()
@@ -672,7 +694,7 @@ class AapTransport {
                 execute: timeout
             )
         }
-        print("AapTransport: Sent byebye request for user selection")
+        AppLog.i("Sent byebye request for user selection", tag: "AapTransport")
         DispatchQueue.main.asyncAfter(deadline: .now() + byebyeWriteTimeout) { [weak self] in
             self?.finishGracefulDisconnect(reason: "write-timeout")
         }
@@ -732,7 +754,7 @@ class AapTransport {
             payload: payload
         )
 
-        print("AapTransport: Send keyCode=\(keyCode) isDown=\(isDown)")
+        AppLog.i("Send keyCode=\(keyCode) isDown=\(isDown)", tag: "AapTransport")
         send(message: message)
     }
 
@@ -830,7 +852,7 @@ class AapTransport {
             self.recordAapTrace(direction: "TX", channel: channel, flags: flags, type: 0, payloadSize: payload.count)
 
             guard let encryptedPayload = self.tlsHandler.encrypt(data: payload) else {
-                print("AapTransport: Failed to encrypt raw stream for channel \(Channel.name(for: channel))")
+                AppLog.w("Failed to encrypt raw stream for channel \(Channel.name(for: channel))", tag: "AapTransport")
                 self.registerTlsEncryptFailure(context: "raw-stream-\(Channel.name(for: channel))")
                 return
             }
@@ -855,7 +877,7 @@ class AapTransport {
         } else {
             if state == .waitingForVersion {
                 let preview = data.prefix(16).map { String(format: "%02x", $0) }.joined(separator: " ")
-                print("AapTransport: waitingForVersion recv \(data.count) bytes, preview=\(preview)")
+                AppLog.i("waitingForVersion recv \(data.count) bytes, preview=\(preview)", tag: "AapTransport")
             }
             appendAndProcessBuffer(data)
         }
@@ -887,7 +909,7 @@ class AapTransport {
             if encLen <= 0 || encLen > AapMessage.DEF_BUFFER_LENGTH {
                 let dropped = encryptedReceiveBuffer.removeFirst()
                 bufferLock.unlock()
-                print("AapTransport: Resync encrypted parser, dropped byte 0x\(String(format: "%02x", dropped))")
+                AppLog.w("Resync encrypted parser, dropped byte 0x\(String(format: "%02x", dropped))", tag: "AapTransport")
                 continue
             }
 
@@ -914,12 +936,12 @@ class AapTransport {
             bufferLock.unlock()
 
             if (flags & 0x08) != 0x08 {
-                print("AapTransport: Invalid encrypted flags=0x\(String(format: "%02x", flags))")
+                AppLog.w("Invalid encrypted flags=0x\(String(format: "%02x", flags))", tag: "AapTransport")
                 continue
             }
 
             guard let decrypted = tlsHandler.decrypt(data: encryptedPayload) else {
-                print("AapTransport: Decrypt returned nil for encrypted payload len=\(encryptedPayload.count)")
+                AppLog.i("Decrypt returned nil for encrypted payload len=\(encryptedPayload.count)", tag: "AapTransport")
                 registerTlsDecryptFailure(context: "payload-len-\(encryptedPayload.count)")
                 continue
             }
@@ -931,7 +953,7 @@ class AapTransport {
                 plaintextLength: decrypted.count,
                 declaredTotal: declaredTotal
             ) {
-                print("AapTransport: Fragmented message audit: \(audit)")
+                AppLog.i("Fragmented message audit: \(audit)", tag: "AapTransport")
                 if AuditRecoveryPolicy.shouldRequestKeyframe(outcome: audit.outcome, channel: audit.channel) {
                     requestVideoRecoveryIfNeeded(reason: "audit-\(audit.outcome)", ignoreRecentVideoGuard: true)
                 }
@@ -963,7 +985,7 @@ class AapTransport {
                     handleMessage(message)
                 }
             } catch {
-                print("AapTransport: Reassembly error: \(error)")
+                AppLog.w("Reassembly error: \(error)", tag: "AapTransport")
             }
         }
     }
@@ -987,7 +1009,7 @@ class AapTransport {
             return
         }
 
-        print("AapTransport: Too many TLS failures, forcing disconnect, reason=\(reason)")
+        AppLog.w("Too many TLS failures, forcing disconnect, reason=\(reason)", tag: "AapTransport")
         dumpRecentAapTrace(reason: reason)
         setState(.error("TLS stream failure (\(reason))"))
         connection.disconnect()
@@ -1062,7 +1084,7 @@ class AapTransport {
 
                 if invalidChannel || invalidLength {
                     let dropped = receiveBuffer.removeFirst()
-                    print("AapTransport: Resync frame parser, dropped byte 0x\(String(format: "%02x", dropped))")
+                    AppLog.w("Resync frame parser, dropped byte 0x\(String(format: "%02x", dropped))", tag: "AapTransport")
                     bufferLock.unlock()
                     continue
                 }
@@ -1096,7 +1118,7 @@ class AapTransport {
             processTlsHandshakeStep(step)
             startHandshakeTimeout(for: .tlsHandshaking)
         } catch {
-            print("AapTransport: Failed to start TLS handshake: \(error)")
+            AppLog.w("Failed to start TLS handshake: \(error)", tag: "AapTransport")
             setState(.error("TLS handshake failed: \(error.localizedDescription)"))
             delegate?.aapTransportDidDisconnect(self)
         }
@@ -1107,7 +1129,7 @@ class AapTransport {
             let step = try tlsHandler.continueHandshake(with: payload)
             processTlsHandshakeStep(step)
         } catch {
-            print("AapTransport: TLS handshake step failed: \(error)")
+            AppLog.w("TLS handshake step failed: \(error)", tag: "AapTransport")
             setState(.error("TLS handshake failed: \(error.localizedDescription)"))
             delegate?.aapTransportDidDisconnect(self)
         }
@@ -1123,11 +1145,11 @@ class AapTransport {
                 payload: step.outgoingData
             )
             sendRaw(message.toData())
-            print("AapTransport: Sent encapsulated SSL payload: \(step.outgoingData.count) bytes, tlsPreview=\(tlsPreview)")
+            AppLog.i("Sent encapsulated SSL payload: \(step.outgoingData.count) bytes, tlsPreview=\(tlsPreview)", tag: "AapTransport")
         }
 
         if step.isComplete {
-            print("AapTransport: TLS handshake completed")
+            AppLog.i("TLS handshake completed", tag: "AapTransport")
             tlsHandler.postHandshakeReset()
             setState(.authenticating)
             sendStatusOk()
@@ -1140,7 +1162,7 @@ class AapTransport {
         noteInboundMessage(channel: Int(channelId), bytes: message.payloadSize)
 
         if channelId != Channel.ID_VID && !Channel.isAudio(channelId) && channelId != Channel.ID_MIC {
-            print("AapTransport: Received message on channel \(Channel.name(for: channelId)), type=\(message.type), size=\(message.payload.count)")
+            AppLog.i("Received message on channel \(Channel.name(for: channelId)), type=\(message.type), size=\(message.payload.count)", tag: "AapTransport")
         }
 
         // ChannelOpenRequest (0x0007) is handled before the service is established on any channel,
@@ -1177,7 +1199,7 @@ class AapTransport {
             handleNavigationMessage(message)
 
         default:
-            print("AapTransport: Unhandled channel \(channelId)")
+            AppLog.w("Unhandled channel \(channelId)", tag: "AapTransport")
         }
     }
 
@@ -1185,10 +1207,10 @@ class AapTransport {
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
         lastInboundMessageMs = nowMs
         if let report = linkGapMonitor.onMessage(nowMs: nowMs) {
-            print("AapTransport: LinkGap: \(report)")
+            AppLog.i("LinkGap: \(report)", tag: "AapTransport")
         }
         if let rateReport = inboundRateMonitor.onMessage(channel: channel, bytes: bytes, nowMs: nowMs) {
-            print("AapTransport: InboundRate: \(rateReport)")
+            AppLog.i("InboundRate: \(rateReport)", tag: "AapTransport")
         }
         let quiet: LinkGapMonitor.Report?
         if UInt8(channel) == Channel.ID_VID {
@@ -1199,7 +1221,7 @@ class AapTransport {
             quiet = nil
         }
         if let q = quiet {
-            print("AapTransport: MediaGap: \(q)")
+            AppLog.i("MediaGap: \(q)", tag: "AapTransport")
         }
     }
 
@@ -1208,12 +1230,12 @@ class AapTransport {
         case 0x8001:
             handleMediaPlaybackStatus(message.payload)
         case 0x8002:
-            print("AapTransport: MPB input/start response packet size=\(message.payload.count)")
+            AppLog.i("MPB input/start response packet size=\(message.payload.count)", tag: "AapTransport")
             break
         case 0x8003:
             handleMediaPlaybackMetadata(message)
         default:
-            print("AapTransport: MPB unhandled type=\(message.type) flags=\(message.flags) size=\(message.payload.count)")
+            AppLog.w("MPB unhandled type=\(message.type) flags=\(message.flags) size=\(message.payload.count)", tag: "AapTransport")
         }
     }
 
@@ -1226,14 +1248,14 @@ class AapTransport {
             mediaSource: source,
             playbackSeconds: seconds
         )
-        print("AapTransport: MPB status state=\(stateValue.map(String.init) ?? "-") source='\(source ?? "")' seconds=\(seconds.map(String.init) ?? "-")")
+        AppLog.i("MPB status state=\(stateValue.map(String.init) ?? "-", tag: "AapTransport") source='\(source ?? "")' seconds=\(seconds.map(String.init) ?? "-")")
         delegate?.aapTransport(self, didReceivePlaybackStatus: status)
     }
 
     private func handleMediaPlaybackMetadata(_ message: AapMessage) {
         let payload = message.payload
         guard !payload.isEmpty else { return }
-        print("AapTransport: MPB metadata packet flags=0x\(String(format: "%02x", message.flags)) size=\(payload.count)")
+        AppLog.i("MPB metadata packet flags=0x\(String(format: "%02x", message.flags)) size=\(payload.count)", tag: "AapTransport")
         let metadata = AapMediaMetadata(
             title: ProtoWire.extractFirstString(from: payload, fieldNumber: 1),
             artist: ProtoWire.extractFirstString(from: payload, fieldNumber: 2),
@@ -1241,7 +1263,7 @@ class AapTransport {
             durationSeconds: ProtoWire.extractFirstVarint(from: payload, fieldNumber: 6),
             albumArt: ProtoWire.extractFirstBytes(from: payload, fieldNumber: 4)
         )
-        print("AapTransport: MPB metadata title='\(metadata.title ?? "")' artist='\(metadata.artist ?? "")' album='\(metadata.album ?? "")' artBytes=\(metadata.albumArt?.count ?? 0)")
+        AppLog.i("MPB metadata title='\(metadata.title ?? "", tag: "AapTransport")' artist='\(metadata.artist ?? "")' album='\(metadata.album ?? "")' artBytes=\(metadata.albumArt?.count ?? 0)")
         delegate?.aapTransport(self, didReceiveMediaMetadata: metadata)
     }
 
@@ -1249,7 +1271,7 @@ class AapTransport {
         switch message.type {
         case 0x8003: // NavigationStatus.MsgType.STATUS
             let status = ProtoWire.extractFirstVarint(from: message.payload, fieldNumber: 1)
-            print("AapTransport: NAV status=\(status.map(String.init) ?? "-")")
+            AppLog.i("NAV status=\(status.map(String.init) ?? "-", tag: "AapTransport")")
 
         case 0x8004: // NavigationStatus.MsgType.NEXTTURNDETAILS
             let road = ProtoWire.extractFirstString(from: message.payload, fieldNumber: 1) ?? ""
@@ -1260,19 +1282,19 @@ class AapTransport {
 
             let sideName = navSideName(side)
             let eventName = navEventName(nextTurn)
-            print("AapTransport: NAV detail road='\(road)' side=\(sideName)(\(side)) next=\(eventName)(\(nextTurn)) turnNo=\(turnNumber.map(String.init) ?? "-") angle=\(turnAngle.map(String.init) ?? "-")")
+            AppLog.i("NAV detail road='\(road)' side=\(sideName)(\(side)) next=\(eventName)(\(nextTurn)) turnNo=\(turnNumber.map(String.init) ?? "-", tag: "AapTransport") angle=\(turnAngle.map(String.init) ?? "-")")
 
         case 0x8005: // NavigationStatus.MsgType.NEXTTURNDISTANCEANDTIME
             let distance = ProtoWire.extractFirstVarint(from: message.payload, fieldNumber: 1)
             let time = ProtoWire.extractFirstVarint(from: message.payload, fieldNumber: 2)
-            print("AapTransport: NAV distance/time distanceM=\(distance.map(String.init) ?? "-") etaSec=\(time.map(String.init) ?? "-")")
+            AppLog.i("NAV distance/time distanceM=\(distance.map(String.init) ?? "-", tag: "AapTransport") etaSec=\(time.map(String.init) ?? "-")")
 
         default:
             let road = ProtoWire.extractFirstString(from: message.payload, fieldNumber: 1)
             let f1 = ProtoWire.extractFirstVarint(from: message.payload, fieldNumber: 1)
             let f2 = ProtoWire.extractFirstVarint(from: message.payload, fieldNumber: 2)
             let f3 = ProtoWire.extractFirstVarint(from: message.payload, fieldNumber: 3)
-            print("AapTransport: NAV unknown type=\(message.type) size=\(message.payload.count) road='\(road ?? "")' f1=\(f1.map(String.init) ?? "-") f2=\(f2.map(String.init) ?? "-") f3=\(f3.map(String.init) ?? "-")")
+            AppLog.w("NAV unknown type=\(message.type) size=\(message.payload.count) road='\(road ?? "", tag: "AapTransport")' f1=\(f1.map(String.init) ?? "-") f2=\(f2.map(String.init) ?? "-") f3=\(f3.map(String.init) ?? "-")")
         }
     }
 
@@ -1313,9 +1335,9 @@ class AapTransport {
         let chan = message.channelUInt8
         switch message.typeUInt16 {
         case AapMessageType.VERSION_RESPONSE.rawValue:
-            print("AapTransport: Version response received")
+            AppLog.i("Version response received", tag: "AapTransport")
             if let result = AapVersionNegotiation.parse(frame: message.data, length: message.size) {
-                print("AapTransport: Negotiated AAP version \(result.major).\(result.minor), status=\(result.statusName), supports16=\(result.supports16)")
+                AppLog.i("Negotiated AAP version \(result.major).\(result.minor), status=\(result.statusName), supports16=\(result.supports16)", tag: "AapTransport")
             }
             delayedVersionStartWorkItem?.cancel()
             delayedVersionStartWorkItem = nil
@@ -1331,18 +1353,18 @@ class AapTransport {
             }
 
         case AapMessageType.AUTH_COMPLETE.rawValue:
-            print("AapTransport: Auth complete received")
+            AppLog.i("Auth complete received", tag: "AapTransport")
             if state == .authenticating {
                 setState(.authenticatingComplete)
                 setState(.binding)
             }
 
         case AapMessageType.SERVICE_DISCOVERY_REQUEST.rawValue:
-            print("AapTransport: Service discovery request received")
+            AppLog.i("Service discovery request received", tag: "AapTransport")
             sendServiceDiscoveryResponse()
 
         case AapMessageType.CHANNEL_OPEN_REQUEST.rawValue:
-            print("AapTransport: Channel open request received")
+            AppLog.i("Channel open request received", tag: "AapTransport")
             sendChannelOpenResponse(on: chan)
             if state == .authenticating {
                 setState(.authenticatingComplete)
@@ -1360,11 +1382,11 @@ class AapTransport {
             break
 
         case AapMessageType.CAR_CONNECTED_DEVICES_REQUEST.rawValue:
-            print("AapTransport: Car connected devices request received")
+            AppLog.i("Car connected devices request received", tag: "AapTransport")
             sendCarConnectedDevicesResponse(on: chan, unsolicited: false)
 
         case AapMessageType.USER_SWITCH_REQUEST.rawValue:
-            print("AapTransport: User switch request received")
+            AppLog.i("User switch request received", tag: "AapTransport")
             sendUserSwitchResponse(on: chan)
 
         case AapMessageType.PING_REQUEST.rawValue:
@@ -1376,7 +1398,7 @@ class AapTransport {
         case 0x0018: // Control.ControlMsgType.messageVideoFocusRequest (24)
             let requestedMode = ProtoWire.extractFirstVarint(from: message.payload, fieldNumber: 2) ?? 1
             if requestedMode == 2 || requestedMode == 3 {
-                print("AapTransport: Native exit requested on control channel (mode=\(requestedMode))")
+                AppLog.i("Native exit requested on control channel (mode=\(requestedMode))", tag: "AapTransport")
                 sendVideoFocusNotification(on: Channel.ID_VID, gain: false, unsolicited: false, reason: "control-video-focus-exit")
                 delegate?.aapTransportDidRequestExit(self)
             } else if requestedMode == 1 || requestedMode == 4 {
@@ -1392,16 +1414,16 @@ class AapTransport {
             delegate?.aapTransportDidRequestExit(self)
 
         case AapMessageType.BYEBYE_RESPONSE.rawValue:
-            print("AapTransport: Received byebye response")
+            AppLog.i("Received byebye response", tag: "AapTransport")
             finishGracefulDisconnect(reason: "response")
             delegate?.aapTransportDidRequestExit(self)
 
         case AapMessageType.CHANNEL_OPEN_RESPONSE.rawValue:
-            print("AapTransport: Channel open response received")
+            AppLog.i("Channel open response received", tag: "AapTransport")
             setState(.running)
 
         default:
-            print("AapTransport: Unknown control message type: \(message.type)")
+            AppLog.w("Unknown control message type: \(message.type)", tag: "AapTransport")
         }
     }
 
@@ -1426,7 +1448,7 @@ class AapTransport {
             return
         }
 
-        print("AapTransport: Unhandled sensor message type=\(message.type)")
+        AppLog.w("Unhandled sensor message type=\(message.type)", tag: "AapTransport")
     }
 
     private func handleInputMessage(_ message: AapMessage) {
@@ -1440,7 +1462,7 @@ class AapTransport {
             return
         }
 
-        print("AapTransport: Unhandled input message type=\(message.type)")
+        AppLog.w("Unhandled input message type=\(message.type)", tag: "AapTransport")
     }
 
     private func sendServiceDiscoveryResponse() {
@@ -1456,7 +1478,7 @@ class AapTransport {
             enableAudioSink: ProjectionSettings.isAudioSinkEnabled
         )
         send(message: message)
-        print("AapTransport: Sent typed ServiceDiscoveryResponse (\(message.size) bytes)")
+        AppLog.i("Sent typed ServiceDiscoveryResponse (\(message.size) bytes)", tag: "AapTransport")
     }
 
     private func sendChannelOpenResponse(on channel: UInt8) {
@@ -1468,7 +1490,7 @@ class AapTransport {
             payload: payload
         )
         send(message: message)
-        print("AapTransport: Sent channel open response on channel \(Channel.name(for: channel))")
+        AppLog.i("Sent channel open response on channel \(Channel.name(for: channel))", tag: "AapTransport")
 
         if channel == Channel.ID_SEN {
             sendDrivingStatusUnrestricted(on: channel)
@@ -1500,7 +1522,7 @@ class AapTransport {
             payload: payload
         )
         send(message: message)
-        print("AapTransport: Audio focus requestType=\(requestType) -> focusState=\(focusState)")
+        AppLog.i("Audio focus requestType=\(requestType) -> focusState=\(focusState)", tag: "AapTransport")
     }
 
     private func sendSensorStartResponse(on channel: UInt8) {
@@ -1513,7 +1535,7 @@ class AapTransport {
             payload: payload
         )
         send(message: message)
-        print("AapTransport: Sent sensor start response")
+        AppLog.i("Sent sensor start response", tag: "AapTransport")
     }
 
     private func sendInputBindingResponse(on channel: UInt8) {
@@ -1526,7 +1548,7 @@ class AapTransport {
             payload: payload
         )
         send(message: message)
-        print("AapTransport: Sent input binding response")
+        AppLog.i("Sent input binding response", tag: "AapTransport")
     }
 
     private func sendDrivingStatusUnrestricted(on channel: UInt8) {
@@ -1540,30 +1562,30 @@ class AapTransport {
             payload: sensorBatch
         )
         send(message: message)
-        print("AapTransport: Sent driving status unrestricted")
+        AppLog.i("Sent driving status unrestricted", tag: "AapTransport")
     }
 
     private func sendVideoFocusNotification(on channel: UInt8, gain: Bool = true, unsolicited: Bool = true, reason: String) {
         let message = AapVideoFocusEventMessage.make(gain: gain, unsolicited: unsolicited)
         send(message: message)
-        print("AapTransport: Sent video focus notification gain=\(gain) unsolicited=\(unsolicited) reason=\(reason)")
+        AppLog.i("Sent video focus notification gain=\(gain) unsolicited=\(unsolicited) reason=\(reason)", tag: "AapTransport")
     }
 
     public func performVideoFocusCycle(reason: String) {
         guard focusCycleLever.tryClaim() else {
-            print("AapTransport: Focus cycle already in flight, skipping redundant cycle")
+            AppLog.i("Focus cycle already in flight, skipping redundant cycle", tag: "AapTransport")
             return
         }
         focusCyclesUsedThisSession += 1
         lastFocusCycleAtMs = Int64(uptimeMs())
-        print("AapTransport: Initiating VideoFocus release/regain cycle (reason: \(reason), cycle #\(focusCyclesUsedThisSession))")
+        AppLog.i("Initiating VideoFocus release/regain cycle (reason: \(reason), cycle #\(focusCyclesUsedThisSession))", tag: "AapTransport")
         sendVideoFocusNotification(on: Channel.ID_VID, gain: false, reason: "cycle-release-\(reason)")
 
         DispatchQueue.global().asyncAfter(deadline: .now() + .milliseconds(Int(WarmRelaunchKeyframePolicy.focusCycleGapMs))) { [weak self] in
             guard let self = self else { return }
             self.sendVideoFocusNotification(on: Channel.ID_VID, gain: true, reason: "cycle-regain-\(reason)")
             self.focusCycleLever.release()
-            print("AapTransport: Completed VideoFocus release/regain cycle")
+            AppLog.i("Completed VideoFocus release/regain cycle", tag: "AapTransport")
         }
     }
 
@@ -1572,7 +1594,7 @@ class AapTransport {
             guard let self = self, self.state == .running, self.isVideoChannelStarted else { return }
             let message = UpdateUiConfigRequest.make(left: left, top: top, right: right, bottom: bottom, uiTheme: uiTheme)
             self.send(message: message)
-            print("AapTransport: Sent UpdateUiConfigRequest left=\(left) top=\(top) right=\(right) bottom=\(bottom)")
+            AppLog.i("Sent UpdateUiConfigRequest left=\(left) top=\(top) right=\(right) bottom=\(bottom)", tag: "AapTransport")
             self.sendVideoFocusNotification(on: Channel.ID_VID, gain: true, unsolicited: true, reason: "update-ui-config")
         }
     }
@@ -1587,7 +1609,7 @@ class AapTransport {
             payload: payload
         )
         send(message: message)
-        print("AapTransport: Sent call availability status")
+        AppLog.i("Sent call availability status", tag: "AapTransport")
     }
 
     private func sendCarConnectedDevicesResponse(on channel: UInt8, unsolicited: Bool) {
@@ -1604,7 +1626,7 @@ class AapTransport {
             payload: payload
         )
         send(message: message)
-        print("AapTransport: Sent car connected devices response (unsolicited=\(unsolicited))")
+        AppLog.i("Sent car connected devices response (unsolicited=\(unsolicited))", tag: "AapTransport")
     }
 
     private func sendUserSwitchResponse(on channel: UInt8) {
@@ -1620,7 +1642,7 @@ class AapTransport {
             payload: payload
         )
         send(message: message)
-        print("AapTransport: Sent user switch response")
+        AppLog.i("Sent user switch response", tag: "AapTransport")
     }
 
     private func buildConnectedDevice(name: String, id: UInt64) -> Data {
@@ -1638,7 +1660,7 @@ class AapTransport {
             payload: payload
         )
         send(message: message)
-        print("AapTransport: Sent ping response")
+        AppLog.i("Sent ping response", tag: "AapTransport")
     }
 
     private func sendNavFocusNotification(on channel: UInt8) {
@@ -1650,7 +1672,7 @@ class AapTransport {
             payload: payload
         )
         send(message: message)
-        print("AapTransport: Sent navigation focus notification")
+        AppLog.i("Sent navigation focus notification", tag: "AapTransport")
     }
 
     private func sendByebyeResponse(on channel: UInt8) {
@@ -1661,7 +1683,7 @@ class AapTransport {
             payload: Data()
         )
         send(message: message)
-        print("AapTransport: Sent byebye response")
+        AppLog.i("Sent byebye response", tag: "AapTransport")
     }
 
     private func finishGracefulDisconnect(reason: String) {
@@ -1681,7 +1703,7 @@ class AapTransport {
         gracefulDisconnectLock.unlock()
         timeout?.cancel()
         guard let completion else { return }
-        print("AapTransport: Graceful disconnect finished via \(reason)")
+        AppLog.i("Graceful disconnect finished via \(reason)", tag: "AapTransport")
         DispatchQueue.main.async(execute: completion)
     }
 
@@ -1982,7 +2004,7 @@ enum ProtoWire {
         case 0x8007: // Media.MsgType.MEDIA_MESSAGE_VIDEO_FOCUS_REQUEST
             let requestedMode = ProtoWire.extractFirstVarint(from: message.payload, fieldNumber: 2) ?? 1
             if requestedMode == 2 || requestedMode == 3 {
-                print("AapTransport: Native exit requested via VIDEO_FOCUS_REQUEST (mode=\(requestedMode))")
+                AppLog.i("Native exit requested via VIDEO_FOCUS_REQUEST (mode=\(requestedMode))", tag: "AapTransport")
                 sendVideoFocusNotification(on: Channel.ID_VID, gain: false, unsolicited: false, reason: "video-focus-exit")
                 delegate?.aapTransportDidRequestExit(self)
             } else if requestedMode == 1 || requestedMode == 4 {
@@ -2019,7 +2041,7 @@ enum ProtoWire {
            nowMs > videoFirstFragmentAtMs,
            nowMs - videoFirstFragmentAtMs > videoAssemblyTimeoutMs,
            flags == 0x09 {
-            print("AapTransport: Video assembly timeout \(nowMs - videoFirstFragmentAtMs)ms, dropping stale fragments")
+            AppLog.w("Video assembly timeout \(nowMs - videoFirstFragmentAtMs)ms, dropping stale fragments", tag: "AapTransport")
             videoAssemblyBuffer.removeAll(keepingCapacity: true)
             videoAssemblyMessageType = 0
             videoFirstFragmentAtMs = 0
@@ -2049,12 +2071,12 @@ enum ProtoWire {
 
         case 0x08: // middle fragment
             if videoFirstFragmentAtMs == 0 {
-                print("AapTransport: Orphan middle video fragment received")
+                AppLog.i("Orphan middle video fragment received", tag: "AapTransport")
                 requestVideoRecoveryIfNeeded(reason: "orphan-middle-fragment", ignoreRecentVideoGuard: false)
                 return
             }
             if videoAssemblyBuffer.count + payload.count > maxVideoAssemblyBytes {
-                print("AapTransport: Video assembly overflow on middle fragment, dropping")
+                AppLog.w("Video assembly overflow on middle fragment, dropping", tag: "AapTransport")
                 videoAssemblyBuffer.removeAll(keepingCapacity: true)
                 videoAssemblyMessageType = 0
                 videoFirstFragmentAtMs = 0
@@ -2065,7 +2087,7 @@ enum ProtoWire {
 
         case 0x0a: // last fragment
             if videoAssemblyBuffer.count + payload.count > maxVideoAssemblyBytes {
-                print("AapTransport: Video assembly overflow on final fragment, dropping")
+                AppLog.w("Video assembly overflow on final fragment, dropping", tag: "AapTransport")
                 videoAssemblyBuffer.removeAll(keepingCapacity: true)
                 videoAssemblyMessageType = 0
                 videoFirstFragmentAtMs = 0
@@ -2100,7 +2122,7 @@ enum ProtoWire {
         if let offset = findAnnexBStartOffset(in: videoBytes) {
             deliverVideoFrame(offset == 0 ? videoBytes : videoBytes.subdata(in: offset..<videoBytes.count))
         } else if let parameterSets = H264NALParser.annexBParameterSets(from: videoBytes) {
-            print("AapTransport: Normalized non-Annex-B H.264 codec configuration")
+            AppLog.i("Normalized non-Annex-B H.264 codec configuration", tag: "AapTransport")
             deliverVideoFrame(parameterSets)
         }
     }
@@ -2222,7 +2244,7 @@ enum ProtoWire {
             }
 
         default:
-            print("AapTransport: Unhandled audio message type=\(message.type) on channel \(Channel.name(for: message.channelUInt8))")
+            AppLog.w("Unhandled audio message type=\(message.type) on channel \(Channel.name(for: message.channelUInt8))", tag: "AapTransport")
         }
     }
 
@@ -2244,22 +2266,22 @@ enum ProtoWire {
     private func handleMicrophoneMessage(_ message: AapMessage) {
         switch message.type {
         case 0x8000: // Media.MsgType.MEDIA_MESSAGE_SETUP
-            print("AapTransport: Microphone setup request received")
+            AppLog.i("Microphone setup request received", tag: "AapTransport")
             sendMediaConfig(on: message.channelUInt8)
 
         case 0x8001: // Media.MsgType.MEDIA_MESSAGE_START
-            print("AapTransport: Microphone start request received")
+            AppLog.i("Microphone start request received", tag: "AapTransport")
             setMediaSessionId(fromStartPayload: message.payload, on: message.channelUInt8)
 
         case 0x8002: // Media.MsgType.MEDIA_MESSAGE_STOP
-            print("AapTransport: Microphone stop request received")
+            AppLog.i("Microphone stop request received", tag: "AapTransport")
             delegate?.aapTransport(self, didRequestMicrophoneCapture: false)
             sendAudioFocusGainUnsolicited()
 
         case 0x8005: // Media.MsgType.MEDIA_MESSAGE_MICROPHONE_REQUEST
             let openValue = ProtoWire.extractFirstVarint(from: message.payload, fieldNumber: 1) ?? 0
             let shouldOpen = openValue != 0
-            print("AapTransport: Microphone request open=\(shouldOpen)")
+            AppLog.i("Microphone request open=\(shouldOpen)", tag: "AapTransport")
             delegate?.aapTransport(self, didRequestMicrophoneCapture: shouldOpen)
             if !shouldOpen {
                 // Assistant flow ended. Proactively restore media focus to unstick playback.
@@ -2274,7 +2296,7 @@ enum ProtoWire {
             break
 
         default:
-            print("AapTransport: Unhandled microphone message type=\(message.type)")
+            AppLog.w("Unhandled microphone message type=\(message.type)", tag: "AapTransport")
         }
     }
 
@@ -2296,7 +2318,7 @@ enum ProtoWire {
         // Media.Start { session_id = 1, configuration_index = 2 }
         let sessionId = ProtoWire.extractFirstVarint(from: payload, fieldNumber: 1) ?? 0
         mediaSessionIds[channel] = sessionId
-        print("AapTransport: Stored media session id \(sessionId) for channel \(Channel.name(for: channel))")
+        AppLog.i("Stored media session id \(sessionId) for channel \(Channel.name(for: channel))", tag: "AapTransport")
     }
 
     private func sendMediaAck(on channel: UInt8) {
@@ -2355,13 +2377,13 @@ enum ProtoWire {
 
         switch action {
         case .nudge:
-            print("AapTransport: Requesting video recovery (nudge), reason=\(reason)")
+            AppLog.i("Requesting video recovery (nudge), reason=\(reason)", tag: "AapTransport")
             sendVideoFocusNotification(on: Channel.ID_VID, gain: true, reason: "recovery-\(reason)")
         case .cycleFocus:
-            print("AapTransport: Requesting video recovery (escalated cycle), reason=\(reason)")
+            AppLog.i("Requesting video recovery (escalated cycle), reason=\(reason)", tag: "AapTransport")
             performVideoFocusCycle(reason: reason)
         case .waitForQuiet:
-            print("AapTransport: Wire corruption active, waiting for quiet before video recovery cycle")
+            AppLog.w("Wire corruption active, waiting for quiet before video recovery cycle", tag: "AapTransport")
             sendVideoFocusNotification(on: Channel.ID_VID, gain: true, reason: "recovery-quiet-\(reason)")
         }
     }
@@ -2385,7 +2407,7 @@ enum ProtoWire {
         )
         send(message: message)
         if !Channel.isAudio(channel) && channel != Channel.ID_MIC && channel != Channel.ID_VID {
-            print("AapTransport: Sent media config on channel \(Channel.name(for: channel))")
+            AppLog.i("Sent media config on channel \(Channel.name(for: channel))", tag: "AapTransport")
         }
     }
 
@@ -2430,20 +2452,21 @@ enum ProtoWire {
         aapTraceLock.unlock()
 
         guard !traceSnapshot.isEmpty else {
-            print("AapTransport: No recent AAP trace before disconnect (\(reason))")
+            AppLog.w("No recent AAP trace before disconnect (\(reason))", tag: "AapTrace")
             return
         }
 
-        print("AapTransport: Recent AAP trace before disconnect (\(reason)):")
-        for (idx, entry) in traceSnapshot.enumerated() {
-            print("  [\(idx + 1)] t=\(entry.timestampMs) \(entry.direction) ch=\(Channel.name(for: entry.channel))(\(entry.channel)) flags=0x\(String(format: "%02x", entry.flags)) type=\(entry.type) size=\(entry.payloadSize)")
+        let count = min(32, traceSnapshot.count)
+        AppLog.w("Recent AAP trace before disconnect (\(reason), last \(count)):", tag: "AapTrace")
+        for (idx, entry) in traceSnapshot.suffix(32).enumerated() {
+            AppLog.w("  [\(idx + 1)] t=\(entry.timestampMs) \(entry.direction) ch=\(Channel.name(for: entry.channel))(\(entry.channel)) flags=0x\(String(format: "%02x", entry.flags)) type=\(entry.type) size=\(entry.payloadSize)", tag: "AapTrace")
         }
     }
 }
 
 extension AapTransport: ByteStreamConnectionDelegate {
     func byteStreamConnectionDidConnect(_ connection: ByteStreamConnection) {
-        print("AapTransport: byte stream connected, starting handshake")
+        AppLog.i("byte stream connected, starting handshake", tag: "AapTransport")
         startHandshake()
     }
 
@@ -2456,11 +2479,11 @@ extension AapTransport: ByteStreamConnectionDelegate {
     func byteStreamConnection(_ connection: ByteStreamConnection, didDisconnect error: Error?) {
         cancelGracefulDisconnect()
         if let error {
-            print("AapTransport: byte stream error: \(error)")
+            AppLog.w("byte stream error: \(error)", tag: "AapTransport")
             dumpRecentAapTrace(reason: "connection-error")
             setState(.error(error.localizedDescription))
         } else {
-            print("AapTransport: byte stream disconnected")
+            AppLog.i("byte stream disconnected", tag: "AapTransport")
             dumpRecentAapTrace(reason: "connection-disconnect")
         }
         delayedVersionStartWorkItem?.cancel()

@@ -41,7 +41,16 @@ public enum LogExporter {
 
     public static func generateFullReport() -> String {
         var report = sessionBanner()
-        report.append("\n\n--- AUDIO DIAGNOSTICS (Latest 64 Events) ---\n")
+
+        report.append("\n\n--- CONNECTION & AAP DIAGNOSTICS ---\n")
+        let connLines = ConnectionManager.shared.diagnosticLines()
+        if connLines.isEmpty {
+            report.append("No connection or AAP diagnostics recorded.\n")
+        } else {
+            report.append(connLines.joined(separator: "\n") + "\n")
+        }
+
+        report.append("\n--- AUDIO DIAGNOSTICS (Latest 64 Events) ---\n")
         let audioEvents = AudioDiagnostics.shared.snapshot()
         if audioEvents.isEmpty {
             report.append("No audio diagnostic events recorded.\n")

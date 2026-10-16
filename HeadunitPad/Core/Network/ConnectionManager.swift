@@ -95,7 +95,7 @@ class ConnectionManager {
 
     private(set) var state: ConnectionState = .disconnected {
         didSet {
-            print("ConnectionManager: state changed from \(oldValue.description) to \(state.description)")
+            AppLog.i("ConnectionManager: state changed from \(oldValue.description) to \(state.description)", tag: "ConnectionManager")
             DispatchQueue.main.async { [weak self] in
                 guard let self = self else { return }
                 self.delegate?.connectionManager(self, didChangeState: self.state)
@@ -105,6 +105,7 @@ class ConnectionManager {
 
     private var hasPerformedSilentIcebreakRetry = false
     private(set) var lastConnectedDevice: DiscoveredDevice?
+    private var lastSessionDiagnosticLines: [String] = []
 
     public var currentRxMbps: Double {
         return aapTransport?.currentRxMbps ?? 0.0
@@ -143,7 +144,7 @@ class ConnectionManager {
     }
 
     func startDiscovery() {
-        print("ConnectionManager: startDiscovery called")
+        AppLog.i("ConnectionManager: startDiscovery called", tag: "ConnectionManager")
         hasPerformedSilentIcebreakRetry = false
         autoReconnect.cancel()
         isUserInitiatedDisconnect = false
@@ -156,7 +157,7 @@ class ConnectionManager {
         }
 
         guard canStart else {
-            print("ConnectionManager: Cannot start discovery, current state: \(state.description)")
+            AppLog.w("ConnectionManager: Cannot start discovery, current state: \(state.description)", tag: "ConnectionManager")
             return
         }
 
@@ -175,10 +176,10 @@ class ConnectionManager {
         discovery.startScan(ports: [Discovery.headunitPort])
     }
 
-    func stopDiscovery() {
-        print("ConnectionManager: stopDiscovery called")
+    func stopDiscovery(cancelPrepared: Bool = true) {
+        AppLog.i("ConnectionManager: stopDiscovery called", tag: "ConnectionManager")
         autoReconnect.cancel()
-        discovery.stopScan()
+        discovery.stopScan(cancelPrepared: cancelPrepared)
         if state == .discovering || state == .waitingForWirelessHelper {
             state = .disconnected
             updateStatus("Ready to connect")
@@ -186,7 +187,7 @@ class ConnectionManager {
     }
 
     func connect(to device: DiscoveredDevice, userInitiated: Bool = true) {
-        print("ConnectionManager: connect(to:) called with device: \(device.displayName), userInitiated: \(userInitiated)")
+        AppLog.i("ConnectionManager: connect(to:) called with device: \(device.displayName), userInitiated: \(userInitiated)", tag: "ConnectionManager")
         if userInitiated {
             hasPerformedSilentIcebreakRetry = false
         }
@@ -195,22 +196,23 @@ class ConnectionManager {
 
         let targetEndpoint = SameEndpointConnectPolicy.endpoint(host: device.ip, port: Int(device.port))
         if !userInitiated && (state == .connecting || state == .handshaking || state == .running) && targetEndpoint == lastTriedEndpoint {
-            print("ConnectionManager: In-flight connection to \(targetEndpoint) already active, ignoring duplicate connect")
+            AppLog.i("ConnectionManager: In-flight connection to \(targetEndpoint) already active, ignoring duplicate connect", tag: "ConnectionManager")
             return
         }
 
         let inFlight = (state == .connecting || state == .handshaking || state == .running)
         guard ConnectionAdmission.admits(inFlight: inFlight, userInitiated: userInitiated) else {
-            print("ConnectionManager: Admission refused connection to \(device.displayName)")
+            AppLog.w("ConnectionManager: Admission refused connection to \(device.displayName)", tag: "ConnectionManager")
             return
         }
         guard arbiter.claim(tier: .user, owner: .manual, what: device.displayName) != nil else {
-            print("ConnectionManager: Arbiter refused connection claim for \(device.displayName)")
+            AppLog.w("ConnectionManager: Arbiter refused connection claim for \(device.displayName)", tag: "ConnectionManager")
             return
         }
 
         lastTriedEndpoint = targetEndpoint
-        stopDiscovery()
+        let prepared = discovery.takePreparedConnection(ip: device.ip, port: device.port)
+        stopDiscovery(cancelPrepared: true)
         state = .connecting
         connectedDevice = device
         lastConnectedDevice = device
@@ -218,12 +220,17 @@ class ConnectionManager {
         installAapTransport(connection: tcpHandler)
         aapTransport?.configurePeer(host: device.ip, port: device.port)
 
-        print("ConnectionManager: Calling tcpHandler.connect(host: \(device.ip), port: \(device.port))")
-        tcpHandler.connect(host: device.ip, port: device.port)
+        if let prepared = prepared {
+            AppLog.i("ConnectionManager: Using prepared connection from discovery for \(device.ip):\(device.port)", tag: "ConnectionManager")
+            tcpHandler.adoptConnection(prepared, host: device.ip, port: device.port)
+        } else {
+            AppLog.i("ConnectionManager: Calling tcpHandler.connect(host: \(device.ip), port: \(device.port))", tag: "ConnectionManager")
+            tcpHandler.connect(host: device.ip, port: device.port)
+        }
     }
 
     func connect(to ip: String, port: UInt16 = 5277) {
-        print("ConnectionManager: connect(to:port:) called with ip: \(ip), port: \(port)")
+        AppLog.i("ConnectionManager: connect(to:port:) called with ip: \(ip), port: \(port)", tag: "ConnectionManager")
         let device = DiscoveredDevice(ip: ip, port: port, name: nil)
         connect(to: device, userInitiated: true)
     }
@@ -239,6 +246,7 @@ class ConnectionManager {
             port: 5277
         )
         if let transport = aapTransport {
+            lastSessionDiagnosticLines = transport.videoDiagnosticLines() + transport.teardownDiagnosticLines()
             state = .disconnecting
             isUserInitiatedDisconnect = true
             autoReconnect.cancel()
@@ -256,7 +264,7 @@ class ConnectionManager {
     }
 
     func disconnectForAppTermination() {
-        print("ConnectionManager: disconnectForAppTermination called")
+        AppLog.i("ConnectionManager: disconnectForAppTermination called", tag: "ConnectionManager")
         if state == .running || state == .handshaking {
             aapTransport?.sendByeByeRequestImmediately()
             activeConnection?.disconnect()
@@ -264,12 +272,15 @@ class ConnectionManager {
     }
 
     func disconnect() {
-        print("ConnectionManager: disconnect called")
+        AppLog.i("ConnectionManager: disconnect called", tag: "ConnectionManager")
         isUserInitiatedDisconnect = true
         autoReconnect.cancel()
 
-        if let transport = aapTransport, (transport.state == .running || transport.state == .binding || transport.state == .authenticatingComplete) {
-            transport.send(message: .userSelectionByebyeRequest)
+        if let transport = aapTransport {
+            lastSessionDiagnosticLines = transport.videoDiagnosticLines() + transport.teardownDiagnosticLines()
+            if (transport.state == .running || transport.state == .binding || transport.state == .authenticatingComplete) {
+                transport.send(message: .userSelectionByebyeRequest)
+            }
         }
 
         TeardownGuard.runThenClose(
@@ -290,7 +301,7 @@ class ConnectionManager {
                 self?.activeConnection?.disconnect()
             },
             onError: { phase, error in
-                print("ConnectionManager: disconnect error during \(phase): \(error.localizedDescription)")
+                AppLog.e("ConnectionManager: disconnect error during \(phase): \(error.localizedDescription)", tag: "ConnectionManager")
             }
         )
     }
@@ -299,11 +310,11 @@ class ConnectionManager {
         guard let device = connectedDevice else { return }
         let ip = device.ip
         let port = device.port
-        print("ConnectionManager: Reconnecting for settings change to \(ip):\(port)")
+        AppLog.i("ConnectionManager: Reconnecting for settings change to \(ip):\(port)", tag: "ConnectionManager")
         let isPassiveInbound = (port == 5000 || port == 5288 || port != 5277)
         disconnect()
         if isPassiveInbound {
-            print("ConnectionManager: Passive inbound connection, waiting for phone to reconnect via WirelessHelper")
+            AppLog.i("ConnectionManager: Passive inbound connection, waiting for phone to reconnect via WirelessHelper", tag: "ConnectionManager")
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
                 self?.startDiscovery()
             }
@@ -367,8 +378,8 @@ class ConnectionManager {
     }
 
     func diagnosticLines() -> [String] {
-        let device = connectedDevice
-        let liveVideoLines = aapTransport?.videoDiagnosticLines() ?? []
+        let device = connectedDevice ?? lastConnectedDevice
+        let liveVideoLines = aapTransport?.videoDiagnosticLines() ?? lastSessionDiagnosticLines
         let connectionLines = [
             "State: \(state.description)",
             "Status: \(statusDetail)",
@@ -403,7 +414,7 @@ class ConnectionManager {
 
     private func updateStatus(_ status: String) {
         statusDetail = status
-        print("ConnectionManager: status = \(status)")
+        AppLog.i("ConnectionManager: status = \(status)", tag: "ConnectionManager")
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             self.delegate?.connectionManager(self, didUpdateStatus: status)
@@ -416,7 +427,7 @@ class ConnectionManager {
 
         let delayMs = UnresponsivePeerPolicy.rescanDelayMs(consecutiveSilentFailures: consecutiveSilentFailures)
         if UnresponsivePeerPolicy.shouldExplain(consecutiveSilentFailures: consecutiveSilentFailures) {
-            print("ConnectionManager: UnresponsivePeerPolicy backing off to \(delayMs)ms after \(consecutiveSilentFailures) silent attempts")
+            AppLog.w("ConnectionManager: UnresponsivePeerPolicy backing off to \(delayMs)ms after \(consecutiveSilentFailures) silent attempts", tag: "ConnectionManager")
         }
 
         updateStatus("\(reason). Reconnecting in \(delayMs / 1000)s...")
@@ -444,11 +455,11 @@ class ConnectionManager {
 
 extension ConnectionManager: DiscoveryDelegate {
     func discoveryDidFindDevice(_ device: DiscoveredDevice) {
-        print("ConnectionManager: Discovered device \(device.displayName)")
+        AppLog.i("ConnectionManager: Discovered device \(device.displayName)", tag: "ConnectionManager")
         if !discoveredDevices.contains(where: { $0.ip == device.ip && $0.port == device.port }) {
             discoveredDevices.append(device)
         }
-        discovery.stopScan()
+        discovery.stopScan(cancelPrepared: false)
         if state == .discovering {
             state = .disconnected
         }
@@ -456,7 +467,7 @@ extension ConnectionManager: DiscoveryDelegate {
     }
 
     func discoveryDidFinish() {
-        print("ConnectionManager: discovery finished, found \(discoveredDevices.count) devices")
+        AppLog.i("ConnectionManager: discovery finished, found \(discoveredDevices.count) devices", tag: "ConnectionManager")
         if state == .discovering {
             if !discoveredDevices.isEmpty {
                 return
@@ -468,7 +479,7 @@ extension ConnectionManager: DiscoveryDelegate {
     }
 
     func discoveryDidFail(_ error: Error) {
-        print("ConnectionManager: discovery failed with error: \(error.localizedDescription)")
+        AppLog.e("ConnectionManager: discovery failed with error: \(error.localizedDescription)", tag: "ConnectionManager")
         state = .error(error.localizedDescription)
         updateStatus(error.localizedDescription)
         scheduleReconnectIfNeeded(reason: "Discovery failed")
@@ -554,9 +565,13 @@ extension ConnectionManager: AapTransportDelegate {
     func aapTransport(_ transport: AapTransport, didChangeState state: AapTransportState) {
         guard transport === aapTransport else { return }
         switch state {
-        case .waitingForVersion, .versionSent, .tlsHandshaking, .authenticating, .authenticatingComplete, .binding:
+        case .waitingForVersion, .versionSent:
             self.state = .handshaking
-            updateStatus("Handshaking with Android Auto...")
+            updateStatus("Waiting for Android Auto Headunit Server (5277)...")
+
+        case .tlsHandshaking, .authenticating, .authenticatingComplete, .binding:
+            self.state = .handshaking
+            updateStatus("Handshaking with Android Auto (TLS / Service Discovery)...")
 
         case .running:
             if ProjectionSettings.isAudioSinkEnabled {
@@ -583,7 +598,7 @@ extension ConnectionManager: AapTransportDelegate {
                 wasPlayingBeforeDisconnect: resume.wasPlaying,
                 elapsedSinceDisconnectMs: resume.elapsedMs
             ) {
-                print("ConnectionManager: AutoResumePlaybackPolicy satisfied, resuming playback")
+                AppLog.i("ConnectionManager: AutoResumePlaybackPolicy satisfied, resuming playback", tag: "ConnectionManager")
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
                     self?.sendRemoteMediaCommand(.play)
                 }
@@ -612,6 +627,7 @@ extension ConnectionManager: AapTransportDelegate {
 
     func aapTransportDidDisconnect(_ transport: AapTransport) {
         guard transport === aapTransport else { return }
+        lastSessionDiagnosticLines = transport.videoDiagnosticLines() + transport.teardownDiagnosticLines()
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
         playbackSnapshot.onDisconnected(
             lastPlaying: lastPlayingState,
@@ -637,7 +653,7 @@ extension ConnectionManager: AapTransportDelegate {
             renderedAnyFrame: false
         )
         if VideoStarvationPolicy.shouldAdvise(consecutiveStarvedSessions: consecutiveStarvedSessions) {
-            print("ConnectionManager: VideoStarvationPolicy advises lowering resolution/fps")
+            AppLog.w("ConnectionManager: VideoStarvationPolicy advises lowering resolution/fps", tag: "ConnectionManager")
         }
 
         scheduleReconnectIfNeeded(reason: "Android Auto disconnected")
@@ -645,7 +661,7 @@ extension ConnectionManager: AapTransportDelegate {
 
     func aapTransportDidRequestExit(_ transport: AapTransport) {
         guard transport === aapTransport else { return }
-        print("ConnectionManager: AapTransport requested exit (native video focus)")
+        AppLog.i("ConnectionManager: AapTransport requested exit (native video focus)", tag: "ConnectionManager")
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             self.isUserInitiatedDisconnect = true
@@ -655,7 +671,16 @@ extension ConnectionManager: AapTransportDelegate {
     }
 
     func aapTransportDidDetectSilentPeerOnInitialHandshake(_ transport: AapTransport) {
-        print("ConnectionManager: aapTransport reported silent peer warning (ignored)")
+        guard transport === aapTransport, !hasPerformedSilentIcebreakRetry, let device = connectedDevice else { return }
+        hasPerformedSilentIcebreakRetry = true
+        AppLog.w("No VERSION_RESPONSE after 3.0s; redialing fresh TCP connection to \(device.ip):\(device.port)", tag: "ConnectionManager")
+        isUserInitiatedDisconnect = true
+        tcpHandler.disconnect()
+        isUserInitiatedDisconnect = false
+        installAapTransport(connection: tcpHandler)
+        aapTransport?.initialVersionRequestDelay = 0.2
+        aapTransport?.configurePeer(host: device.ip, port: device.port)
+        tcpHandler.connect(host: device.ip, port: device.port)
     }
 }
 
@@ -670,12 +695,12 @@ extension ConnectionManager {
         }
 
         guard canAccept else {
-            print("ConnectionManager: dropping inbound AAP connection while state=\(state.description)")
+            AppLog.w("ConnectionManager: dropping inbound AAP connection while state=\(state.description)", tag: "ConnectionManager")
             connection.cancel()
             return
         }
 
-        discovery.stopScan()
+        discovery.stopScan(cancelPrepared: true)
         wirelessHelperServer.stop()
         legacyAapServer.stop()
 
@@ -706,7 +731,7 @@ extension ConnectionManager: WirelessHelperServerDelegate {
     }
 
     func wirelessHelperServer(_ server: WirelessHelperServer, didFail error: Error) {
-        print("ConnectionManager: wireless helper server on port \(server.listeningPort) failed with error: \(error.localizedDescription)")
+        AppLog.e("ConnectionManager: wireless helper server on port \(server.listeningPort) failed with error: \(error.localizedDescription)", tag: "ConnectionManager")
         if state == .discovering {
             state = .error(error.localizedDescription)
             updateStatus(error.localizedDescription)

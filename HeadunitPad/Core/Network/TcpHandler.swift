@@ -36,26 +36,24 @@ class TcpHandler: ByteStreamConnection, @unchecked Sendable {
     init() {}
 
     func adoptConnection(_ existingConnection: NWConnection, host: String, port: UInt16) {
-        print("TcpHandler: adopting prepared connection for host=\(host), port=\(port)")
-
+        AppLog.i("TcpHandler: adopting prepared connection for \(host):\(port)", tag: "TcpHandler")
         disconnect()
         connection = existingConnection
-        setupStateHandler(host: host, port: port)
-
         isConnected = true
+        setupStateHandler(host: host, port: port)
+        startReceiving()
         if Thread.isMainThread {
             delegate?.byteStreamConnectionDidConnect(self)
-            startReceiving()
         } else {
-            DispatchQueue.main.sync {
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
                 self.delegate?.byteStreamConnectionDidConnect(self)
             }
-            startReceiving()
         }
     }
 
     func acceptConnection(_ acceptedConnection: NWConnection, host: String, port: UInt16) {
-        print("TcpHandler: accepting inbound connection for host=\(host), port=\(port)")
+        AppLog.i("TcpHandler: accepting inbound connection for host=\(host), port=\(port)", tag: "TcpHandler")
 
         disconnect()
         connection = acceptedConnection
@@ -76,7 +74,7 @@ class TcpHandler: ByteStreamConnection, @unchecked Sendable {
             }
             remotePort = port.rawValue
         }
-        print("TcpHandler: accepting incoming connection from \(remoteHost):\(remotePort) with \(initialData.count) initial bytes")
+        AppLog.i("TcpHandler: accepting incoming connection from \(remoteHost):\(remotePort) with \(initialData.count) initial bytes", tag: "TcpHandler")
 
         disconnect()
         connection = incomingConnection
@@ -107,7 +105,7 @@ class TcpHandler: ByteStreamConnection, @unchecked Sendable {
     }
 
     func connect(host: String, port: UInt16) {
-        print("TcpHandler: connect called with host=\(host), port=\(port)")
+        AppLog.i("TcpHandler: connect called with host=\(host), port=\(port)", tag: "TcpHandler")
 
         disconnect()
 
@@ -120,14 +118,14 @@ class TcpHandler: ByteStreamConnection, @unchecked Sendable {
 
         let endpoint = NWEndpoint.hostPort(host: NWEndpoint.Host(host), port: NWEndpoint.Port(rawValue: port)!)
 
-        print("TcpHandler: Creating NWConnection (plain TCP) to \(endpoint)")
+        AppLog.i("TcpHandler: Creating NWConnection (plain TCP) to \(endpoint)", tag: "TcpHandler")
         connection = NWConnection(to: endpoint, using: parameters)
 
         setupStateHandler(host: host, port: port)
 
-        print("TcpHandler: Starting connection...")
+        AppLog.i("TcpHandler: Starting connection...", tag: "TcpHandler")
         connection?.start(queue: queue)
-        print("TcpHandler: connection.start() called")
+        AppLog.i("TcpHandler: connection.start() called", tag: "TcpHandler")
 
         startConnectionTimeout()
     }
@@ -136,24 +134,24 @@ class TcpHandler: ByteStreamConnection, @unchecked Sendable {
         connection?.stateUpdateHandler = { [weak self] state in
             guard let self = self else { return }
 
-            print("TcpHandler: connection state changed to: \(String(describing: state))")
+            AppLog.i("TcpHandler: connection state changed to: \(String(describing: state))", tag: "TcpHandler")
 
             switch state {
             case .setup:
-                print("TcpHandler: state = setup")
+                AppLog.d("TcpHandler: state = setup", tag: "TcpHandler")
 
             case .preparing:
-                print("TcpHandler: state = preparing")
+                AppLog.d("TcpHandler: state = preparing", tag: "TcpHandler")
 
             case .ready:
-                print("TcpHandler: state = ready, connected!")
+                AppLog.i("TcpHandler: state = ready, connected!", tag: "TcpHandler")
                 self.connectionTimer?.cancel()
                 self.isConnected = true
                 self.delegate?.byteStreamConnectionDidConnect(self)
                 self.startReceiving()
 
             case .failed(let error):
-                print("TcpHandler: state = failed, error=\(error)")
+                AppLog.e("TcpHandler: state = failed, error=\(error)", tag: "TcpHandler")
                 self.connectionTimer?.cancel()
                 self.isConnected = false
                 DispatchQueue.main.async {
@@ -161,7 +159,7 @@ class TcpHandler: ByteStreamConnection, @unchecked Sendable {
                 }
 
             case .cancelled:
-                print("TcpHandler: state = cancelled")
+                AppLog.w("TcpHandler: state = cancelled", tag: "TcpHandler")
                 self.connectionTimer?.cancel()
                 self.isConnected = false
                 DispatchQueue.main.async {
@@ -169,10 +167,10 @@ class TcpHandler: ByteStreamConnection, @unchecked Sendable {
                 }
 
             case .waiting(let error):
-                print("TcpHandler: state = waiting, error=\(error)")
+                AppLog.w("TcpHandler: state = waiting, error=\(error)", tag: "TcpHandler")
 
             @unknown default:
-                print("TcpHandler: state = unknown")
+                AppLog.w("TcpHandler: state = unknown", tag: "TcpHandler")
             }
         }
     }
@@ -181,7 +179,7 @@ class TcpHandler: ByteStreamConnection, @unchecked Sendable {
         let timer = DispatchWorkItem { [weak self] in
             guard let self = self else { return }
             if !self.isConnected {
-                print("TcpHandler: Connection timeout after \(self.connectionTimeout)s")
+                AppLog.w("TcpHandler: Connection timeout after \(self.connectionTimeout)s", tag: "TcpHandler")
                 DispatchQueue.main.async {
                     self.delegate?.byteStreamConnection(self, didDisconnect: TcpHandlerError.timeout)
                 }
@@ -193,7 +191,7 @@ class TcpHandler: ByteStreamConnection, @unchecked Sendable {
     }
 
     func disconnect() {
-        print("TcpHandler: disconnect called")
+        AppLog.i("TcpHandler: disconnect called", tag: "TcpHandler")
         connectionTimer?.cancel()
         connectionTimer = nil
         connection?.cancel()
@@ -203,14 +201,14 @@ class TcpHandler: ByteStreamConnection, @unchecked Sendable {
 
     func send(_ data: Data, completion: ((Error?) -> Void)?) {
         guard let connection = connection, isConnected else {
-            print("TcpHandler: send called but not connected")
+            AppLog.w("TcpHandler: send called but not connected", tag: "TcpHandler")
             completion?(TcpHandlerError.invalidState)
             return
         }
 
         connection.send(content: data, completion: .contentProcessed { error in
             if let error = error {
-                print("TcpHandler: send error: \(error)")
+                AppLog.e("TcpHandler: send error: \(error)", tag: "TcpHandler")
             }
             completion?(error)
         })
@@ -227,13 +225,13 @@ class TcpHandler: ByteStreamConnection, @unchecked Sendable {
             }
 
             if let error = error {
-                print("TcpHandler: receive error: \(error)")
+                AppLog.e("TcpHandler: receive error: \(error)", tag: "TcpHandler")
                 self.disconnect()
                 return
             }
 
             if isComplete {
-                print("TcpHandler: connection complete")
+                AppLog.i("TcpHandler: connection complete", tag: "TcpHandler")
                 self.disconnect()
                 return
             }

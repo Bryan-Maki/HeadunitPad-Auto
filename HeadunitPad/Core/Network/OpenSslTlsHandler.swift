@@ -45,13 +45,13 @@ class OpenSslTlsHandler {
 
         sslContext = SSL_CTX_new(TLS_client_method())
         guard sslContext != nil else {
-            print("OpenSslTlsHandler: Failed to create SSL context")
+            AppLog.e("Failed to create SSL context", tag: "OpenSslTls")
             return false
         }
 
         SSL_CTX_set_verify(sslContext, SSL_VERIFY_NONE, nil)
 
-        print("OpenSslTlsHandler: SSL context created")
+        AppLog.i("SSL context created", tag: "OpenSslTls")
         return true
     }
 
@@ -60,19 +60,19 @@ class OpenSslTlsHandler {
 
         let result = SSL_CTX_use_certificate_file(sslContext, certPath, SSL_FILETYPE_PEM)
         guard result == 1 else {
-            print("OpenSslTlsHandler: Failed to load certificate: \(result)")
+            AppLog.e("Failed to load certificate: \(result)", tag: "OpenSslTls")
             return false
         }
 
         let keyResult = SSL_CTX_use_PrivateKey_file(sslContext, keyPath, SSL_FILETYPE_PEM)
         guard keyResult == 1 else {
-            print("OpenSslTlsHandler: Failed to load private key: \(keyResult)")
+            AppLog.e("Failed to load private key: \(keyResult)", tag: "OpenSslTls")
             return false
         }
 
         let verifyResult = SSL_CTX_check_private_key(sslContext)
         guard verifyResult == 1 else {
-            print("OpenSslTlsHandler: Private key does not match certificate")
+            AppLog.e("Private key does not match certificate", tag: "OpenSslTls")
             return false
         }
 
@@ -81,7 +81,7 @@ class OpenSslTlsHandler {
 
         loadClientIdentityIntoMemory(certPath: certPath, keyPath: keyPath)
 
-        print("OpenSslTlsHandler: Certificate and key loaded")
+        AppLog.i("Certificate and key loaded", tag: "OpenSslTls")
         return true
     }
 
@@ -133,29 +133,29 @@ class OpenSslTlsHandler {
 
         if let cert = clientCertificate {
             let certSetResult = SSL_use_certificate(ssl, cert)
-            print("OpenSslTlsHandler: SSL_use_certificate result=\(certSetResult)")
+            AppLog.i("SSL_use_certificate result=\(certSetResult)", tag: "OpenSslTls")
         }
         if let pkey = clientPrivateKey {
             let keySetResult = SSL_use_PrivateKey(ssl, pkey)
-            print("OpenSslTlsHandler: SSL_use_PrivateKey result=\(keySetResult)")
+            AppLog.i("SSL_use_PrivateKey result=\(keySetResult)", tag: "OpenSslTls")
         }
 
         // Fallback: if in-memory identity is unavailable, bind cert/key from PEM files per session.
         if SSL_get_certificate(ssl) == nil {
             if let certPath = certPath {
                 let certFileResult = SSL_use_certificate_file(ssl, certPath, SSL_FILETYPE_PEM)
-                print("OpenSslTlsHandler: SSL_use_certificate_file result=\(certFileResult)")
+                AppLog.i("SSL_use_certificate_file result=\(certFileResult)", tag: "OpenSslTls")
             }
             if let keyPath = keyPath {
                 let keyFileResult = SSL_use_PrivateKey_file(ssl, keyPath, SSL_FILETYPE_PEM)
-                print("OpenSslTlsHandler: SSL_use_PrivateKey_file result=\(keyFileResult)")
+                AppLog.i("SSL_use_PrivateKey_file result=\(keyFileResult)", tag: "OpenSslTls")
             }
         }
 
         let sessionKeyCheck = SSL_check_private_key(ssl)
-        print("OpenSslTlsHandler: SSL_check_private_key(session) result=\(sessionKeyCheck)")
+        AppLog.i("SSL_check_private_key(session) result=\(sessionKeyCheck)", tag: "OpenSslTls")
         let sslCert = SSL_get_certificate(ssl)
-        print("OpenSslTlsHandler: Session cert present=\(sslCert != nil)")
+        AppLog.i("Session cert present=\(sslCert != nil)", tag: "OpenSslTls")
 
         readBio = BIO_new(BIO_s_mem())
         writeBio = BIO_new(BIO_s_mem())
@@ -171,7 +171,7 @@ class OpenSslTlsHandler {
         SSL_set_connect_state(ssl)
         SSL_set_verify(ssl, SSL_VERIFY_NONE, nil)
 
-        print("OpenSslTlsHandler: Handshake session prepared")
+        AppLog.i("Handshake session prepared", tag: "OpenSslTls")
         return try runHandshakeStep()
     }
 
@@ -188,7 +188,7 @@ class OpenSslTlsHandler {
             if written <= 0 {
                 throw OpenSslTlsError.bioError("BIO_write failed while feeding handshake data")
             }
-            print("OpenSslTlsHandler: Fed \(written) handshake bytes into read BIO")
+            AppLog.i("Fed \(written) handshake bytes into read BIO", tag: "OpenSslTls")
         }
 
         return try runHandshakeStep()
@@ -208,12 +208,12 @@ class OpenSslTlsHandler {
 
             if result == 1 {
                 isHandshakeComplete = true
-                print("OpenSslTlsHandler: Handshake complete")
+                AppLog.i("Handshake complete", tag: "OpenSslTls")
                 return OpenSslHandshakeStep(outgoingData: outgoing, isComplete: true)
             }
 
             let err = SSL_get_error(ssl, result)
-            print("OpenSslTlsHandler: SSL_do_handshake result=\(result) err=\(err)")
+            AppLog.w("SSL_do_handshake result=\(result) err=\(err)", tag: "OpenSslTls")
 
             if err == SSL_ERROR_WANT_READ {
                 return OpenSslHandshakeStep(outgoingData: outgoing, isComplete: false)
@@ -251,7 +251,7 @@ class OpenSslTlsHandler {
         guard let bio = bio else { return }
         let ret = BIO_ctrl(bio, OpenSslTlsHandler.bioSetWriteBufSizeCmd, size, nil)
         if ret <= 0 {
-            print("OpenSslTlsHandler: Failed to set BIO write buffer size to \(size)")
+            AppLog.e("Failed to set BIO write buffer size to \(size)", tag: "OpenSslTls")
         }
     }
 
@@ -345,24 +345,24 @@ class OpenSslTlsHandler {
         }
 
         guard let certData = try? Data(contentsOf: URL(fileURLWithPath: certPath)) else {
-            print("OpenSslTlsHandler: Failed to read certificate data from path")
+            AppLog.e("Failed to read certificate data from path", tag: "OpenSslTls")
             return
         }
         guard let keyData = try? Data(contentsOf: URL(fileURLWithPath: keyPath)) else {
-            print("OpenSslTlsHandler: Failed to read private key data from path")
+            AppLog.e("Failed to read private key data from path", tag: "OpenSslTls")
             return
         }
 
         let certBio = BIO_new_mem_buf((certData as NSData).bytes, Int32(certData.count))
         guard certBio != nil else {
-            print("OpenSslTlsHandler: Failed to create certificate BIO")
+            AppLog.e("Failed to create certificate BIO", tag: "OpenSslTls")
             return
         }
         defer { BIO_free(certBio) }
 
         let keyBio = BIO_new_mem_buf((keyData as NSData).bytes, Int32(keyData.count))
         guard keyBio != nil else {
-            print("OpenSslTlsHandler: Failed to create key BIO")
+            AppLog.e("Failed to create key BIO", tag: "OpenSslTls")
             return
         }
         defer { BIO_free(keyBio) }
@@ -370,20 +370,20 @@ class OpenSslTlsHandler {
         var certOut: OpaquePointer?
         let cert = PEM_read_bio_X509_AUX(certBio, &certOut, nil, nil)
         guard cert != nil else {
-            print("OpenSslTlsHandler: PEM_read_bio_X509_AUX failed")
+            AppLog.e("PEM_read_bio_X509_AUX failed", tag: "OpenSslTls")
             return
         }
 
         var keyOut: OpaquePointer?
         let pkey = PEM_read_bio_PrivateKey(keyBio, &keyOut, nil, nil)
         guard pkey != nil else {
-            print("OpenSslTlsHandler: PEM_read_bio_PrivateKey failed")
+            AppLog.e("PEM_read_bio_PrivateKey failed", tag: "OpenSslTls")
             X509_free(cert)
             return
         }
 
         clientCertificate = cert
         clientPrivateKey = pkey
-        print("OpenSslTlsHandler: Loaded client identity into memory")
+        AppLog.i("Loaded client identity into memory", tag: "OpenSslTls")
     }
 }

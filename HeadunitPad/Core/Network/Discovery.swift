@@ -86,7 +86,7 @@ public final class Discovery {
         let browser = NWBrowser(for: descriptor, using: params)
         permissionTriggerBrowser = browser
         browser.stateUpdateHandler = { state in
-            print("Discovery: Local network browser state=\(state)")
+            AppLog.i("Discovery: Local network browser state=\(state)", tag: "Discovery")
         }
         browser.start(queue: DispatchQueue.global(qos: .utility))
         DispatchQueue.global().asyncAfter(deadline: .now() + 2.0) {
@@ -119,7 +119,7 @@ public final class Discovery {
         queue.async(execute: workItem)
     }
 
-    public func stopScan() {
+    public func stopScan(cancelPrepared: Bool = false) {
         browseWorkItem?.cancel()
         browseWorkItem = nil
         isScanning = false
@@ -127,8 +127,10 @@ public final class Discovery {
         probeLock.lock()
         let connections = Array(activeProbeConnections.values)
         activeProbeConnections.removeAll()
-        let prepared = Array(preparedConnections.values)
-        preparedConnections.removeAll()
+        let prepared = cancelPrepared ? Array(preparedConnections.values) : []
+        if cancelPrepared {
+            preparedConnections.removeAll()
+        }
         reportedEndpoints.removeAll()
         probeLock.unlock()
 
@@ -144,10 +146,9 @@ public final class Discovery {
     public func takePreparedConnection(ip: String, port: UInt16) -> NWConnection? {
         let key = SameEndpointConnectPolicy.endpoint(host: ip, port: Int(port))
         probeLock.lock()
-        let old = preparedConnections.removeValue(forKey: key)
+        let conn = preparedConnections.removeValue(forKey: key)
         probeLock.unlock()
-        old?.cancel()
-        return nil
+        return conn
     }
 
     // MARK: - Scan Sequence
@@ -157,7 +158,7 @@ public final class Discovery {
         let firstIp = NetworkAddresses.allInterfaces().first?.ip
         guard let myIp = DiscoverySubnetPolicy.address(stationIpv4: stationIp, firstInterfaceIpv4: firstIp),
               let subnet = DiscoverySubnetPolicy.subnetOf(ipv4: myIp) else {
-            print("Discovery: Could not determine valid local subnet (source: \(DiscoverySubnetPolicy.source(stationIpv4: stationIp)))")
+            AppLog.w("Discovery: Could not determine valid local subnet (source: \(DiscoverySubnetPolicy.source(stationIpv4: stationIp)))", tag: "Discovery")
             DispatchQueue.main.async { [weak self] in
                 self?.isScanning = false
                 self?.delegate?.discoveryDidFail(DiscoveryError.noNetworkInterface)
@@ -165,7 +166,7 @@ public final class Discovery {
             return
         }
 
-        print("Discovery: Starting discovery on \(myIp) (/24: \(subnet).*)")
+        AppLog.i("Discovery: Starting discovery on \(myIp) (/24: \(subnet).*)", tag: "Discovery")
 
         // Priority 1: Instant Gateway Probe (<subnet>.1:5277) + Historical IPs
         var prioritySuspects: [String] = []
@@ -184,7 +185,7 @@ public final class Discovery {
             }
         }
 
-        print("Discovery: Priority 1 - probing immediate suspects on 5277: \(prioritySuspects)")
+        AppLog.i("Discovery: Priority 1 - probing immediate suspects on 5277: \(prioritySuspects)", tag: "Discovery")
         let priorityGroup = DispatchGroup()
         var foundPriority = false
 
@@ -195,7 +196,7 @@ public final class Discovery {
                 defer { priorityGroup.leave() }
                 if success {
                     foundPriority = true
-                    print("Discovery: Priority suspect \(suspect):\(Discovery.headunitPort) connected!")
+                    AppLog.i("Discovery: Priority suspect \(suspect):\(Discovery.headunitPort) connected!", tag: "Discovery")
                     self?.reportFoundService(ip: suspect, port: Discovery.headunitPort)
                 }
             }
@@ -205,7 +206,7 @@ public final class Discovery {
 
         // If gateway .1 or historical IP connected, finish immediately!
         if foundPriority {
-            print("Discovery: Priority suspect responded, completing discovery immediately without scanning subnet.")
+            AppLog.i("Discovery: Priority suspect responded, completing discovery immediately without scanning subnet.", tag: "Discovery")
             finishScan()
             return
         }
@@ -216,7 +217,7 @@ public final class Discovery {
         }
 
         // Priority 2: Deep parallel scan of remainder of /24 subnet (.2 .. .254)
-        print("Discovery: Priority 2 - Deep scan of entire subnet \(subnet).2..254 in parallel batches")
+        AppLog.i("Discovery: Priority 2 - Deep scan of entire subnet \(subnet).2..254 in parallel batches", tag: "Discovery")
         var candidateIps: [String] = []
         for i in 2...254 {
             let ip = "\(subnet).\(i)"
@@ -243,7 +244,7 @@ public final class Discovery {
                     defer { batchGroup.leave() }
                     if success {
                         batchFound = true
-                        print("Discovery: Host \(ip):\(Discovery.headunitPort) responded in subnet scan")
+                        AppLog.i("Discovery: Host \(ip):\(Discovery.headunitPort) responded in subnet scan", tag: "Discovery")
                         self?.reportFoundService(ip: ip, port: Discovery.headunitPort)
                     }
                 }
@@ -251,7 +252,7 @@ public final class Discovery {
 
             _ = batchGroup.wait(timeout: .now() + 0.45)
             if batchFound {
-                print("Discovery: Device found in batch, finishing scan")
+                AppLog.i("Discovery: Device found in batch, finishing scan", tag: "Discovery")
                 break
             }
         }
@@ -277,7 +278,7 @@ public final class Discovery {
 
     private func finishScan() {
         isScanning = false
-        print("Discovery: Scan finished")
+        AppLog.i("Discovery: Scan finished", tag: "Discovery")
         DispatchQueue.main.async { [weak self] in
             self?.delegate?.discoveryDidFinish()
         }
@@ -303,8 +304,10 @@ public final class Discovery {
 
         let endpoint = NWEndpoint.hostPort(host: NWEndpoint.Host(ip), port: portEndpoint)
         let tcpOptions = NWProtocolTCP.Options()
+        tcpOptions.enableKeepalive = true
         tcpOptions.noDelay = true
         let parameters = NWParameters(tls: nil, tcp: tcpOptions)
+        parameters.allowLocalEndpointReuse = true
         parameters.prohibitExpensivePaths = false
 
         let connection = NWConnection(to: endpoint, using: parameters)
@@ -346,9 +349,10 @@ public final class Discovery {
                 lock.unlock()
                 timeoutWorkItem.cancel()
                 conn.stateUpdateHandler = nil
-                conn.cancel()
+                self.storePreparedConnection(conn, ip: ip, port: port)
                 self.removeActiveProbe(probeId)
-                completion(true, nil)
+                AppLog.i("Probe ready & stored prepared connection for \(ip):\(port)", tag: "Discovery")
+                completion(true, conn)
 
             case .failed, .cancelled:
                 hasCompleted = true
