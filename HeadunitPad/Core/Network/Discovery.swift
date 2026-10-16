@@ -32,6 +32,12 @@ public struct DiscoveredDevice: Identifiable, Equatable {
         self.name = name
     }
 
+    public init(id: UUID = UUID(), name: String? = nil, ip: String, port: UInt16 = 5277) {
+        self.ip = ip
+        self.port = port
+        self.name = name
+    }
+
     public var displayName: String {
         if let name = name {
             return name

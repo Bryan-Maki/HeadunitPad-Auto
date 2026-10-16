@@ -235,7 +235,7 @@ class ConnectionManager {
         let targetDevice = DiscoveredDevice(
             id: device.id,
             name: device.name,
-            ip: device.ip,
+            ipAddress: device.ip,
             port: 5277
         )
         if let transport = aapTransport {
