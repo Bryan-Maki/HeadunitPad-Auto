@@ -1540,13 +1540,13 @@ class MainViewController: UIViewController {
                 btMacRow.isHidden = false
 
                 let snapshot = ProjectionQrSnapshot(
-                    listeningPort: 5299,
-                    bluetoothMac: bt.isEmpty ? nil : bt,
-                    bluetoothName: "HeadunitPad",
                     ssid: s.isEmpty ? nil : s,
                     passkey: p.isEmpty ? nil : p,
                     bssid: b.isEmpty ? nil : b,
-                    ip: currentIp
+                    ip: currentIp,
+                    listeningPort: 5299,
+                    bluetoothMac: bt.isEmpty ? nil : bt,
+                    bluetoothName: "HeadunitPad"
                 )
                 let decision = ProjectionQrPolicy.decide(snapshot: snapshot)
                 switch decision {
