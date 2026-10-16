@@ -773,32 +773,30 @@ final class Phase5SystemIntegrationTests: XCTestCase {
         let sensor10Req = AapMessage(channel: Channel.ID_SEN, flags: 0x03, type: 0x8001, payload: Data([0x08, 0x0a]))
         transport.handleMessage(sensor10Req)
 
-        func waitQueue() {
-            let exp = expectation(description: "Wait for processingQueue async night mode event")
-            DispatchQueue.global().asyncAfter(deadline: .now() + 0.05) {
-                exp.fulfill()
-            }
-            wait(for: [exp], timeout: 1.0)
-        }
+        let exp1 = expectation(description: "initial night event")
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.1) { exp1.fulfill() }
+        wait(for: [exp1], timeout: 1.0)
 
-        waitQueue()
         let initialCount = connection.sentPackets.count
         XCTAssertGreaterThanOrEqual(initialCount, 2, "Sensor start response + initial night mode event must be sent")
 
-        // Duplicate send with same value and force: false: should be deduplicated
         let currentNight = ProjectionSettings.effectiveIsNightMode()
         transport.sendNightModeEvent(isNight: currentNight, force: false)
-        waitQueue()
+        let exp2 = expectation(description: "dedup night event")
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.1) { exp2.fulfill() }
+        wait(for: [exp2], timeout: 1.0)
         XCTAssertEqual(connection.sentPackets.count, initialCount, "Duplicate night mode event must be suppressed")
 
-        // Send with force: true: should send even if value is identical
         transport.sendNightModeEvent(isNight: currentNight, force: true)
-        waitQueue()
+        let exp3 = expectation(description: "forced night event")
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.1) { exp3.fulfill() }
+        wait(for: [exp3], timeout: 1.0)
         XCTAssertEqual(connection.sentPackets.count, initialCount + 1, "Forced night mode event must be transmitted")
 
-        // Send with different value: should send
         transport.sendNightModeEvent(isNight: !currentNight, force: false)
-        waitQueue()
+        let exp4 = expectation(description: "different night event")
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.1) { exp4.fulfill() }
+        wait(for: [exp4], timeout: 1.0)
         XCTAssertEqual(connection.sentPackets.count, initialCount + 2, "Different night mode value must be transmitted")
     }
 

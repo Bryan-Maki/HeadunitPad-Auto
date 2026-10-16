@@ -777,7 +777,7 @@ class AapTransport {
     public func sendNightModeEvent(isNight: Bool, force: Bool = false) {
         processingQueue.async { [weak self] in
             guard let self = self else { return }
-            guard self.state == .running, self.startedSensors.contains(10) else { return }
+            guard self.startedSensors.contains(10) else { return }
             if !force && self.lastSentNightMode == isNight { return }
             self.lastSentNightMode = isNight
             let batch = SensorBatch(nightMode: [SensorBatch.NightData(isNightMode: isNight)])
