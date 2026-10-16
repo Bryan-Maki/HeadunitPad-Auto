@@ -83,7 +83,7 @@ class AapTransport {
     private let versionHandshakeTimeout: TimeInterval
     private let tlsHandshakeTimeout: TimeInterval = 15.0
     var initialVersionRequestDelay: TimeInterval = 0.05
-    private let versionRetryInterval: TimeInterval = 1.2
+    var versionRetryInterval: TimeInterval = 1.2
     private let maxVersionRequestAttempts: Int
     private var versionRequestAttempts = 0
     private var versionRetryWorkItem: DispatchWorkItem?
