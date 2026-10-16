@@ -6,7 +6,6 @@
 [![Swift](https://img.shields.io/badge/Swift-5.9%2B-orange?logo=swift)](https://swift.org)
 [![Architecture](https://img.shields.io/badge/Architecture-100%25%20Pure%20Wireless-success)]()
 [![Sideloading](https://img.shields.io/badge/Install-AltStore%20%7C%20SideStore%20%7C%20Sideloadly%20%7C%20TrollStore-purple)]()
-[![CI Build](https://github.com/andyching168/HeadunitPad-Auto/actions/workflows/build-ipa.yml/badge.svg)](https://github.com/andyching168/HeadunitPad-Auto/actions)
 [![License](https://img.shields.io/badge/License-AGPL--3.0-green.svg)](LICENSE)
 
 ---
