@@ -277,17 +277,20 @@ final class Phase6DiagnosticsAndPolishTests: XCTestCase {
         }
 
         // Invalid format error
-        let wrongFormat = """
-        {
-          "format": "wrong-format",
-          "version": 1,
-          "exportedAt": "2026-01-01T00:00:00Z",
-          "settings": {}
-        }
-        """
+        let validContainerJson = SettingsBackupManager.exportToJson()
+        let wrongFormat = validContainerJson.replacingOccurrences(of: "\"format\" : \"headunitpad-auto-settings\"", with: "\"format\" : \"wrong-format\"")
         XCTAssertThrowsError(try SettingsBackupManager.importFromJson(wrongFormat)) { error in
             guard case SettingsBackupError.invalidFormat = error else {
-                XCTFail("Expected invalidFormat error")
+                XCTFail("Expected invalidFormat error, got: \(error)")
+                return
+            }
+        }
+
+        // Unsupported version error
+        let wrongVersion = validContainerJson.replacingOccurrences(of: "\"version\" : 1", with: "\"version\" : 99")
+        XCTAssertThrowsError(try SettingsBackupManager.importFromJson(wrongVersion)) { error in
+            guard case SettingsBackupError.unsupportedVersion(let v) = error, v == 99 else {
+                XCTFail("Expected unsupportedVersion(99) error, got: \(error)")
                 return
             }
         }

@@ -24,7 +24,7 @@ public enum LogExporter {
         lines.append("Connection State: \(ConnectionManager.shared.state.description)")
         lines.append("Configured Resolution: \(ProjectionSettings.resolution.title)")
         lines.append("Negotiated Resolution: \(HeadUnitScreenConfig.shared.negotiatedWidth)x\(HeadUnitScreenConfig.shared.negotiatedHeight)")
-        lines.append("Announced Margins: W=\(HeadUnitScreenConfig.shared.widthMarginPx) H=\(HeadUnitScreenConfig.shared.heightMarginPx)")
+        lines.append("Announced Margins: W=\(HeadUnitScreenConfig.shared.widthMargin) H=\(HeadUnitScreenConfig.shared.heightMargin)")
         lines.append("Configured DPI: \(ProjectionSettings.dpi)")
         lines.append("FPS Limit: \(ProjectionSettings.fpsLimit.title)")
         lines.append("Video Fit Mode: \(ProjectionSettings.fitMode.title)")
@@ -81,12 +81,19 @@ public enum LogExporter {
         let full = generateFullReport()
         guard full.utf8.count > maxBytes else { return full }
 
-        let banner = sessionBanner() + "\n\n... [Log truncated to 250KB for clipboard] ...\n\n"
+        let notice = "\n\n... [Log truncated to 250KB for clipboard] ...\n\n"
+        let banner = sessionBanner() + notice
         let bannerBytes = banner.utf8.count
-        let remainingBytes = max(0, maxBytes - bannerBytes)
 
+        if bannerBytes >= maxBytes {
+            let utf8 = full.utf8
+            let prefixIndex = utf8.index(utf8.startIndex, offsetBy: maxBytes, limitedBy: utf8.endIndex) ?? utf8.endIndex
+            return String(utf8[..<prefixIndex]) ?? ""
+        }
+
+        let remainingBytes = max(0, maxBytes - bannerBytes)
         let utf8 = full.utf8
-        let startIndex = utf8.index(utf8.endIndex, offsetBy: -remainingBytes)
+        let startIndex = utf8.index(utf8.endIndex, offsetBy: -remainingBytes, limitedBy: utf8.startIndex) ?? utf8.startIndex
         let trailingLogs = String(utf8[startIndex...]) ?? ""
         return banner + trailingLogs
     }
