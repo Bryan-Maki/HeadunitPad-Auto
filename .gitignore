@@ -206,6 +206,7 @@ logs/
 *.trace
 coverage/
 dist/
+build_output/
 logs_*.zip
 gh_cli/
 
