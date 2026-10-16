@@ -194,7 +194,7 @@ class ConnectionManager {
         isUserInitiatedDisconnect = false
 
         let targetEndpoint = SameEndpointConnectPolicy.endpoint(host: device.ip, port: Int(device.port))
-        if (state == .connecting || state == .handshaking || state == .running) && targetEndpoint == lastTriedEndpoint {
+        if !userInitiated && (state == .connecting || state == .handshaking || state == .running) && targetEndpoint == lastTriedEndpoint {
             print("ConnectionManager: In-flight connection to \(targetEndpoint) already active, ignoring duplicate connect")
             return
         }
@@ -210,7 +210,6 @@ class ConnectionManager {
         }
 
         lastTriedEndpoint = targetEndpoint
-        let preparedConnection = discovery.takePreparedConnection(ip: device.ip, port: device.port)
         stopDiscovery()
         state = .connecting
         connectedDevice = device
@@ -219,13 +218,8 @@ class ConnectionManager {
         installAapTransport(connection: tcpHandler)
         aapTransport?.configurePeer(host: device.ip, port: device.port)
 
-        if let preparedConnection = preparedConnection {
-            print("ConnectionManager: Using prepared connection from discovery for \(device.ip):\(device.port)")
-            tcpHandler.adoptConnection(preparedConnection, host: device.ip, port: device.port)
-        } else {
-            print("ConnectionManager: Calling tcpHandler.connect(host: \(device.ip), port: \(device.port))")
-            tcpHandler.connect(host: device.ip, port: device.port)
-        }
+        print("ConnectionManager: Calling tcpHandler.connect(host: \(device.ip), port: \(device.port))")
+        tcpHandler.connect(host: device.ip, port: device.port)
     }
 
     func connect(to ip: String, port: UInt16 = 5277) {
@@ -235,31 +229,28 @@ class ConnectionManager {
     }
 
     func reconnectForOrientationChange() {
+        guard state == .running, HeadUnitScreenConfig.shared.isResolutionLocked else { return }
         guard let device = connectedDevice ?? lastConnectedDevice else { return }
-        guard state == .running || state == .handshaking || state == .connecting else { return }
         hasPerformedSilentIcebreakRetry = false
         let targetDevice = DiscoveredDevice(
             id: device.id,
             name: device.name,
-            ipAddress: device.ipAddress,
+            ip: device.ip,
             port: 5277
         )
-        if state == .running, let transport = aapTransport {
-            setState(.disconnecting)
-            transport.requestGracefulDisconnect(reason: .orientationChange) { [weak self] in
+        if let transport = aapTransport {
+            state = .disconnecting
+            isUserInitiatedDisconnect = true
+            autoReconnect.cancel()
+            transport.requestGracefulDisconnect(reason: .userSelection) { [weak self] in
                 guard let self = self else { return }
                 self.activeConnection?.disconnect()
                 self.activeConnection = nil
                 self.aapTransport = nil
-                self.setState(.disconnected)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                self.state = .disconnected
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
                     self.connect(to: targetDevice, userInitiated: true)
                 }
-            }
-        } else {
-            disconnect()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
-                self?.connect(to: targetDevice, userInitiated: true)
             }
         }
     }
@@ -296,9 +287,7 @@ class ConnectionManager {
                 }
             },
             close: { [weak self] in
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    self?.activeConnection?.disconnect()
-                }
+                self?.activeConnection?.disconnect()
             },
             onError: { phase, error in
                 print("ConnectionManager: disconnect error during \(phase): \(error.localizedDescription)")
@@ -455,16 +444,15 @@ class ConnectionManager {
 
 extension ConnectionManager: DiscoveryDelegate {
     func discoveryDidFindDevice(_ device: DiscoveredDevice) {
-        print("ConnectionManager: discovered device: \(device.displayName)")
-        discoveredDevices.append(device)
-        updateStatus("Found Headunit Server at \(device.ip):\(device.port)")
-        delegate?.connectionManager(self, didDiscoverDevice: device)
-
-        // Auto-connect immediately to the discovered headunit server!
-        if state == .discovering {
-            print("ConnectionManager: Auto-connecting immediately to \(device.displayName)...")
-            connect(to: device)
+        print("ConnectionManager: Discovered device \(device.displayName)")
+        if !discoveredDevices.contains(where: { $0.ip == device.ip && $0.port == device.port }) {
+            discoveredDevices.append(device)
         }
+        discovery.stopScan()
+        if state == .discovering {
+            state = .disconnected
+        }
+        delegate?.connectionManager(self, didDiscoverDevice: device)
     }
 
     func discoveryDidFinish() {
@@ -566,6 +554,10 @@ extension ConnectionManager: AapTransportDelegate {
     func aapTransport(_ transport: AapTransport, didChangeState state: AapTransportState) {
         guard transport === aapTransport else { return }
         switch state {
+        case .waitingForVersion, .versionSent, .tlsHandshaking, .authenticating, .authenticatingComplete, .binding:
+            self.state = .handshaking
+            updateStatus("Handshaking with Android Auto...")
+
         case .running:
             if ProjectionSettings.isAudioSinkEnabled {
                 NowPlayingCoordinator.shared.activate()
@@ -663,13 +655,7 @@ extension ConnectionManager: AapTransportDelegate {
     }
 
     func aapTransportDidDetectSilentPeerOnInitialHandshake(_ transport: AapTransport) {
-        guard !hasPerformedSilentIcebreakRetry, let device = connectedDevice ?? lastConnectedDevice else { return }
-        hasPerformedSilentIcebreakRetry = true
-        print("ConnectionManager: Peer 5277 silent on initial handshake (zombie socket), performing fast icebreak reconnect...")
-        activeConnection?.disconnect()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
-            self?.connect(to: device, userInitiated: false)
-        }
+        print("ConnectionManager: aapTransport reported silent peer warning (ignored)")
     }
 }
 

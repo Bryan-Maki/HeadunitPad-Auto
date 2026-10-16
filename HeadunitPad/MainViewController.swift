@@ -371,6 +371,7 @@ class MainViewController: UIViewController {
 
     override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
         super.viewWillTransition(to: size, with: coordinator)
+        let wasResolutionLocked = HeadUnitScreenConfig.shared.isResolutionLocked
         let wasCodecPortrait = HeadUnitScreenConfig.shared.negotiatedHeight > HeadUnitScreenConfig.shared.negotiatedWidth
         coordinator.animate(alongsideTransition: { [weak self] _ in
             guard let self = self else { return }
@@ -390,10 +391,16 @@ class MainViewController: UIViewController {
                 h = Int((size.height * nativeScale).rounded())
             }
             if w > 0 && h > 0 {
-                if ProjectionSettings.orientation == .system && ((h > w) != wasCodecPortrait) {
+                if ProjectionSettings.orientation == .system && wasResolutionLocked && ((h > w) != wasCodecPortrait) {
                     HeadUnitScreenConfig.shared.clearCustomNegotiatedResolution()
                     HeadUnitScreenConfig.shared.clearAnnouncedMargins()
                     HeadUnitScreenConfig.shared.initScreen(
+                        width: w,
+                        height: h,
+                        fitMode: ProjectionSettings.videoFitMode,
+                        requestedResolution: ProjectionSettings.resolution
+                    )
+                    self.connectionManager.screenConfig.initScreen(
                         width: w,
                         height: h,
                         fitMode: ProjectionSettings.videoFitMode,
@@ -414,9 +421,9 @@ class MainViewController: UIViewController {
             let currentH = Int((self.view.bounds.height * nativeScale).rounded())
             let isNowPortrait = currentH > currentW
             if ProjectionSettings.orientation == .system && (isNowPortrait != wasCodecPortrait) {
-                if self.connectionManager.state == .running || self.connectionManager.state == .handshaking {
+                if self.connectionManager.state == .running {
                     self.orientationReconnectTimer?.invalidate()
-                    self.orientationReconnectTimer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: false) { [weak self] _ in
+                    self.orientationReconnectTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: false) { [weak self] _ in
                         self?.connectionManager.reconnectForOrientationChange()
                     }
                 }
@@ -732,7 +739,7 @@ class MainViewController: UIViewController {
             directConnectContainer.isHidden = true
             orDividerLabel.isHidden = true
             connectButton.isHidden = true
-            disconnectButton.isHidden = true
+            disconnectButton.isHidden = false
             activityIndicator.startAnimating()
             setNeedsStatusBarAppearanceUpdate()
             setNeedsUpdateOfHomeIndicatorAutoHidden()
@@ -772,7 +779,7 @@ class MainViewController: UIViewController {
             directConnectContainer.isHidden = true
             orDividerLabel.isHidden = true
             connectButton.isHidden = true
-            disconnectButton.isHidden = true
+            disconnectButton.isHidden = false
             activityIndicator.startAnimating()
             setNeedsStatusBarAppearanceUpdate()
             setNeedsUpdateOfHomeIndicatorAutoHidden()
@@ -1713,7 +1720,17 @@ extension MainViewController: ConnectionManagerDelegate {
     func connectionManager(_ manager: ConnectionManager, didDiscoverDevice device: DiscoveredDevice) {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            self.statusLabel.text = "Found: \(device.displayName), connecting..."
+            self.statusLabel.text = "Found: \(device.displayName)"
+            let alert = UIAlertController(
+                title: "Device Found",
+                message: "Found \(device.displayName). Connect now?",
+                preferredStyle: .alert
+            )
+            alert.addAction(UIAlertAction(title: "Connect", style: .default) { [weak self] _ in
+                self?.connectionManager.connect(to: device, userInitiated: true)
+            })
+            alert.addAction(UIAlertAction(title: "Cancel", style: .cancel, handler: nil))
+            self.present(alert, animated: true)
         }
     }
 

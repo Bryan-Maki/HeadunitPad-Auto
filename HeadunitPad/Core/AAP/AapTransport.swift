@@ -82,8 +82,8 @@ class AapTransport {
     private var handshakeTimer: DispatchWorkItem?
     private let versionHandshakeTimeout: TimeInterval
     private let tlsHandshakeTimeout: TimeInterval = 15.0
-    var initialVersionRequestDelay: TimeInterval = 0.05
-    var versionRetryInterval: TimeInterval = 1.2
+    var initialVersionRequestDelay: TimeInterval = 0.5
+    var versionRetryInterval: TimeInterval = 2.0
     private let maxVersionRequestAttempts: Int
     private var versionRequestAttempts = 0
     private var versionRetryWorkItem: DispatchWorkItem?
@@ -393,13 +393,6 @@ class AapTransport {
 
         if versionRequestAttempts == 2 {
             triggerLauncherPokeIfNeeded()
-            if lastInboundMessageMs == 0 {
-                print("AapTransport: Silent peer detected on initial handshake attempt 2")
-                DispatchQueue.main.async { [weak self] in
-                    guard let self = self else { return }
-                    self.delegate?.aapTransportDidDetectSilentPeerOnInitialHandshake(self)
-                }
-            }
         }
 
         print("AapTransport: VERSION_REQUEST attempt \(versionRequestAttempts)/\(maxVersionRequestAttempts)")

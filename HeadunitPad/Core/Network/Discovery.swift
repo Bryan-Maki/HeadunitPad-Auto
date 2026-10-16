@@ -138,8 +138,10 @@ public final class Discovery {
     public func takePreparedConnection(ip: String, port: UInt16) -> NWConnection? {
         let key = SameEndpointConnectPolicy.endpoint(host: ip, port: Int(port))
         probeLock.lock()
-        defer { probeLock.unlock() }
-        return preparedConnections.removeValue(forKey: key)
+        let old = preparedConnections.removeValue(forKey: key)
+        probeLock.unlock()
+        old?.cancel()
+        return nil
     }
 
     // MARK: - Scan Sequence
@@ -185,10 +187,9 @@ public final class Discovery {
             priorityGroup.enter()
             probePort(ip: suspect, port: Discovery.headunitPort, timeout: 0.5) { [weak self] success, conn in
                 defer { priorityGroup.leave() }
-                if success, let conn = conn {
+                if success {
                     foundPriority = true
                     print("Discovery: Priority suspect \(suspect):\(Discovery.headunitPort) connected!")
-                    self?.storePreparedConnection(conn, ip: suspect, port: Discovery.headunitPort)
                     self?.reportFoundService(ip: suspect, port: Discovery.headunitPort)
                 }
             }
@@ -234,10 +235,9 @@ public final class Discovery {
                 batchGroup.enter()
                 probePort(ip: ip, port: Discovery.headunitPort, timeout: 0.4) { [weak self] success, conn in
                     defer { batchGroup.leave() }
-                    if success, let conn = conn {
+                    if success {
                         batchFound = true
                         print("Discovery: Host \(ip):\(Discovery.headunitPort) responded in subnet scan")
-                        self?.storePreparedConnection(conn, ip: ip, port: Discovery.headunitPort)
                         self?.reportFoundService(ip: ip, port: Discovery.headunitPort)
                     }
                 }
@@ -339,8 +339,10 @@ public final class Discovery {
                 hasCompleted = true
                 lock.unlock()
                 timeoutWorkItem.cancel()
+                conn.stateUpdateHandler = nil
+                conn.cancel()
                 self.removeActiveProbe(probeId)
-                completion(true, conn)
+                completion(true, nil)
 
             case .failed, .cancelled:
                 hasCompleted = true

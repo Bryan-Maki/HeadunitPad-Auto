@@ -336,8 +336,8 @@ final class Phase6DiagnosticsAndPolishTests: XCTestCase {
         let mockStream = MockByteConnection()
         let transport = AapTransport(connection: mockStream)
 
-        XCTAssertEqual(transport.initialVersionRequestDelay, 0.05, accuracy: 0.001, "initialVersionRequestDelay must be 50ms for instant handshake")
-        XCTAssertEqual(transport.versionRetryInterval, 1.2, accuracy: 0.001, "versionRetryInterval must be 1.2s")
+        XCTAssertEqual(transport.initialVersionRequestDelay, 0.5, accuracy: 0.001, "initialVersionRequestDelay must be 0.5s for stable handshake")
+        XCTAssertEqual(transport.versionRetryInterval, 2.0, accuracy: 0.001, "versionRetryInterval must be 2.0s")
         XCTAssertEqual(transport.currentRxMbps, 0.0, "Initial Rx throughput must be 0.0 Mbps")
     }
 }

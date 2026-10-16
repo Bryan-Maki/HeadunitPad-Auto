@@ -303,4 +303,21 @@
   - 仅保留挂载在 `homeContentView` 上的主页面设置按钮（`settingsButton`），进入 Android Auto（`.running`）投屏后随主页面自动全屏隐藏，杜绝投屏画面右上角的任何控件遮挡。
 - **新增手机端 Head Unit Server 英文新手引导卡片**：
   - 在主页面 `connectButton` 正下方新增圆角卡片 `serverGuideContainer`（`How to Start Head Unit Server on Android`），以清晰地道的 4 步英文指引引导用户：开启 Android Auto 开发者模式、启动 `Head unit server`、开启手机个人热点并连接 iPad。
-  - 仅在 `.disconnected` 与 `.error` 状态下展示，连接中与投屏状态下自动隐藏，保证界面清爽高效。
+  - 仅在 `.disconnected` 与 `.error` 状态下展示，连接中与投屏状态下自动隐藏，保证界面清爽高效。
+
+### Phase 6 Production Hardening & Connection Loop Bugfix (2026-10-16)
+- **恢复设备发现确认弹窗与防后台抢跑**：
+  - 在 `MainViewController` 中恢复弹出 `"Device Found"` `UIAlertController`（含 Connect 与 Cancel），赋予用户主动连接控制权，彻底杜绝后台静默自动连接引发的 Socket 竞争与手机端 5277 服务端半开连接死锁。
+  - 在 `.discovering` 与 `.connecting` 状态下展示 `disconnectButton`（`isHidden = false`），允许用户在扫描超时或选错设备时一键取消并重置状态。
+- **探活 Socket 解耦与全新独立 TCP 链路**：
+  - 彻底废除 `Discovery.probePort` 生成的跨队列 `preparedConnection` 交付给 `TcpHandler.adoptConnection` 的复用逻辑；探活端口成功响应后立即调用 `conn.cancel()` 释放临时探活 Socket。
+  - 正式连接始终由 `TcpHandler.connect(host:port:)` 在自身的 `TcpHandler.queue` 上创建带 KeepAlive 的全新干净 TCP 连接，彻底解决调度队列分裂导致的死锁问题。
+- **稳态握手时序恢复与消除 1.25s 抢跑自杀**：
+  - 将 `AapTransport` 的首包延迟 `initialVersionRequestDelay` 恢复为经真机验证的稳态值 `0.5s`，重试间隔 `versionRetryInterval` 恢复为 `2.0s`，满足手机端 Android Auto 5277 建立连接后异步绑定内部 CarService 读线程所需的 300~500ms 准备时间。
+  - 移除在 `versionRequestAttempts == 2` 时过早触发 `aapTransportDidDetectSilentPeerOnInitialHandshake` 强行掐断连接的自杀逻辑，彻底消除每隔 1~2 秒无限断开重连的死循环；仅保留第 2 次尝试时的 `triggerLauncherPokeIfNeeded()`。
+- **消除断开连接延迟误杀竞态**：
+  - 在 `ConnectionManager.disconnect()` 中移除 `0.1s` 异步延迟，同步调用 `activeConnection?.disconnect()`，杜绝毫秒级内重连时新连接被旧断连回调误杀的竞态 Bug。
+- **旋转自适应与触控对齐保护**：
+  - `MainViewController.viewWillTransition` 记录 `wasResolutionLocked` 与 `wasCodecPortrait`，仅在连接处于 `.running` 状态且检测到屏幕方向与协商分辨率真正反转时才触发 `0.25s` 防抖重连，避免在握手阶段误触发重连。
+- **CI 测试套件 100% 绿色通行**：
+  - 更新 `HeadunitPadTests/Phase6DiagnosticsAndPolishTests.swift` 中的时序断言，全量单元测试（Phase 1 至 Phase 6）100% 通过。
