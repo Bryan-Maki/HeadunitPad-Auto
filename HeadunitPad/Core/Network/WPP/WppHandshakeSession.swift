@@ -148,6 +148,7 @@ public final class WppHandshakeSession {
                 return actions
             }
 
+            switch stage {
             case .awaitVersion:
                 if type == WppMessageType.versionResponse {
                     // Matching open-headunit WppHandshakeSession.kt:265-275:
