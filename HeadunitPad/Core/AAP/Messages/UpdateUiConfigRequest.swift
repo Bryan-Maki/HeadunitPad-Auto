@@ -15,15 +15,10 @@ public final class UpdateUiConfigRequest {
             left: Int32(left),
             right: Int32(right)
         )
-        let themeVal: Int32? = uiTheme ?? {
-            let isNight = ProjectionSettings.effectiveIsNightMode()
-            switch ProjectionSettings.nightMode {
-            case .day: return 1
-            case .night: return 2
-            case .auto, .system: return isNight ? 2 : 1
-            }
-        }()
-        let uiConfig = UiConfig(margins: insets, uiTheme: themeVal)
+        // Protocol-correct (matching open-headunit UpdateUiConfigRequest.kt):
+        // UiConfig MUST ONLY set Field 1 (margins). Never set Field 4 (ui_theme),
+        // otherwise Gearhead aborts the projection session during startup.
+        let uiConfig = UiConfig(margins: insets, uiTheme: nil)
         let requestProto = UpdateUiConfigRequestProto(uiConfig: uiConfig)
 
         return AapMessage(

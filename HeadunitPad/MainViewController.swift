@@ -248,10 +248,7 @@ class MainViewController: UIViewController {
             let h = Int(size.height)
             if w > 0 && h > 0 {
                 print("MainViewController: Video size resolved from SPS: \(w)x\(h)")
-                self.connectionManager.screenConfig.negotiatedWidth = w
-                self.connectionManager.screenConfig.negotiatedHeight = h
-                self.connectionManager.screenConfig.recalculateMargins()
-                self.syncVideoAndTouchGeometry()
+                self.videoRenderer.setNeedsLayout()
             }
         }
         TrackpadInputBridge.shared.setTouchSender { pointers, action, actionIndex in
@@ -797,7 +794,7 @@ class MainViewController: UIViewController {
             return
         }
 
-        connectionManager.updateNightMode(userInterfaceStyle: traitCollection.userInterfaceStyle)
+        connectionManager.updateNightMode(userInterfaceStyle: traitCollection.userInterfaceStyle, force: false)
 
         let now = Date().timeIntervalSince1970
         if !hasReceivedFirstVideoFrame {
@@ -814,7 +811,7 @@ class MainViewController: UIViewController {
         super.traitCollectionDidChange(previousTraitCollection)
         if #available(iOS 13.0, *) {
             if previousTraitCollection?.userInterfaceStyle != traitCollection.userInterfaceStyle {
-                connectionManager.updateNightMode(userInterfaceStyle: traitCollection.userInterfaceStyle)
+                connectionManager.updateNightMode(userInterfaceStyle: traitCollection.userInterfaceStyle, force: true)
             }
         }
     }
@@ -1056,7 +1053,7 @@ class MainViewController: UIViewController {
             alert.addAction(UIAlertAction(title: title, style: .default) { [weak self] _ in
                 guard let self = self else { return }
                 ProjectionSettings.nightMode = option
-                self.connectionManager.updateNightMode(userInterfaceStyle: self.traitCollection.userInterfaceStyle)
+                self.connectionManager.updateNightMode(userInterfaceStyle: self.traitCollection.userInterfaceStyle, force: true)
                 self.presentSettingsMenu()
             })
         }
@@ -1419,22 +1416,42 @@ class MainViewController: UIViewController {
         scrollView.addSubview(contentView)
         setupVC.view.addSubview(scrollView)
 
+        let segmentedControl = UISegmentedControl(items: [
+            "Phone Hotspot / Helper (5288)",
+            "Native QR (Router / Car AP)"
+        ])
+        segmentedControl.selectedSegmentIndex = 0
+        segmentedControl.translatesAutoresizingMaskIntoConstraints = false
+
         let hintLabel = UILabel()
-        hintLabel.text = "Scan this QR code with your Android phone's Camera or Google Lens to configure Android Auto wireless connection, or customize credentials below."
-        hintLabel.font = .systemFont(ofSize: 14, weight: .regular)
+        hintLabel.font = .systemFont(ofSize: 13, weight: .regular)
         hintLabel.textColor = .secondaryLabel
         hintLabel.numberOfLines = 0
-        hintLabel.textAlignment = .center
+        hintLabel.textAlignment = .left
         hintLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        let qrContainer = UIView()
+        qrContainer.backgroundColor = .secondarySystemBackground
+        qrContainer.layer.cornerRadius = 12
+        qrContainer.layer.masksToBounds = true
+        qrContainer.layer.borderWidth = 1
+        qrContainer.layer.borderColor = UIColor.separator.cgColor
+        qrContainer.translatesAutoresizingMaskIntoConstraints = false
 
         let qrImageView = UIImageView()
         qrImageView.contentMode = .scaleAspectFit
         qrImageView.backgroundColor = .white
-        qrImageView.layer.cornerRadius = 12
-        qrImageView.layer.masksToBounds = true
-        qrImageView.layer.borderWidth = 1
-        qrImageView.layer.borderColor = UIColor.separator.cgColor
         qrImageView.translatesAutoresizingMaskIntoConstraints = false
+        qrContainer.addSubview(qrImageView)
+
+        let qrNoticeLabel = UILabel()
+        qrNoticeLabel.font = .systemFont(ofSize: 13, weight: .medium)
+        qrNoticeLabel.textColor = .systemOrange
+        qrNoticeLabel.numberOfLines = 0
+        qrNoticeLabel.textAlignment = .center
+        qrNoticeLabel.translatesAutoresizingMaskIntoConstraints = false
+        qrNoticeLabel.isHidden = true
+        qrContainer.addSubview(qrNoticeLabel)
 
         let stackView = UIStackView()
         stackView.axis = .vertical
@@ -1444,57 +1461,32 @@ class MainViewController: UIViewController {
 
         let ssidField = UITextField()
         ssidField.borderStyle = .roundedRect
-        ssidField.placeholder = "Wi-Fi SSID (e.g. AndroidAuto-Hotspot)"
-        ssidField.text = ProjectionSettings.wifiSsid.isEmpty ? "AndroidAuto-Headunit" : ProjectionSettings.wifiSsid
+        ssidField.placeholder = "Wi-Fi / Hotspot SSID"
+        ssidField.text = ProjectionSettings.wifiSsid
 
         let passField = UITextField()
         passField.borderStyle = .roundedRect
-        passField.placeholder = "Wi-Fi Password / Passkey"
-        passField.text = ProjectionSettings.wifiPasskey.isEmpty ? "12345678" : ProjectionSettings.wifiPasskey
+        passField.placeholder = "Wi-Fi / Hotspot Password"
+        passField.text = ProjectionSettings.wifiPasskey
 
         let bssidField = UITextField()
         bssidField.borderStyle = .roundedRect
-        bssidField.placeholder = "BSSID (e.g. 02:00:00:00:00:00)"
-        bssidField.text = ProjectionSettings.wifiBssid.isEmpty ? "02:00:00:00:00:00" : ProjectionSettings.wifiBssid
+        bssidField.placeholder = "Router BSSID (MAC, e.g. 12:34:56:78:9a:bc)"
+        bssidField.text = ProjectionSettings.wifiBssid
 
         let btMacField = UITextField()
         btMacField.borderStyle = .roundedRect
-        btMacField.placeholder = "Bluetooth MAC (e.g. AA:BB:CC:DD:EE:FF)"
-        btMacField.text = ProjectionSettings.bluetoothMac.isEmpty ? "AA:BB:CC:DD:EE:FF" : ProjectionSettings.bluetoothMac
+        btMacField.placeholder = "Connected Bluetooth MAC (e.g. 11:22:33:44:55:66)"
+        btMacField.text = ProjectionSettings.bluetoothMac
 
-        let currentIp = NetworkAddresses.stationIpv4() ?? "192.168.43.2"
+        let currentIp = NetworkAddresses.stationIpv4() ?? NetworkAddresses.currentHotspotGatewayIpv4() ?? "192.168.43.2"
         let ipLabel = UILabel()
-        ipLabel.text = "iPad IP: \(currentIp)  |  WPP Port: 5299  |  AAP: 5288"
+        ipLabel.text = "iPad IP: \(currentIp):5288  |  WPP: 5299"
         ipLabel.font = .monospacedDigitSystemFont(ofSize: 13, weight: .medium)
         ipLabel.textColor = .secondaryLabel
         ipLabel.textAlignment = .center
 
-        func updateQr() {
-            let s = ssidField.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            let p = passField.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            let b = bssidField.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            let bt = btMacField.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-
-            let uri = ProjectionDeepLink.generateUri(
-                ssid: s.isEmpty ? "AndroidAuto-Headunit" : s,
-                passphrase: p.isEmpty ? "12345678" : p,
-                ipAddress: currentIp,
-                port: 5299,
-                bssid: b.isEmpty ? "02:00:00:00:00:00" : b,
-                bluetoothMac: bt.isEmpty ? "AA:BB:CC:DD:EE:FF" : bt
-            )
-            qrImageView.image = QrCodeGenerator.generateQrCode(content: uri, size: 240)
-        }
-        updateQr()
-
-        [ssidField, passField, bssidField, btMacField].forEach { tf in
-            tf.font = .systemFont(ofSize: 14)
-            tf.autocorrectionType = .no
-            tf.autocapitalizationType = .none
-            tf.addAction(UIAction { _ in updateQr() }, for: .editingChanged)
-        }
-
-        func makeRow(label: String, field: UITextField) -> UIView {
+        func makeRow(label: String, field: UITextField) -> UIStackView {
             let container = UIStackView()
             container.axis = .vertical
             container.spacing = 4
@@ -1507,15 +1499,95 @@ class MainViewController: UIViewController {
             return container
         }
 
-        stackView.addArrangedSubview(makeRow(label: "Wi-Fi SSID", field: ssidField))
-        stackView.addArrangedSubview(makeRow(label: "Wi-Fi Password", field: passField))
-        stackView.addArrangedSubview(makeRow(label: "Wi-Fi BSSID (MAC)", field: bssidField))
-        stackView.addArrangedSubview(makeRow(label: "Bluetooth MAC", field: btMacField))
+        let ssidRow = makeRow(label: "Wi-Fi / Hotspot SSID", field: ssidField)
+        let passRow = makeRow(label: "Wi-Fi / Hotspot Password", field: passField)
+        let bssidRow = makeRow(label: "Router BSSID (MAC Address)", field: bssidField)
+        let btMacRow = makeRow(label: "Bluetooth MAC Address", field: btMacField)
+
+        stackView.addArrangedSubview(ssidRow)
+        stackView.addArrangedSubview(passRow)
+        stackView.addArrangedSubview(bssidRow)
+        stackView.addArrangedSubview(btMacRow)
         stackView.addArrangedSubview(ipLabel)
 
+        contentView.addSubview(segmentedControl)
         contentView.addSubview(hintLabel)
-        contentView.addSubview(qrImageView)
+        contentView.addSubview(qrContainer)
         contentView.addSubview(stackView)
+
+        func updateQr() {
+            let s = ssidField.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let p = passField.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let b = bssidField.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let bt = btMacField.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+            if segmentedControl.selectedSegmentIndex == 0 {
+                // Mode 0: Phone Hotspot / Helper
+                hintLabel.text = "当手机开启个人热点（iPad 连接手机热点）时，手机处于 AP 模式，无法使用原生 AA 扫码连接。请使用以下方式自动免 5277 连接：\n① 在手机安装 Headunit Revived Wireless Helper 扫下方二维码，蓝牙连接后即可自动推送至本机 \(currentIp):5288；\n② 或在手机开启 5277 开发者服务由本机自动连接。"
+                bssidRow.isHidden = true
+                btMacRow.isHidden = true
+
+                let encodedSsid = s.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? s
+                let encodedPass = p.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? p
+                let uri = "wirelesshelper://config?ssid=\(encodedSsid)&pass=\(encodedPass)"
+                qrImageView.image = QrCodeGenerator.generateQrCode(content: uri, size: 240)
+                qrImageView.isHidden = false
+                qrNoticeLabel.isHidden = true
+            } else {
+                // Mode 1: Native QR (Router / Car AP)
+                hintLabel.text = "适用于 iPad 与手机处于同一路由器 Wi-Fi、随身 Wi-Fi 或蜂窝 iPad 热点环境。请输入真实 Router BSSID 与已连接车载/iPad的真实蓝牙 MAC 地址："
+                bssidRow.isHidden = false
+                btMacRow.isHidden = false
+
+                let snapshot = ProjectionQrSnapshot(
+                    listeningPort: 5299,
+                    bluetoothMac: bt.isEmpty ? nil : bt,
+                    bluetoothName: "HeadunitPad",
+                    ssid: s.isEmpty ? nil : s,
+                    passkey: p.isEmpty ? nil : p,
+                    bssid: b.isEmpty ? nil : b,
+                    ip: currentIp
+                )
+                let decision = ProjectionQrPolicy.decide(snapshot: snapshot)
+                switch decision {
+                case .show(let uri):
+                    qrImageView.image = QrCodeGenerator.generateQrCode(content: uri, size: 240)
+                    qrImageView.isHidden = false
+                    qrNoticeLabel.isHidden = true
+                case .refuse(let refusal):
+                    qrImageView.image = nil
+                    qrImageView.isHidden = true
+                    qrNoticeLabel.isHidden = false
+                    let reasonDesc: String
+                    switch refusal {
+                    case .noCredentials:
+                        reasonDesc = "请填写 Wi-Fi SSID 和密码"
+                    case .noBssid:
+                        reasonDesc = "请输入合法的路由器 BSSID (MAC 地址)"
+                    case .noBluetoothIdentity:
+                        reasonDesc = "请输入已连接的真实车载或 iPad 蓝牙 MAC 地址（不能使用占位符 AA:BB:CC:DD:EE:FF）"
+                    case .dongleIdentity:
+                        reasonDesc = "蓝牙名称不能包含 Dongle 关键字"
+                    case .noAddress:
+                        reasonDesc = "未获取到有效的本机 IP 地址"
+                    default:
+                        reasonDesc = "\(refusal)"
+                    }
+                    qrNoticeLabel.text = "⚠️ 无法生成原生配对二维码\n\(reasonDesc)\n请完善下方配置后自动生成。"
+                }
+            }
+        }
+
+        segmentedControl.addAction(UIAction { _ in updateQr() }, for: .valueChanged)
+
+        [ssidField, passField, bssidField, btMacField].forEach { tf in
+            tf.font = .systemFont(ofSize: 14)
+            tf.autocorrectionType = .no
+            tf.autocapitalizationType = .none
+            tf.addAction(UIAction { _ in updateQr() }, for: .editingChanged)
+        }
+
+        updateQr()
 
         NSLayoutConstraint.activate([
             scrollView.topAnchor.constraint(equalTo: setupVC.view.safeAreaLayoutGuide.topAnchor),
@@ -1529,16 +1601,29 @@ class MainViewController: UIViewController {
             contentView.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor),
             contentView.widthAnchor.constraint(equalTo: scrollView.frameLayoutGuide.widthAnchor),
 
-            hintLabel.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 16),
+            segmentedControl.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 16),
+            segmentedControl.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
+            segmentedControl.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
+
+            hintLabel.topAnchor.constraint(equalTo: segmentedControl.bottomAnchor, constant: 14),
             hintLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
             hintLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
 
-            qrImageView.topAnchor.constraint(equalTo: hintLabel.bottomAnchor, constant: 16),
-            qrImageView.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
-            qrImageView.widthAnchor.constraint(equalToConstant: 220),
-            qrImageView.heightAnchor.constraint(equalToConstant: 220),
+            qrContainer.topAnchor.constraint(equalTo: hintLabel.bottomAnchor, constant: 16),
+            qrContainer.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
+            qrContainer.widthAnchor.constraint(equalToConstant: 240),
+            qrContainer.heightAnchor.constraint(equalToConstant: 240),
 
-            stackView.topAnchor.constraint(equalTo: qrImageView.bottomAnchor, constant: 16),
+            qrImageView.topAnchor.constraint(equalTo: qrContainer.topAnchor),
+            qrImageView.leadingAnchor.constraint(equalTo: qrContainer.leadingAnchor),
+            qrImageView.trailingAnchor.constraint(equalTo: qrContainer.trailingAnchor),
+            qrImageView.bottomAnchor.constraint(equalTo: qrContainer.bottomAnchor),
+
+            qrNoticeLabel.leadingAnchor.constraint(equalTo: qrContainer.leadingAnchor, constant: 16),
+            qrNoticeLabel.trailingAnchor.constraint(equalTo: qrContainer.trailingAnchor, constant: -16),
+            qrNoticeLabel.centerYAnchor.constraint(equalTo: qrContainer.centerYAnchor),
+
+            stackView.topAnchor.constraint(equalTo: qrContainer.bottomAnchor, constant: 16),
             stackView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 24),
             stackView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -24),
             stackView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -24)

@@ -127,6 +127,7 @@ class AapTransport {
     private let maxConsecutiveTlsFailures = 6
     private var startedSensors: Set<UInt64> = []
     private var lastSentNightMode: Bool? = nil
+    private var isVideoChannelStarted: Bool = false
     private struct AapTraceEntry {
         let timestampMs: UInt64
         let direction: String
@@ -302,6 +303,9 @@ class AapTransport {
         gracefulDisconnectDiagnostic = "Not requested"
         peerDisconnectDiagnostic = "None"
         gracefulDisconnectLock.unlock()
+        startedSensors.removeAll()
+        lastSentNightMode = nil
+        isVideoChannelStarted = false
         setState(.waitingForVersion)
 
         let delayedStart = DispatchWorkItem { [weak self] in
@@ -1547,10 +1551,13 @@ class AapTransport {
     }
 
     func sendUpdateUiConfigRequest(left: Int, top: Int, right: Int, bottom: Int, uiTheme: Int32? = nil) {
-        guard state == .running else { return }
-        let message = UpdateUiConfigRequest.make(left: left, top: top, right: right, bottom: bottom, uiTheme: uiTheme)
-        print("AapTransport: Sent UpdateUiConfigRequest left=\(left) top=\(top) right=\(right) bottom=\(bottom) uiTheme=\(String(describing: uiTheme))")
-        send(message: message)
+        processingQueue.async { [weak self] in
+            guard let self = self, self.state == .running, self.isVideoChannelStarted else { return }
+            let message = UpdateUiConfigRequest.make(left: left, top: top, right: right, bottom: bottom, uiTheme: uiTheme)
+            self.send(message: message)
+            print("AapTransport: Sent UpdateUiConfigRequest left=\(left) top=\(top) right=\(right) bottom=\(bottom)")
+            self.sendVideoFocusNotification(on: Channel.ID_VID, gain: true, unsolicited: true, reason: "update-ui-config")
+        }
     }
 
     private func sendCallAvailabilityStatus(on channel: UInt8) {
@@ -1675,8 +1682,9 @@ class AapTransport {
 
     private func buildMinimalServiceDiscoveryResponsePayload() -> Data {
         let sensorDrivingStatus = ProtoWire.fieldBytes(1, value: ProtoWire.fieldVarint(1, value: 13))
+        let sensorNight = ProtoWire.fieldBytes(1, value: ProtoWire.fieldVarint(1, value: 10))
         let sensorLocation = ProtoWire.fieldBytes(1, value: ProtoWire.fieldVarint(1, value: 1))
-        var sensorSource = sensorDrivingStatus
+        var sensorSource = sensorDrivingStatus + sensorNight
         if ProjectionSettings.gpsSource == .ipad {
             sensorSource += sensorLocation
         }
@@ -1942,14 +1950,16 @@ enum ProtoWire {
             sendVideoFocusNotification(on: message.channelUInt8, reason: "video-setup")
 
         case 0x8001: // Media.MsgType.MEDIA_MESSAGE_START
+            isVideoChannelStarted = true
             setMediaSessionId(fromStartPayload: message.payload, on: message.channelUInt8)
             if state != .running {
                 setState(.running)
             }
             sendVideoFocusNotification(on: message.channelUInt8, reason: "video-start")
-            sendNightModeEvent(isNight: ProjectionSettings.effectiveIsNightMode(), force: true)
+            sendNightModeEvent(isNight: ProjectionSettings.effectiveIsNightMode(), force: false)
 
         case 0x8002: // Media.MsgType.MEDIA_MESSAGE_STOP
+            isVideoChannelStarted = false
             break
 
         case 0x8007: // Media.MsgType.MEDIA_MESSAGE_VIDEO_FOCUS_REQUEST
@@ -2440,7 +2450,9 @@ extension AapTransport: ByteStreamConnectionDelegate {
         delayedVersionStartWorkItem = nil
         versionRetryWorkItem?.cancel()
         versionRetryWorkItem = nil
+        startedSensors.removeAll()
         lastSentNightMode = nil
+        isVideoChannelStarted = false
         tlsHandler.releaseSessionOnly()
         delegate?.aapTransportDidDisconnect(self)
     }

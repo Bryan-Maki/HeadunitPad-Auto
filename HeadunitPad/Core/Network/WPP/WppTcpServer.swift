@@ -347,6 +347,18 @@ public final class WppTcpServer {
                 client.connection.cancel()
             }
         }
+
+        if client.session.stage == .awaitVersion || client.session.stage == .awaitInfoRequest {
+            client.timeoutWorkItem?.cancel()
+            let timeoutMs = client.session.currentStageTimeoutMs ?? 3_000
+            let work = DispatchWorkItem { [weak self, weak client] in
+                guard let self = self, let client = client else { return }
+                let timeoutActions = client.session.on(event: .stageTimeout)
+                self.processActions(timeoutActions, for: client)
+            }
+            client.timeoutWorkItem = work
+            queue.asyncAfter(deadline: .now() + Double(timeoutMs) / 1000.0, execute: work)
+        }
     }
 
     public func notifyTcpSessionUp() {

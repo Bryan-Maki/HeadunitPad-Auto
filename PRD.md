@@ -216,3 +216,22 @@
 - iPad 真机无线连接下，满屏比例裁切、Coolwalk 分屏预览、HEVC 视频、AAC 多音轨混音压音、麦克风、定位、日夜模式、HUD 导航与外设按键全部通过实机验收。
 - 连续无线投屏播放至少 30 分钟、前后台切换及热点闪断重连测试零崩溃。
 - `README.md` 与工程文档已同步更新为最新的纯无线安装与使用指南。
+
+---
+
+## 10. Iteration & Hardening Changelog
+
+### Phase 5 Hardening & Regression Bugfix (2026-10-16)
+- **开屏 2 秒断连修复**：
+  - 修复 `UpdateUiConfigRequest (0x8009)`：严格对标 `open-headunit UpdateUiConfigRequest.kt`，`UiConfig` 仅设置 Field 1 (`margins`)，彻底移除 Field 4 (`ui_theme`)，防止手机端 Gearhead 在握手开屏阶段触发协议异常断开连接。
+  - `AapTransport` 增加 `isVideoChannelStarted` 门禁，在 `sendUpdateUiConfigRequest` 中拦截首帧前的过早配置包并补发 `VideoFocusNotification (0x8008)`；握手及断连时彻底重置 `startedSensors`、`lastSentNightMode` 与 `isVideoChannelStarted`。
+  - 彻底移除 `ConnectionManager.updateNightMode` 中误调用 `sendUpdateUiConfigRequest` 的逻辑，防止日夜模式刷新并发射非法的 0x8009 轰炸。
+- **WPP 5299 / 5288 状态机与双模式配对**：
+  - 修复 `WppHandshakeSession`：收到 `versionResponse` 时忽略 status（真机常返回 -8），无条件推进到 `.awaitInfoRequest`；在 `.awaitInfoRequest` 增加对 `startResponse` 与 `connectStatus` 的直接响应；增加 3 秒单次超时自动回退机制发送 `WifiStartRequest (Type 1, port: 5288)`。
+  - 保持 `5299`（WPP）与 `5288`（AAP Helper）双端口在应用生命周期内常驻同步监听，防止因连接状态重置导致手机无处连入。
+  - 修复 `WppMessages.carInfo()`：将 Field 9 `bodyType` 移除（传 `nil`），与 `open-headunit` 协议规范 100% 对齐。
+  - 重构主界面无线配对弹窗为双模式切换（`Phone Hotspot / Helper (5288)` 与 `Native QR (Router / Car AP)`），严格拦截假占位符（`02:00:00:00:00:00` / `AA:BB:CC:DD:EE:FF`），提供清晰配置引导。
+- **跨方向旋转自适应与触控对齐**：
+  - 消除 `MainViewController` 中使用 H.264 SPS 宏块对齐高度（1088）覆盖握手高度（1080）引发的边距畸变 Bug。
+  - `HeadUnitScreenConfig.getMargins()` 增加跨方向旋转保护，当分辨率锁定且屏幕旋转导致方向不匹配时，保留已协商边距，避免畸变裁切；`checkAndNotifyMarginDivergence()` 增加方向不匹配拦截。
+  - `TouchCoordinateMapper` 在 `.fill` / `.fillMargin` 发生跨方向旋转降级为 `.resizeAspect` 时，增加黑边偏移扣除算法，确保竖屏状态下触控坐标 100% 精确对齐。

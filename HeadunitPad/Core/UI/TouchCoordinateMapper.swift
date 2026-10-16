@@ -72,8 +72,39 @@ public struct TouchCoordinateMapper: Sendable {
             videoY = (rawY / surfaceH) * uiH
 
         case .fill, .fillMargin:
-            videoX = (px / surfaceW) * uiW
-            videoY = (rawY / surfaceH) * uiH
+            let isMismatched = (surfaceW > surfaceH) != (uiW > uiH)
+            if isMismatched {
+                let videoAspect = uiW / uiH
+                let surfaceAspect = surfaceW / surfaceH
+
+                let activeW: Float
+                let activeH: Float
+                let offsetX: Float
+                let offsetY: Float
+
+                if videoAspect > surfaceAspect {
+                    activeW = surfaceW
+                    activeH = surfaceW / videoAspect
+                    offsetX = 0
+                    offsetY = (surfaceH - activeH) / 2.0
+                } else {
+                    activeH = surfaceH
+                    activeW = surfaceH * videoAspect
+                    offsetX = (surfaceW - activeW) / 2.0
+                    offsetY = 0
+                }
+
+                if activeW > 0 && activeH > 0 {
+                    videoX = ((px - offsetX) / activeW) * uiW
+                    videoY = ((rawY - offsetY) / activeH) * uiH
+                } else {
+                    videoX = (px / surfaceW) * uiW
+                    videoY = (rawY / surfaceH) * uiH
+                }
+            } else {
+                videoX = (px / surfaceW) * uiW
+                videoY = (rawY / surfaceH) * uiH
+            }
 
         case .contain:
             let uiRatio = uiW / uiH

@@ -306,9 +306,28 @@ public final class HeadUnitScreenConfig {
         let (codecW, codecH) = activeSize()
         guard codecW > 0 && codecH > 0 else { return (0, 0) }
 
+        let isDisplayPortrait = screenHeightPx > screenWidthPx
+        let isCodecPortrait = codecH > codecW
+
+        // When resolution is locked during active streaming and the user rotates the iPad
+        // across orientations (e.g. landscape stream on portrait screen or vice versa),
+        // do NOT crop >50% of the codec canvas into the opposite aspect ratio.
+        // Preserve the last announced margins (or 0,0) so H264VideoRendererView's
+        // isMismatched branch cleanly letterboxes (.resizeAspect) without disconnecting.
+        if isResolutionLocked && (isDisplayPortrait != isCodecPortrait) {
+            let safeW = announcedWidthMargin >= 0 ? announcedWidthMargin : 0
+            let safeH = announcedHeightMargin >= 0 ? announcedHeightMargin : 0
+            return (safeW, safeH)
+        }
+
         if videoFitMode == .fillMargin {
             let screenAspect = Double(screenWidthPx) / Double(screenHeightPx)
             let codecAspect = Double(codecW) / Double(codecH)
+
+            if abs(screenAspect - codecAspect) < 0.01 {
+                return (0, 0)
+            }
+
             if screenAspect < codecAspect {
                 let activeH = codecH
                 let activeW = Int((Double(codecH) * screenAspect).rounded()) & ~1
@@ -423,6 +442,11 @@ public final class HeadUnitScreenConfig {
     public var onMarginsDivergedDetailed: ((_ left: Int, _ top: Int, _ right: Int, _ bottom: Int) -> Void)?
 
     public func checkAndNotifyMarginDivergence() {
+        let (codecW, codecH) = activeSize()
+        if isResolutionLocked && ((screenHeightPx > screenWidthPx) != (codecH > codecW)) {
+            return
+        }
+
         let currentWidthMargin = getWidthMargin()
         let currentHeightMargin = getHeightMargin()
         if MarginAnnouncementPolicy.hasDiverged(

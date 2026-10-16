@@ -110,7 +110,7 @@ public enum WppMessages {
             headUnitModel: headUnitModel,
             headUnitSoftwareBuild: softwareBuild,
             headUnitSoftwareVersion: softwareVersion,
-            bodyType: 1
+            bodyType: nil
         )
     }
 

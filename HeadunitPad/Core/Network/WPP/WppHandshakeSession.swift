@@ -148,24 +148,36 @@ public final class WppHandshakeSession {
                 return actions
             }
 
-            switch stage {
             case .awaitVersion:
                 if type == WppMessageType.versionResponse {
-                    if let st = status, st != 0 {
-                        stage = .failed
-                        actions.append(.fail(reason: "Version rejected with status \(WppStatus.describe(st))", phoneWasSilent: false, joinRefused: false))
-                    } else if credentialsKnown {
-                        stage = .awaitInfoRequest
-                        actions.append(.sendStartRequest)
-                    } else {
-                        stage = .awaitCredentials
-                    }
+                    // Matching open-headunit WppHandshakeSession.kt:265-275:
+                    // Phone frequently returns status -8 (STATUS_NO_SUPPORTED_WIFI_CHANNELS)
+                    // but subsequent handshake succeeds normally. Advance to awaitInfoRequest regardless.
+                    stage = .awaitInfoRequest
+                    actions.append(.sendStartRequest)
                 }
 
             case .awaitInfoRequest:
                 if type == WppMessageType.infoRequest {
                     stage = .settling
                     actions.append(.sendInfoResponse)
+                    actions.append(.extendSettle)
+                } else if type == WppMessageType.startResponse {
+                    if let st = status, st != 0 {
+                        stage = .failed
+                        actions.append(.fail(reason: "WifiStartResponse status=\(st)", phoneWasSilent: false, joinRefused: false))
+                    } else {
+                        stage = .settling
+                        actions.append(.extendSettle)
+                    }
+                } else if type == WppMessageType.connectStatus {
+                    if let st = status, st != 0 {
+                        stage = .failed
+                        actions.append(.fail(reason: "WifiConnectStatus status=\(st)", phoneWasSilent: false, joinRefused: true))
+                    } else {
+                        stage = .holding
+                        actions.append(.completeSuccess)
+                    }
                 }
 
             case .settling:
@@ -204,11 +216,22 @@ public final class WppHandshakeSession {
                 actions.append(.completeSuccess)
             }
 
-        case .stageTimeout, .settleTimeout:
-            if stage == .settling || stage == .awaitVersion || stage == .awaitInfoRequest {
+        case .stageTimeout:
+            if stage == .awaitVersion {
+                print("WppHandshakeSession: Version request timed out, falling back to sendStartRequest")
+                stage = .awaitInfoRequest
+                actions.append(.sendStartRequest)
+            } else if stage == .awaitInfoRequest {
                 let silent = phoneWasSilent
                 stage = .failed
                 actions.append(.fail(reason: "Stage timeout in \(stage)", phoneWasSilent: silent, joinRefused: false))
+            }
+
+        case .settleTimeout:
+            if stage == .settling {
+                let silent = phoneWasSilent
+                stage = .failed
+                actions.append(.fail(reason: "Settle timeout in \(stage)", phoneWasSilent: silent, joinRefused: false))
             }
 
         case .networkWithdrawn:

@@ -50,6 +50,15 @@ public enum ProjectionDeepLink {
         return bssidRegex?.firstMatch(in: bssid, options: [], range: range) != nil
     }
 
+    public static func isUsableBssid(_ bssid: String) -> Bool {
+        guard isValidBssid(bssid) else { return false }
+        let upper = bssid.uppercased()
+        if upper == "00:00:00:00:00:00" || upper == "02:00:00:00:00:00" || upper == "FF:FF:FF:FF:FF:FF" {
+            return false
+        }
+        return true
+    }
+
     public static func build(
         ssid: String,
         passkey: String,

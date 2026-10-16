@@ -74,7 +74,10 @@ public enum ProjectionQrPolicy {
         if ProjectionDeepLink.looksLikeDongle(snapshot.bluetoothName) {
             return .refuse(refusal: .dongleIdentity)
         }
-        guard let btMac = snapshot.bluetoothMac, ProjectionDeepLink.isValidBssid(btMac) else {
+        guard let btMac = snapshot.bluetoothMac,
+              ProjectionDeepLink.isValidBssid(btMac),
+              ProjectionDeepLink.isUsableBssid(btMac),
+              btMac.uppercased() != "AA:BB:CC:DD:EE:FF" else {
             return .refuse(refusal: .noBluetoothIdentity)
         }
 

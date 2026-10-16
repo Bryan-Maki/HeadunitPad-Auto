@@ -113,6 +113,8 @@ class ConnectionManager {
         wirelessHelperServer.delegate = self
         legacyAapServer.delegate = self
         wppServer.delegate = self
+        wirelessHelperServer.start(port: 5288, enableBonjour: true)
+        legacyAapServer.start(port: 5000, enableBonjour: false)
         wppServer.start(port: 5299)
         wppServer.onRawAapConnectionDetected = { [weak self] connection, initialData in
             let host = Self.hostString(from: connection.endpoint)
@@ -173,9 +175,6 @@ class ConnectionManager {
         print("ConnectionManager: stopDiscovery called")
         autoReconnect.cancel()
         discovery.stopScan()
-        wirelessHelperServer.stop()
-        legacyAapServer.stop()
-        wppServer.stop()
         if state == .discovering || state == .waitingForWirelessHelper {
             state = .disconnected
             updateStatus("Ready to connect")
@@ -240,6 +239,12 @@ class ConnectionManager {
                 self.connectedDevice = nil
                 self.state = .disconnected
                 self.updateStatus("Ready to connect")
+                if !self.wirelessHelperServer.isRunning {
+                    self.wirelessHelperServer.start(port: 5288, enableBonjour: true)
+                }
+                if !self.wppServer.isRunning {
+                    self.wppServer.start(port: 5299)
+                }
             },
             close: { [weak self] in
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
@@ -271,16 +276,9 @@ class ConnectionManager {
         }
     }
 
-    public func updateNightMode(userInterfaceStyle: UIUserInterfaceStyle? = nil) {
+    public func updateNightMode(userInterfaceStyle: UIUserInterfaceStyle? = nil, force: Bool = false) {
         let isNight = ProjectionSettings.effectiveIsNightMode(userInterfaceStyle: userInterfaceStyle)
-        aapTransport?.sendNightModeEvent(isNight: isNight, force: true)
-        let cfg = screenConfig
-        let left = cfg.getLeftMargin()
-        let top = cfg.getTopMargin()
-        let right = cfg.getRightMargin()
-        let bottom = cfg.getBottomMargin()
-        let theme: Int32 = isNight ? 2 : 1
-        sendUpdateUiConfigRequest(left: left, top: top, right: right, bottom: bottom, uiTheme: theme)
+        aapTransport?.sendNightModeEvent(isNight: isNight, force: force)
     }
 
     func send(_ data: Data) {
@@ -587,6 +585,12 @@ extension ConnectionManager: AapTransportDelegate {
         connectedDevice = nil
         state = .disconnected
         updateStatus("Android Auto disconnected")
+        if !wirelessHelperServer.isRunning {
+            wirelessHelperServer.start(port: 5288, enableBonjour: true)
+        }
+        if !wppServer.isRunning {
+            wppServer.start(port: 5299)
+        }
 
         consecutiveStarvedSessions = VideoStarvationPolicy.nextStreak(
             current: consecutiveStarvedSessions,
