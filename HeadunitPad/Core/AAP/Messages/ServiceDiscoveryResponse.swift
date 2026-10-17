@@ -172,16 +172,19 @@ public final class AapServiceDiscoveryResponseMessage {
         services.append(ControlService(id: UInt32(Channel.ID_NAV), navigationStatusService: navService))
 
         // 8. HeadUnitInfo
+        let effectiveVehicleType: Int32 = useMic ? 1 : 3 // 1: Car, 3: Motorcycle
+        let effectiveVehicleId = useMic ? vehicleId : "\(vehicleId)-moto"
+
         let huInfo = HeadUnitInfo(
             make: vehicleMake,
             model: vehicleModel,
             year: vehicleYear,
-            vehicleId: vehicleId,
+            vehicleId: effectiveVehicleId,
             headUnitMake: headUnitMake,
             headUnitModel: headUnitModel,
             headUnitSoftwareBuild: "1",
             headUnitSoftwareVersion: "0.1.0",
-            vehicleType: 1 // Car
+            vehicleType: effectiveVehicleType
         )
 
         let response = ServiceDiscoveryResponseProto(
@@ -189,7 +192,7 @@ public final class AapServiceDiscoveryResponseMessage {
             make: vehicleMake,
             model: vehicleModel,
             year: vehicleYear,
-            vehicleId: vehicleId,
+            vehicleId: effectiveVehicleId,
             driverPosition: rightHandDrive ? .right : .left,
             headUnitMake: headUnitMake,
             headUnitModel: headUnitModel,

@@ -510,6 +510,10 @@ extension ConnectionManager: DiscoveryDelegate {
 
 extension ConnectionManager: AapTransportDelegate {
     func aapTransport(_ transport: AapTransport, didRequestMicrophoneCapture isOpen: Bool) {
+        guard ProjectionSettings.effectiveUseIpadMic else {
+            microphoneCapture.stop()
+            return
+        }
         if isOpen {
             microphoneCapture.start(sampleRate: 16_000, channels: 1)
         } else {
@@ -596,10 +600,8 @@ extension ConnectionManager: AapTransportDelegate {
             updateStatus("Handshaking with Android Auto (TLS / Service Discovery)...")
 
         case .running:
-            if ProjectionSettings.isAudioSinkEnabled {
-                NowPlayingCoordinator.shared.activate()
-            } else {
-                NowPlayingCoordinator.shared.deactivate()
+            NowPlayingCoordinator.shared.activate()
+            if !ProjectionSettings.isAudioSinkEnabled {
                 PCMAudioPlayer.shared.stop()
             }
             self.state = .running

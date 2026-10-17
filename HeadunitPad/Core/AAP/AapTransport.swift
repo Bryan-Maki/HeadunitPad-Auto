@@ -1240,31 +1240,60 @@ class AapTransport {
     }
 
     private func handleMediaPlaybackStatus(_ payload: Data) {
-        let stateValue = ProtoWire.extractFirstVarint(from: payload, fieldNumber: 1)
-        let source = ProtoWire.extractFirstString(from: payload, fieldNumber: 2)
-        let seconds = ProtoWire.extractFirstVarint(from: payload, fieldNumber: 3)
-        let status = AapPlaybackStatus(
-            state: stateValue.flatMap { AapPlaybackStatus.State(rawValue: $0) },
-            mediaSource: source,
-            playbackSeconds: seconds
-        )
-        AppLog.i("MPB status state=\(stateValue.map(String.init) ?? "-") source='\(source ?? "")' seconds=\(seconds.map(String.init) ?? "-")", tag: "AapTransport")
-        delegate?.aapTransport(self, didReceivePlaybackStatus: status)
+        var status: AapPlaybackStatus?
+        do {
+            var reader = ProtoReader(data: payload)
+            let protoStatus = try MediaPlaybackStatus(from: &reader)
+            let state = protoStatus.state.flatMap { AapPlaybackStatus.State(rawValue: UInt64($0.rawValue)) }
+            status = AapPlaybackStatus(
+                state: state,
+                mediaSource: protoStatus.mediaSource,
+                playbackSeconds: protoStatus.playbackSeconds.map { UInt64($0) }
+            )
+        } catch {
+            AppLog.w("ProtoReader failed to decode MediaPlaybackStatus: \(error), fallback to ProtoWire", tag: "AapTransport")
+            let stateValue = ProtoWire.extractFirstVarint(from: payload, fieldNumber: 1)
+            let source = ProtoWire.extractFirstString(from: payload, fieldNumber: 2)
+            let seconds = ProtoWire.extractFirstVarint(from: payload, fieldNumber: 3)
+            status = AapPlaybackStatus(
+                state: stateValue.flatMap { AapPlaybackStatus.State(rawValue: $0) },
+                mediaSource: source,
+                playbackSeconds: seconds
+            )
+        }
+        guard let finalStatus = status else { return }
+        AppLog.i("MPB status state=\(finalStatus.state.map { "\($0.rawValue)" } ?? "-") source='\(finalStatus.mediaSource ?? "")' seconds=\(finalStatus.playbackSeconds.map(String.init) ?? "-")", tag: "AapTransport")
+        delegate?.aapTransport(self, didReceivePlaybackStatus: finalStatus)
     }
 
     private func handleMediaPlaybackMetadata(_ message: AapMessage) {
         let payload = message.payload
         guard !payload.isEmpty else { return }
         AppLog.i("MPB metadata packet flags=0x\(String(format: "%02x", message.flags)) size=\(payload.count)", tag: "AapTransport")
-        let metadata = AapMediaMetadata(
-            title: ProtoWire.extractFirstString(from: payload, fieldNumber: 1),
-            artist: ProtoWire.extractFirstString(from: payload, fieldNumber: 2),
-            album: ProtoWire.extractFirstString(from: payload, fieldNumber: 3),
-            durationSeconds: ProtoWire.extractFirstVarint(from: payload, fieldNumber: 6),
-            albumArt: ProtoWire.extractFirstBytes(from: payload, fieldNumber: 4)
-        )
-        AppLog.i("MPB metadata title='\(metadata.title ?? "")' artist='\(metadata.artist ?? "")' album='\(metadata.album ?? "")' artBytes=\(metadata.albumArt?.count ?? 0)", tag: "AapTransport")
-        delegate?.aapTransport(self, didReceiveMediaMetadata: metadata)
+        var metadata: AapMediaMetadata?
+        do {
+            var reader = ProtoReader(data: payload)
+            let protoMeta = try MediaMetaData(from: &reader)
+            metadata = AapMediaMetadata(
+                title: protoMeta.song,
+                artist: protoMeta.artist,
+                album: protoMeta.album,
+                durationSeconds: protoMeta.durationSeconds.map { UInt64($0) },
+                albumArt: protoMeta.albumArt
+            )
+        } catch {
+            AppLog.w("ProtoReader failed to decode MediaMetaData: \(error), fallback to ProtoWire", tag: "AapTransport")
+            metadata = AapMediaMetadata(
+                title: ProtoWire.extractFirstString(from: payload, fieldNumber: 1),
+                artist: ProtoWire.extractFirstString(from: payload, fieldNumber: 2),
+                album: ProtoWire.extractFirstString(from: payload, fieldNumber: 3),
+                durationSeconds: ProtoWire.extractFirstVarint(from: payload, fieldNumber: 6),
+                albumArt: ProtoWire.extractFirstBytes(from: payload, fieldNumber: 4)
+            )
+        }
+        guard let finalMeta = metadata else { return }
+        AppLog.i("MPB metadata title='\(finalMeta.title ?? "")' artist='\(finalMeta.artist ?? "")' album='\(finalMeta.album ?? "")' artBytes=\(finalMeta.albumArt?.count ?? 0)", tag: "AapTransport")
+        delegate?.aapTransport(self, didReceiveMediaMetadata: finalMeta)
     }
 
     private func handleNavigationMessage(_ message: AapMessage) {
@@ -1473,7 +1502,7 @@ class AapTransport {
             fpsLimit: ProjectionSettings.effectiveFpsLimit.rawValue,
             rightHandDrive: isRhd,
             useGps: useGps,
-            useMic: true,
+            useMic: ProjectionSettings.effectiveUseIpadMic,
             requestedDpi: ProjectionSettings.effectiveDpi,
             enableAudioSink: ProjectionSettings.isAudioSinkEnabled
         )
@@ -1823,7 +1852,9 @@ class AapTransport {
             payload += ProtoWire.fieldBytes(1, value: audioServiceMedia)
             payload += ProtoWire.fieldBytes(1, value: audioServiceSpeech)
         }
-        payload += ProtoWire.fieldBytes(1, value: micService)
+        if ProjectionSettings.effectiveUseIpadMic {
+            payload += ProtoWire.fieldBytes(1, value: micService)
+        }
         payload += ProtoWire.fieldBytes(1, value: navService)
         payload += ProtoWire.fieldBytes(1, value: mediaPlaybackService)
 
@@ -2282,6 +2313,11 @@ enum ProtoWire {
             let openValue = ProtoWire.extractFirstVarint(from: message.payload, fieldNumber: 1) ?? 0
             let shouldOpen = openValue != 0
             AppLog.i("Microphone request open=\(shouldOpen)", tag: "AapTransport")
+            if !ProjectionSettings.effectiveUseIpadMic {
+                delegate?.aapTransport(self, didRequestMicrophoneCapture: false)
+                sendMicrophoneResponse(on: message.channelUInt8, status: shouldOpen ? 1 : 0)
+                break
+            }
             delegate?.aapTransport(self, didRequestMicrophoneCapture: shouldOpen)
             if !shouldOpen {
                 // Assistant flow ended. Proactively restore media focus to unstick playback.

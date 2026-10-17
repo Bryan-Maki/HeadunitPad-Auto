@@ -43,6 +43,8 @@ public struct SettingsPayload: Codable, Equatable {
     public var audioOutputTarget: Int
     public var nightMode: Int
     public var showPerformanceOverlay: Bool
+    public var isAutoDpi: Bool?
+    public var microphoneSource: Int?
 
     public init(
         resolution: Int,
@@ -61,7 +63,9 @@ public struct SettingsPayload: Codable, Equatable {
         audioCodecPreference: Int,
         audioOutputTarget: Int,
         nightMode: Int,
-        showPerformanceOverlay: Bool
+        showPerformanceOverlay: Bool,
+        isAutoDpi: Bool? = nil,
+        microphoneSource: Int? = nil
     ) {
         self.resolution = resolution
         self.fpsLimit = fpsLimit
@@ -80,6 +84,8 @@ public struct SettingsPayload: Codable, Equatable {
         self.audioOutputTarget = audioOutputTarget
         self.nightMode = nightMode
         self.showPerformanceOverlay = showPerformanceOverlay
+        self.isAutoDpi = isAutoDpi
+        self.microphoneSource = microphoneSource
     }
 }
 
@@ -119,7 +125,9 @@ public enum SettingsBackupManager {
             audioCodecPreference: ProjectionSettings.audioCodecPreference.rawValue,
             audioOutputTarget: ProjectionSettings.audioOutputTarget.rawValue,
             nightMode: ProjectionSettings.nightMode.rawValue,
-            showPerformanceOverlay: ProjectionSettings.showPerformanceOverlay
+            showPerformanceOverlay: ProjectionSettings.showPerformanceOverlay,
+            isAutoDpi: ProjectionSettings.isAutoDpi,
+            microphoneSource: ProjectionSettings.microphoneSource.rawValue
         )
     }
 
@@ -201,6 +209,12 @@ public enum SettingsBackupManager {
             ProjectionSettings.nightMode = nm
         }
         ProjectionSettings.showPerformanceOverlay = s.showPerformanceOverlay
+        if let autoDpi = s.isAutoDpi {
+            ProjectionSettings.isAutoDpi = autoDpi
+        }
+        if let micRaw = s.microphoneSource, let micSource = MicrophoneSource(rawValue: micRaw) {
+            ProjectionSettings.microphoneSource = micSource
+        }
 
         HeadUnitScreenConfig.shared.recalculate(requestedResolution: ProjectionSettings.resolution)
 
@@ -223,6 +237,8 @@ public enum SettingsBackupManager {
         ProjectionSettings.videoCodecPreference = .h264
         ProjectionSettings.audioCodecPreference = .aac
         ProjectionSettings.audioOutputTarget = .ipad
+        ProjectionSettings.microphoneSource = .followAudioOutput
+        ProjectionSettings.isAutoDpi = true
         ProjectionSettings.nightMode = .system
         ProjectionSettings.showPerformanceOverlay = false
 

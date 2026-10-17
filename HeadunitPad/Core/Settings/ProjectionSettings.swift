@@ -112,6 +112,20 @@ public enum AudioOutputTarget: Int, CaseIterable {
     }
 }
 
+public enum MicrophoneSource: Int, CaseIterable {
+    case followAudioOutput = 0
+    case ipad = 1
+    case phone = 2
+
+    public var title: String {
+        switch self {
+        case .followAudioOutput: return "Follow Audio Output"
+        case .ipad: return "iPad Microphone"
+        case .phone: return "Phone / Car BT Mic"
+        }
+    }
+}
+
 public typealias ProjectionVideoResolution = ResolutionPreset
 public typealias ProjectionResolution = ResolutionPreset
 
@@ -133,6 +147,7 @@ public enum ProjectionSettings {
     private static let videoCodecPreferenceKey = "projection-video-codec-preference"
     private static let audioCodecPreferenceKey = "projection-audio-codec-preference"
     private static let audioOutputTargetKey = "projection-audio-output-target"
+    private static let microphoneSourceKey = "projection-microphone-source"
     private static let nightModeKey = "projection-night-mode"
     private static let wifiSsidKey = "projection-wifi-ssid"
     private static let wifiPasskeyKey = "projection-wifi-passkey"
@@ -390,6 +405,7 @@ public enum ProjectionSettings {
         videoCodecPreference = .h264
         audioCodecPreference = .aac
         audioOutputTarget = .ipad
+        microphoneSource = .followAudioOutput
         nightMode = .auto
         resetDpiToDefault()
     }
@@ -409,6 +425,30 @@ public enum ProjectionSettings {
 
     public static var isAudioSinkEnabled: Bool {
         return audioOutputTarget == .ipad
+    }
+
+    public static var microphoneSource: MicrophoneSource {
+        get {
+            guard let raw = defaults.object(forKey: microphoneSourceKey) as? Int,
+                  let source = MicrophoneSource(rawValue: raw) else {
+                return .followAudioOutput
+            }
+            return source
+        }
+        set {
+            defaults.set(newValue.rawValue, forKey: microphoneSourceKey)
+        }
+    }
+
+    public static var effectiveUseIpadMic: Bool {
+        switch microphoneSource {
+        case .followAudioOutput:
+            return audioOutputTarget == .ipad
+        case .ipad:
+            return true
+        case .phone:
+            return false
+        }
     }
 
     public static var videoResolution: ResolutionPreset {

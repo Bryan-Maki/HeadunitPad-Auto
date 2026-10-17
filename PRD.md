@@ -134,6 +134,19 @@
 
 每次仅推进一个阶段（Phase），每个阶段必须通过对应的编译、单元测试与功能门禁（Gate）后方可进入下一阶段。
 
+| 阶段编号 | 阶段名称 | 核心交付内容 | 当前状态 |
+|---|---|---|---|
+| **Phase 0** | 工程基建与免越狱适配 | 移除私有 USB 权限，配置普通 Apple ID 免费自签打包与 CI 流水线 | ✅ 已完成 |
+| **Phase 1** | 协议层与 1:1 满屏自适应 | Protobuf 编解码、分片重组、`0x8009` 零断连横竖屏动态边距重排、触控零漂移映射 | ✅ 已完成 |
+| **Phase 2** | 无线 5277 发现与重连状态机 | 网关直连、并发子网扫描、探活连接零损耗复用、3.0s 静默重拨双保险、看门狗与自动重连 | ✅ 已完成 |
+| **Phase 3** | 视频硬解升级与丢包自愈 | `VideoToolbox` H.264/HEVC 硬解、PLI 关键帧自愈、`activeClipView` 局部裁剪与防拉伸护栏 | ✅ 已完成 |
+| **Phase 4** | 多音轨混音、AAC 硬解与麦克风 | `AudioToolbox` AAC-LC 硬解、三声道独立混音、导航 30% 自动压音（Ducking）、48k->16k 麦克风降采样 | ✅ 已完成 |
+| **Phase 5** | 日夜模式、GPS 与行车解除 | `SensorBatch (0x8003)` 日夜切换、`DrivingStatus = UNRESTRICTED`、CoreLocation GPS 透传 | ✅ 已完成 |
+| **Phase 6** | 纯净全屏与诊断工具箱 | 移除投屏遮挡按钮、左上角穿透式 `PerformanceOverlayView`、`AudioStreamTester`、故障横幅、`AppLog` 导出与 JSON 备份、全新 AppIcon | ✅ 已完成 |
+| **Phase 7** | **锁屏 Now Playing 修复与麦克风源路由** | **修复 `.mixWithOthers` 导致 iOS 锁屏/控制中心无歌曲信息 Bug、重构 `NowPlayingCoordinator`、新增 `MicrophoneSource`（Follow / iPad / Phone + Motorcycle 协议策略）与 JSON 备份补齐** | 🎯 **当前进行中** |
+| **Phase 8** | **现代车载仪表盘主页与原生分组设置中心** | **重构 `MainViewController` 为双栏卡片式车载仪表盘（含状态呼吸灯胶囊与 6 大配置速览磁贴）、新建 `.insetGrouped` 原生 `SettingsViewController`（内嵌实时 `DpiPreviewView`）、投屏防熄屏常亮** | ⏳ 待执行 |
+| **Phase 9** | **智能网络感知、天文日夜、方控映射与解码降级** | **实现 `F8` (`NetworkReachabilityMonitor`)、`F4` (`TwilightCalculator` 日出日落算法 + GPS 负经纬度修复)、`F3` (`KeymapManager` 蓝牙方控/键盘映射)、`F10` (`DecoderConfigLadder` 运行时自动降级闭环)** | ⏳ 待执行 |
+
 ### Phase 0 — USB purge and standard IPA foundation
 
 1. 删除 `HeadunitPad/Core/USB/`、`HeadunitPadTests/*USB*`、`HeadunitPadTests/AndroidOpenAccessoryTests.swift` 及旧构建脚本，修复 `project.pbxproj` 引用。
@@ -190,6 +203,43 @@
 6. **全量单元测试 (`Phase6DiagnosticsAndPolishTests`)**：全面覆盖 HUD 格式化、无交互穿透、音频波形合成与压音、连接故障过滤、日志轮转、设置备份导入及横竖屏 DPI 对称性。
 
 **Gate**：性能监控 HUD 穿透显示且指标刷新准确；声道测试器发声与压音正常；日志导出与设置 JSON 备份/恢复闭环验证通过；全部 Phase 1-6 单元测试 100% 通过。
+
+### Phase 7 — Audio Focus, Lockscreen Now Playing Restoration & Microphone Source Routing (P1) [🎯 进行中]
+
+1. **彻底修复 iOS 锁屏与控制中心不显示歌曲信息与专辑封面**：
+   - 根因消除：彻底移除 `NowPlayingCoordinator`、`PCMAudioPlayer`、`MicrophoneCapture` 中所有 `AVAudioSession.setCategory` 调用里的 `.mixWithOthers` 伴音标志，恢复系统级主媒体播放器锁屏焦点资格。
+   - 重构 `NowPlayingCoordinator`：废除局部 `MPNowPlayingSession`，统一使用全局 `MPNowPlayingInfoCenter.default()` 与 `MPRemoteCommandCenter.shared()`，并启用 `UIApplication.shared.beginReceivingRemoteControlEvents()`。
+   - 解除 `isAudioSinkEnabled` 拦截门禁：通过 `0.001` 音量的 `keepAlivePlayer` 静音流保活，确保即使声音走手机/车载蓝牙（`AudioOutputTarget == .phone`），iPad 锁屏与控制中心依然实时展示歌曲名、歌手、专辑封面并支持锁屏按键切歌。
+   - 修复播放状态刷新：每次收到状态或进度更新，立即同步 `MPNowPlayingInfoCenter.default().playbackState` 并全量更新锁屏信息。
+   - 升级 `Channel.ID_MPB (9)` 强类型解析：使用 `PlaybackProto.swift` 的 `ProtoReader` 反序列化 `MediaPlaybackStatus` 与 `MediaMetaData`，防止手机端扩展字段截断 `albumArt` 提取。
+2. **新增麦克风设备位置设定 (`MicrophoneSource`) 与车型伪装防断连策略**：
+   - 配置模型：新增 `MicrophoneSource`（`.followAudioOutput`、`.ipad`、`.phone`）与 `effectiveUseIpadMic` 计算属性，并在 `SettingsBackupManager` 补齐 `isAutoDpi` 与 `microphoneSource` 的 JSON 导入导出与默认重置。
+   - AAP 协议层对标 `open-headunit`：当 `useMic == false` 时，不宣告 Channel 7 麦克风服务，并将 `HeadUnitInfo.vehicleType` 设为 `3` (`MOTORCYCLE`)、`vehicleId` 设为 `"\(vehicleId)-moto"`，强制 Android Auto 使用手机本地/原车蓝牙麦克风收音且不中止握手。
+   - 拒收逻辑：若 `!effectiveUseIpadMic`，拒绝启动 `MicrophoneCapture` 并回复状态码 `1`。
+3. **主界面与设置联动**：主菜单展示并支持切换麦克风源，切换导致模式变化时在投屏中自动触发重握手。
+
+**Gate**：单元测试 100% 通过（Covering `effectiveUseIpadMic`、Motorcycle 车型伪装协议、`PlaybackProto` 编解码及 JSON 备份往返）；连接后锁屏与控制中心实时显示曲目与封面；切换麦克风模式协议响应无断连。
+
+### Phase 8 — Modern Dual-Column Inset-Grouped Dashboard & Settings Center (P1) [⏳ 待执行]
+
+1. **现代车载卡片式双栏仪表盘主页 (`MainViewController.swift`)**：
+   - 顶部品牌与动态状态胶囊栏（带呼吸指示灯状态胶囊、IP 徽标与毛玻璃 Settings 按钮）。
+   - 双栏自适应网格（横屏左右双栏、竖屏上下单栏）：左栏直连与扫描主控 Hub，右栏 4 步结构化新手引导卡片。
+   - 底部 6 大交互式配置速览磁贴栏（点击直达设置）。
+   - 投屏常亮防熄屏（`UIApplication.shared.isIdleTimerDisabled = true`）。
+2. **原生 iPadOS 分组设置中心 (`SettingsViewController.swift`)**：
+   - 模态弹出 `.insetGrouped` 样式原生控制器，内嵌实时 `DpiPreviewView`、全量音视频管线、智能传感器、网络看门狗与备份管理。
+
+**Gate**：界面视觉对标新能源原生车机设计；全功能设置项平滑交互；投屏常亮与熄屏保护正常。
+
+### Phase 9 — Smart Network Reachability, Twilight Night Mode, Keymap & Decoder Fallback Ladder (P2) [⏳ 待执行]
+
+1. **动态网络常驻监听器 (`NetworkReachabilityMonitor`)**：基于 `NWPathMonitor` 常驻感知 Wi-Fi 断开/接入手机热点，自动刷新网关并触发自动重连。
+2. **天文日出日落算法 (`TwilightCalculator`) & GPS 负坐标修复**：NOAA 太阳算法 + 4 分钟防眩光修正日夜切换；修复 AAP 负经纬度补码。
+3. **物理键盘与蓝牙方控映射 (`KeymapManager`)**：`UIKeyboardHIDUsage` 到 Android KeyCode 完整映射与转发。
+4. **视频硬解运行时阶梯自动降级 (`DecoderConfigLadder`)**：连续解码失败阈值检测，自动降级分辨率/编码格式并重连自愈。
+
+**Gate**：热点切换自动重连秒级生效；负经纬度与日夜切换精准；蓝牙按键操控车机无延迟；解码故障平滑自动降级。
 
 ---
 

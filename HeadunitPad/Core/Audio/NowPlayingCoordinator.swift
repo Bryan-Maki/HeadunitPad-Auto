@@ -13,7 +13,6 @@ final class NowPlayingCoordinator {
     private var keepAlivePlayer: AVQueuePlayer?
     private var keepAliveItem: AVPlayerItem?
     private var keepAliveLooper: AVPlayerLooper?
-    private var nowPlayingSession: MPNowPlayingSession?
     private var configuredCommandCenter: MPRemoteCommandCenter?
     private var lastPublishedIsPlaying: Bool?
     private var hasConfiguredAudioSession = false
@@ -21,19 +20,15 @@ final class NowPlayingCoordinator {
     private init() {}
 
     private var activeInfoCenter: MPNowPlayingInfoCenter {
-        nowPlayingSession?.nowPlayingInfoCenter ?? MPNowPlayingInfoCenter.default()
+        MPNowPlayingInfoCenter.default()
     }
 
     private var activeCommandCenter: MPRemoteCommandCenter {
-        nowPlayingSession?.remoteCommandCenter ?? MPRemoteCommandCenter.shared()
+        MPRemoteCommandCenter.shared()
     }
 
     func activate() {
         DispatchQueue.main.async {
-            guard ProjectionSettings.isAudioSinkEnabled else {
-                print("NowPlayingCoordinator: skipped activate because audio output target is phone")
-                return
-            }
             guard !self.isActive else {
                 self.updateNowPlayingInfo(metadata: self.metadata, playbackState: self.playbackState)
                 return
@@ -60,9 +55,7 @@ final class NowPlayingCoordinator {
             self.hasConfiguredAudioSession = false
             self.stopSilentPlayback()
             self.clearRemoteCommands()
-            self.activeInfoCenter.nowPlayingInfo = nil
             MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
-            self.nowPlayingSession = nil
             UIApplication.shared.endReceivingRemoteControlEvents()
             print("NowPlayingCoordinator: deactivated")
         }
@@ -83,7 +76,7 @@ final class NowPlayingCoordinator {
 
         let session = AVAudioSession.sharedInstance()
         do {
-            try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
+            try session.setCategory(.playback, mode: .default, options: [])
             try session.setActive(true)
             hasConfiguredAudioSession = true
             print("NowPlayingCoordinator: audio session activated for AVRCP")
@@ -103,34 +96,14 @@ final class NowPlayingCoordinator {
             let item = AVPlayerItem(url: url)
             player = AVQueuePlayer()
             player.actionAtItemEnd = .none
-            player.volume = 0.0001
+            player.volume = 0.001
             keepAliveItem = item
             keepAlivePlayer = player
             item.nowPlayingInfo = makeNowPlayingInfo(metadata: metadata, playbackState: playbackState)
             keepAliveLooper = AVPlayerLooper(player: player, templateItem: item)
-            configureNowPlayingSession(for: player)
         }
 
         player.playImmediately(atRate: 1.0)
-    }
-
-    private func configureNowPlayingSession(for player: AVPlayer) {
-        let session = MPNowPlayingSession(players: [player])
-        session.automaticallyPublishesNowPlayingInfo = false
-        nowPlayingSession = session
-        session.becomeActiveIfPossible { [weak self] success in
-            print("NowPlayingCoordinator: now playing session active=\(success)")
-            guard success else { return }
-            DispatchQueue.main.async {
-                guard let self else { return }
-                self.configureRemoteCommands()
-                self.updateNowPlayingInfo(
-                    metadata: self.metadata,
-                    playbackState: self.playbackState,
-                    forceRepublish: true
-                )
-            }
-        }
     }
 
     private func stopSilentPlayback() {
@@ -138,14 +111,12 @@ final class NowPlayingCoordinator {
     }
 
     private func tearDownSilentPlayback() {
-        nowPlayingSession?.nowPlayingInfoCenter.nowPlayingInfo = nil
         keepAlivePlayer?.pause()
         keepAlivePlayer?.removeAllItems()
         keepAliveLooper?.disableLooping()
         keepAliveLooper = nil
         keepAlivePlayer = nil
         keepAliveItem = nil
-        nowPlayingSession = nil
     }
 
     private func pauseSilentPlayback() {
@@ -201,28 +172,24 @@ final class NowPlayingCoordinator {
 
     func updatePlaybackState(_ playbackState: NowPlayingPlaybackState) {
         DispatchQueue.main.async {
-            let didChangePlayingState = self.playbackState.isPlaying != playbackState.isPlaying
             self.playbackState = playbackState
             guard self.isActive else { return }
-            let shouldPublish = didChangePlayingState
+
+            MPNowPlayingInfoCenter.default().playbackState = playbackState.isPlaying ? .playing : .paused
+
             if playbackState.isPlaying {
-                if ProjectionSettings.isAudioSinkEnabled {
-                    self.configureAudioSession()
-                    self.startSilentPlayback()
-                } else {
-                    self.pauseSilentPlayback()
-                }
+                self.configureAudioSession()
+                self.startSilentPlayback()
             } else {
                 self.pauseSilentPlayback()
             }
-            if shouldPublish {
-                self.updateNowPlayingInfo(
-                    metadata: self.metadata,
-                    playbackState: playbackState,
-                    forceRepublish: true
-                )
-            }
-            print("NowPlayingCoordinator: playback updated isPlaying=\(playbackState.isPlaying) elapsed=\(playbackState.elapsedSeconds) published=\(shouldPublish)")
+
+            self.updateNowPlayingInfo(
+                metadata: self.metadata,
+                playbackState: playbackState,
+                forceRepublish: true
+            )
+            print("NowPlayingCoordinator: playback updated isPlaying=\(playbackState.isPlaying) elapsed=\(playbackState.elapsedSeconds)")
         }
     }
 
@@ -279,13 +246,16 @@ final class NowPlayingCoordinator {
         switch command {
         case .play:
             playbackState = NowPlayingPlaybackState(isPlaying: true, elapsedSeconds: playbackState.elapsedSeconds)
+            MPNowPlayingInfoCenter.default().playbackState = .playing
             configureAudioSession()
             startSilentPlayback()
         case .pause, .stop:
             playbackState = NowPlayingPlaybackState(isPlaying: false, elapsedSeconds: playbackState.elapsedSeconds)
+            MPNowPlayingInfoCenter.default().playbackState = .paused
             pauseSilentPlayback()
         case .playPause:
             playbackState = NowPlayingPlaybackState(isPlaying: !playbackState.isPlaying, elapsedSeconds: playbackState.elapsedSeconds)
+            MPNowPlayingInfoCenter.default().playbackState = playbackState.isPlaying ? .playing : .paused
             if playbackState.isPlaying {
                 configureAudioSession()
                 startSilentPlayback()

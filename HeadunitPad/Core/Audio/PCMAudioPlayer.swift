@@ -75,6 +75,7 @@ final class PCMAudioPlayer {
             object: nil,
             queue: nil
         ) { [weak self] note in
+            guard ProjectionSettings.isAudioSinkEnabled else { return }
             let reasonValue = note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt
             let reason = reasonValue.flatMap { AVAudioSession.RouteChangeReason(rawValue: $0) }
             // Ignore categoryChange notifications triggered by our own setCategory call
@@ -94,6 +95,7 @@ final class PCMAudioPlayer {
             object: nil,
             queue: nil
         ) { [weak self] note in
+            guard ProjectionSettings.isAudioSinkEnabled else { return }
             let typeValue = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt
             let type = typeValue.flatMap { AVAudioSession.InterruptionType(rawValue: $0) }
             if type == .ended {
@@ -382,12 +384,12 @@ final class PCMAudioPlayer {
         let session = AVAudioSession.sharedInstance()
         do {
             if !isMicrophoneActive {
-                try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
+                try session.setCategory(.playback, mode: .default, options: [])
                 try session.setPreferredSampleRate(48000)
                 try session.setPreferredIOBufferDuration(0.02)
                 try session.setActive(true)
             } else {
-                try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP, .mixWithOthers])
+                try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP])
                 try session.setPreferredSampleRate(16000)
                 try session.setPreferredIOBufferDuration(0.02)
                 try session.setActive(true)

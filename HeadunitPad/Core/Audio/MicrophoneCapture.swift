@@ -86,7 +86,7 @@ final class MicrophoneCapture {
     private func configureAudioSession(sampleRate: Double, channels: AVAudioChannelCount) {
         let session = AVAudioSession.sharedInstance()
         do {
-            try session.setCategory(.playAndRecord, mode: .default, options: [.mixWithOthers, .allowBluetooth, .allowBluetoothA2DP])
+            try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP])
             try session.setPreferredSampleRate(sampleRate)
             try session.setPreferredInputNumberOfChannels(Int(channels))
             try session.setActive(true)
@@ -98,7 +98,7 @@ final class MicrophoneCapture {
     private func restorePlaybackAudioSession() {
         let session = AVAudioSession.sharedInstance()
         do {
-            try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
+            try session.setCategory(.playback, mode: .default, options: [])
             try? session.setPreferredSampleRate(48000)
             try session.setActive(true)
             NowPlayingCoordinator.shared.activate()
@@ -106,7 +106,7 @@ final class MicrophoneCapture {
             print("MicrophoneCapture: Failed to restore playback session: \(error)")
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
                 do {
-                    try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
+                    try session.setCategory(.playback, mode: .default, options: [])
                     try? session.setPreferredSampleRate(48000)
                     try session.setActive(true)
                     NowPlayingCoordinator.shared.activate()

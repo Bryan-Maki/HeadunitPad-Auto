@@ -932,10 +932,11 @@ class MainViewController: UIViewController {
         let codec = ProjectionSettings.videoCodecPreference.title
         let audioCodec = ProjectionSettings.audioCodecPreference.title
         let audioTarget = ProjectionSettings.audioOutputTarget.title
+        let micSource = ProjectionSettings.microphoneSource.title
 
         let alert = UIAlertController(
             title: "Settings",
-            message: "Changes apply on next connection.\nAuto reconnect: \(autoReconnect)\nVideo: \(codec)\nAudio Codec: \(audioCodec)\nAudio Output: \(audioTarget)\nOrientation: \(orientation)\nResolution: \(resolution)\nFPS: \(fps)\(fps != effectiveFps ? " (effective: \(effectiveFps))" : "")\nDPI: \(dpi)\(dpi != effectiveDpi ? " (effective: \(effectiveDpi))" : "")\nFit: \(ProjectionSettings.videoFitMode.title)\nPosition: \(ProjectionSettings.driverPosition == .left ? "LHD" : "RHD")\nGPS: \(gpsSource)",
+            message: "Changes apply on next connection.\nAuto reconnect: \(autoReconnect)\nVideo: \(codec)\nAudio Codec: \(audioCodec)\nAudio Output: \(audioTarget)\nMic: \(micSource)\nOrientation: \(orientation)\nResolution: \(resolution)\nFPS: \(fps)\(fps != effectiveFps ? " (effective: \(effectiveFps))" : "")\nDPI: \(dpi)\(dpi != effectiveDpi ? " (effective: \(effectiveDpi))" : "")\nFit: \(ProjectionSettings.videoFitMode.title)\nPosition: \(ProjectionSettings.driverPosition == .left ? "LHD" : "RHD")\nGPS: \(gpsSource)",
             preferredStyle: .actionSheet
         )
 
@@ -956,6 +957,10 @@ class MainViewController: UIViewController {
 
         alert.addAction(UIAlertAction(title: "Audio Output: \(audioTarget)", style: .default) { [weak self] _ in
             self?.presentAudioOutputTargetMenu()
+        })
+
+        alert.addAction(UIAlertAction(title: "Microphone Source: \(micSource)", style: .default) { [weak self] _ in
+            self?.presentMicrophoneSourceMenu()
         })
 
         alert.addAction(UIAlertAction(title: "Display Fit Mode: \(ProjectionSettings.videoFitMode.title)", style: .default) { [weak self] _ in
@@ -1224,9 +1229,38 @@ class MainViewController: UIViewController {
                 ProjectionSettings.audioOutputTarget = target
                 if !target.isAudioSinkEnabled {
                     self.audioPlayer.reset()
-                    NowPlayingCoordinator.shared.deactivate()
                 }
                 if self.connectionManager.state == .running {
+                    self.connectionManager.reconnectForSettingsChange()
+                }
+                self.presentSettingsMenu()
+            })
+        }
+
+        alert.addAction(UIAlertAction(title: "Back", style: .cancel) { [weak self] _ in
+            self?.presentSettingsMenu()
+        })
+
+        configurePopoverSource(for: alert)
+        present(alert, animated: true)
+    }
+
+    private func presentMicrophoneSourceMenu() {
+        let alert = UIAlertController(
+            title: "Microphone Source",
+            message: "Choose audio input source for Google Assistant and voice calls.\n\n• Follow Audio Output: Automatically uses iPad mic when audio plays on iPad, or phone/car mic when audio plays on phone.\n• iPad Microphone: Always record from iPad built-in/connected microphone.\n• Phone / Car BT Mic: Use phone or vehicle Bluetooth microphone (declares motorcycle protocol profile).",
+            preferredStyle: .actionSheet
+        )
+
+        let prevEffective = ProjectionSettings.effectiveUseIpadMic
+
+        for source in MicrophoneSource.allCases {
+            let title = (source == ProjectionSettings.microphoneSource) ? "\(source.title) (Current)" : source.title
+            alert.addAction(UIAlertAction(title: title, style: .default) { [weak self] _ in
+                guard let self = self else { return }
+                ProjectionSettings.microphoneSource = source
+                let newEffective = ProjectionSettings.effectiveUseIpadMic
+                if prevEffective != newEffective && self.connectionManager.state == .running {
                     self.connectionManager.reconnectForSettingsChange()
                 }
                 self.presentSettingsMenu()
