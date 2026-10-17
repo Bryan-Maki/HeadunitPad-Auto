@@ -236,11 +236,11 @@ final class SettingsViewController: UIViewController, UITableViewDataSource, UIT
             let seg = UISegmentedControl(items: ["Fill", "Fit", "Stretch"])
             switch ProjectionSettings.videoFitMode {
             case .fillMargin: seg.selectedSegmentIndex = 0
-            case .fitLetterbox: seg.selectedSegmentIndex = 1
+            case .contain, .fill, .cover: seg.selectedSegmentIndex = 1
             case .stretch: seg.selectedSegmentIndex = 2
             }
             seg.addAction(UIAction { [weak self] _ in
-                let modes: [VideoFitMode] = [.fillMargin, .fitLetterbox, .stretch]
+                let modes: [VideoFitMode] = [.fillMargin, .contain, .stretch]
                 let mode = modes[seg.selectedSegmentIndex]
                 ProjectionSettings.videoFitMode = mode
                 HeadUnitScreenConfig.shared.videoFitMode = mode
@@ -301,14 +301,13 @@ final class SettingsViewController: UIViewController, UITableViewDataSource, UIT
         case 0:
             let cell = UITableViewCell(style: .default, reuseIdentifier: nil)
             cell.textLabel?.text = "Video Codec"
-            let seg = UISegmentedControl(items: ["H.264", "HEVC", "Auto"])
+            let seg = UISegmentedControl(items: ["H.264", "HEVC"])
             switch ProjectionSettings.videoCodecPreference {
             case .h264: seg.selectedSegmentIndex = 0
             case .hevc: seg.selectedSegmentIndex = 1
-            case .auto: seg.selectedSegmentIndex = 2
             }
             seg.addAction(UIAction { [weak self] _ in
-                let codecs: [VideoCodecPreference] = [.h264, .hevc, .auto]
+                let codecs: [VideoCodecPreference] = [.h264, .hevc]
                 ProjectionSettings.videoCodecPreference = codecs[seg.selectedSegmentIndex]
                 if self?.connectionManager.state == .running {
                     self?.onSettingsChanged?(.requiresReconnect)
