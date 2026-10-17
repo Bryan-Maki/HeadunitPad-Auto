@@ -212,13 +212,13 @@
    - 解除 `isAudioSinkEnabled` 拦截门禁：通过 `0.001` 音量的 `keepAlivePlayer` 静音流保活，确保即使声音走手机/车载蓝牙（`AudioOutputTarget == .phone`），iPad 锁屏与控制中心依然实时展示歌曲名、歌手、专辑封面并支持锁屏按键切歌。
    - 修复播放状态刷新：每次收到状态或进度更新，立即同步 `MPNowPlayingInfoCenter.default().playbackState` 并全量更新锁屏信息。
    - 升级 `Channel.ID_MPB (9)` 强类型解析：使用 `PlaybackProto.swift` 的 `ProtoReader` 反序列化 `MediaPlaybackStatus` 与 `MediaMetaData`，防止手机端扩展字段截断 `albumArt` 提取。
-2. **新增麦克风设备位置设定 (`MicrophoneSource`) 与车型伪装防断连策略**：
+2. **新增麦克风设备位置设定 (`MicrophoneSource`) 与恒定车载身份防分裂策略**：
    - 配置模型：新增 `MicrophoneSource`（`.followAudioOutput`、`.ipad`、`.phone`）与 `effectiveUseIpadMic` 计算属性，并在 `SettingsBackupManager` 补齐 `isAutoDpi` 与 `microphoneSource` 的 JSON 导入导出与默认重置。
-   - AAP 协议层对标 `open-headunit`：当 `useMic == false` 时，不宣告 Channel 7 麦克风服务，并将 `HeadUnitInfo.vehicleType` 设为 `3` (`MOTORCYCLE`)、`vehicleId` 设为 `"\(vehicleId)-moto"`，强制 Android Auto 使用手机本地/原车蓝牙麦克风收音且不中止握手。
-   - 拒收逻辑：若 `!effectiveUseIpadMic`，拒绝启动 `MicrophoneCapture` 并回复状态码 `1`。
+   - AAP 协议层恒定车载身份：彻底消除车载与摩托车身份分裂，始终保持 `HeadUnitInfo.vehicleType = 1`（`CAR`）与 `vehicleId = "iPad-HeadunitPad"`，避免切换音频输出时被识别为两台不同车机；在握手时常驻宣告 `Channel.ID_MIC (7)`。
+   - 麦克风动态路由：当 `!effectiveUseIpadMic` 时，拒绝启动本地麦克风采集并回复错误码 `1`，在语音结束时主动释放/恢复音频焦点，由手机本地麦克风或车载蓝牙 HFP 麦克风平滑收音。
 3. **主界面与设置联动**：主菜单展示并支持切换麦克风源，切换导致模式变化时在投屏中自动触发重握手。
 
-**Gate**：单元测试 100% 通过（Covering `effectiveUseIpadMic`、Motorcycle 车型伪装协议、`PlaybackProto` 编解码及 JSON 备份往返）；连接后锁屏与控制中心实时显示曲目与封面；切换麦克风模式协议响应无断连。
+**Gate**：单元测试 100% 通过（Covering `effectiveUseIpadMic`、恒定 Car 车型身份协议、`PlaybackProto` 编解码及 JSON 备份往返）；连接后锁屏与控制中心实时显示曲目与封面；切换麦克风模式协议响应无断连。
 
 ### Phase 8 — Modern Dual-Column Inset-Grouped Dashboard & Settings Center (P1) [✅ 已完成 (100% 闭环收官)]
 
