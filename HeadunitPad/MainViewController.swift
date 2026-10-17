@@ -1300,25 +1300,36 @@ extension MainViewController: ConnectionManagerDelegate {
 
     func connectionManager(_ manager: ConnectionManager, didDiscoverDevice device: DiscoveredDevice) {
         DispatchQueue.main.async { [weak self] in
-            self?.connectionManager.connect(to: device, userInitiated: true)
+            guard let self = self else { return }
+            self.statusLabel.text = "Found: \(device.displayName)"
+            let alert = UIAlertController(
+                title: "Device Found",
+                message: "Found \(device.displayName). Connect now?",
+                preferredStyle: .alert
+            )
+            alert.addAction(UIAlertAction(title: "Connect", style: .default) { [weak self] _ in
+                self?.connectionManager.connect(to: device, userInitiated: true)
+            })
+            alert.addAction(UIAlertAction(title: "Cancel", style: .cancel, handler: nil))
+            self.present(alert, animated: true)
         }
     }
 
     func connectionManager(_ manager: ConnectionManager, didReceiveVideoData data: Data) {
         lastVideoFrameTs = Date().timeIntervalSince1970
-        videoRenderer.feed(naluData: data)
+        videoRenderer.enqueueAnnexBFrame(data)
     }
 
     func connectionManager(_ manager: ConnectionManager, didReceiveAudioData data: Data, on channel: UInt8) {
-        audioPlayer.write(pcmData: data, on: channel)
+        audioPlayer.playPCM(data, on: channel)
     }
 
     func connectionManager(_ manager: ConnectionManager, didReceiveAudioData data: Data, on channel: UInt8, isAac: Bool) {
-        audioPlayer.write(audioData: data, on: channel, isAac: isAac)
+        audioPlayer.playAudio(data, on: channel, isAac: isAac)
     }
 
     func connectionManager(_ manager: ConnectionManager, didReceiveAudioCodecConfig data: Data, on channel: UInt8) {
-        audioPlayer.configureAacDecoder(with: data, on: channel)
+        audioPlayer.configureCodec(channel: channel, csd: data)
     }
 }
 
