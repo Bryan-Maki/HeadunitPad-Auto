@@ -9,18 +9,18 @@
 
 import UIKit
 
-public final class SettingsViewController: UIViewController, UITableViewDataSource, UITableViewDelegate {
+final class SettingsViewController: UIViewController, UITableViewDataSource, UITableViewDelegate {
 
     // MARK: - Enums & Types
 
-    public enum ChangeImpact {
+    enum ChangeImpact {
         case uiOnly
         case nightModeChanged
         case geometryChanged
         case requiresReconnect
     }
 
-    public enum SettingsSection: Int, CaseIterable {
+    enum SettingsSection: Int, CaseIterable {
         case activeSession = 0
         case displayLayout = 1
         case videoAudio = 2
@@ -28,7 +28,7 @@ public final class SettingsViewController: UIViewController, UITableViewDataSour
         case connectionAutomation = 4
         case diagnosticsBackup = 5
 
-        public var title: String? {
+        var title: String? {
             switch self {
             case .activeSession:
                 return ConnectionManager.shared.state == .running ? "Active Session" : nil
@@ -48,9 +48,9 @@ public final class SettingsViewController: UIViewController, UITableViewDataSour
 
     // MARK: - Public Callbacks
 
-    public var onSettingsChanged: ((ChangeImpact) -> Void)?
-    public var onProvideDiagnosticLines: (() -> [String])?
-    public var connectionManager: ConnectionManager = ConnectionManager.shared
+    var onSettingsChanged: ((ChangeImpact) -> Void)?
+    var onProvideDiagnosticLines: (() -> [String])?
+    var connectionManager: ConnectionManager = ConnectionManager.shared
 
     // MARK: - UI Components
 
@@ -69,12 +69,12 @@ public final class SettingsViewController: UIViewController, UITableViewDataSour
 
     // MARK: - Lifecycle
 
-    public override func viewDidLoad() {
+    override func viewDidLoad() {
         super.viewDidLoad()
         setupUI()
     }
 
-    public override func viewWillAppear(_ animated: Bool) {
+    override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         tableView.reloadData()
     }
@@ -114,11 +114,11 @@ public final class SettingsViewController: UIViewController, UITableViewDataSour
 
     // MARK: - UITableViewDataSource
 
-    public func numberOfSections(in tableView: UITableView) -> Int {
+    func numberOfSections(in tableView: UITableView) -> Int {
         return SettingsSection.allCases.count
     }
 
-    public func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
         guard let sec = SettingsSection(rawValue: section) else { return 0 }
         switch sec {
         case .activeSession:
@@ -136,11 +136,11 @@ public final class SettingsViewController: UIViewController, UITableViewDataSour
         }
     }
 
-    public func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
+    func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
         return SettingsSection(rawValue: section)?.title
     }
 
-    public func tableView(_ tableView: UITableView, titleForFooterInSection section: Int) -> String? {
+    func tableView(_ tableView: UITableView, titleForFooterInSection section: Int) -> String? {
         guard let sec = SettingsSection(rawValue: section) else { return nil }
         switch sec {
         case .displayLayout:
@@ -154,7 +154,7 @@ public final class SettingsViewController: UIViewController, UITableViewDataSour
         }
     }
 
-    public func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+    func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         guard let sec = SettingsSection(rawValue: indexPath.section) else {
             return UITableViewCell()
         }
@@ -519,7 +519,7 @@ public final class SettingsViewController: UIViewController, UITableViewDataSour
 
     // MARK: - UITableViewDelegate
 
-    public func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+    func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: true)
         guard let sec = SettingsSection(rawValue: indexPath.section) else { return }
 
@@ -724,9 +724,9 @@ public final class SettingsViewController: UIViewController, UITableViewDataSour
 
 // MARK: - DpiPreviewCell
 
-public final class DpiPreviewCell: UITableViewCell {
+final class DpiPreviewCell: UITableViewCell {
 
-    public var onDpiChanged: ((SettingsViewController.ChangeImpact) -> Void)?
+    var onDpiChanged: ((SettingsViewController.ChangeImpact) -> Void)?
 
     private let previewView: DpiPreviewView = {
         let v = DpiPreviewView()
@@ -776,13 +776,13 @@ public final class DpiPreviewCell: UITableViewCell {
         return stack
     }()
 
-    public override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
+    override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
         super.init(style: style, reuseIdentifier: reuseIdentifier)
         selectionStyle = .none
         setupViews()
     }
 
-    public required init?(coder: NSCoder) {
+    required init?(coder: NSCoder) {
         super.init(coder: coder)
         selectionStyle = .none
         setupViews()
@@ -855,7 +855,7 @@ public final class DpiPreviewCell: UITableViewCell {
         ])
     }
 
-    public func configure(with screenConfig: HeadUnitScreenConfig) {
+    func configure(with screenConfig: HeadUnitScreenConfig) {
         previewView.dpi = ProjectionSettings.effectiveDpi
         previewView.panelWidthPx = screenConfig.screenWidthPx > 0 ? screenConfig.screenWidthPx : 1920
         previewView.panelHeightPx = screenConfig.screenHeightPx > 0 ? screenConfig.screenHeightPx : 1080
@@ -874,7 +874,7 @@ public final class DpiPreviewCell: UITableViewCell {
         previewView.setNeedsDisplay()
     }
 
-    public func updateRightHandDrive(_ isRhd: Bool) {
+    func updateRightHandDrive(_ isRhd: Bool) {
         previewView.isRightHandDrive = isRhd
         previewView.setNeedsDisplay()
     }
@@ -905,3 +905,4 @@ public final class DpiPreviewCell: UITableViewCell {
         dpiValueLabel.text = "\(prefix)(\(previewView.dpi) DPI) • \(previewView.virtualWidthDp)×\(previewView.virtualHeightDp) dp (\(splitText))"
     }
 }
+

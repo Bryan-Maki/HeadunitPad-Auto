@@ -11,7 +11,7 @@ import UIKit
 import AVFoundation
 import CoreLocation
 
-public final class MainViewController: UIViewController {
+final class MainViewController: UIViewController {
 
     // MARK: - Properties
 
@@ -398,7 +398,7 @@ public final class MainViewController: UIViewController {
 
     // MARK: - Lifecycle
 
-    public override func viewDidLoad() {
+    override func viewDidLoad() {
         super.viewDidLoad()
         HeadUnitScreenConfig.shared.videoFitMode = ProjectionSettings.videoFitMode
         setupUI()
@@ -438,13 +438,13 @@ public final class MainViewController: UIViewController {
         refreshQuickSpecTiles()
     }
 
-    public override func viewDidAppear(_ animated: Bool) {
+    override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         applyOrientationLock()
         refreshQuickSpecTiles()
     }
 
-    public override func viewDidLayoutSubviews() {
+    override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         touchOverlayView.frame = videoContainerView.bounds
         touchOverlayView.isUserInteractionEnabled = true
@@ -480,7 +480,7 @@ public final class MainViewController: UIViewController {
         }
     }
 
-    public override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
+    override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
         super.viewWillTransition(to: size, with: coordinator)
 
         coordinator.animate(alongsideTransition: { [weak self] _ in
@@ -508,11 +508,11 @@ public final class MainViewController: UIViewController {
 
     // MARK: - Autorotation
 
-    public override var shouldAutorotate: Bool {
+    override var shouldAutorotate: Bool {
         return ProjectionSettings.orientation == .system
     }
 
-    public override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
+    override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
         switch ProjectionSettings.orientation {
         case .landscape:
             return .landscape
@@ -523,7 +523,7 @@ public final class MainViewController: UIViewController {
         }
     }
 
-    public override var preferredInterfaceOrientationForPresentation: UIInterfaceOrientation {
+    override var preferredInterfaceOrientationForPresentation: UIInterfaceOrientation {
         switch ProjectionSettings.orientation {
         case .landscape:
             return .landscapeRight
@@ -929,7 +929,7 @@ public final class MainViewController: UIViewController {
 
     // MARK: - Quick Spec Tiles Refresh
 
-    public func refreshQuickSpecTiles() {
+    func refreshQuickSpecTiles() {
         let res = ProjectionSettings.resolution.title
         let fps = ProjectionSettings.fpsLimit.title
         displayTile?.value = "\(res) • \(fps)"
@@ -1108,11 +1108,11 @@ public final class MainViewController: UIViewController {
         refreshQuickSpecTiles()
     }
 
-    public override var prefersStatusBarHidden: Bool {
+    override var prefersStatusBarHidden: Bool {
         return connectionManager.state == .running
     }
 
-    public override var prefersHomeIndicatorAutoHidden: Bool {
+    override var prefersHomeIndicatorAutoHidden: Bool {
         return connectionManager.state == .running
     }
 
@@ -1166,11 +1166,11 @@ public final class MainViewController: UIViewController {
         connectionManager.disconnect()
     }
 
-    @objc public func settingsButtonTapped() {
+    @objc func settingsButtonTapped() {
         presentSettingsMenu()
     }
 
-    public func presentSettingsMenu() {
+    func presentSettingsMenu() {
         let settingsVC = SettingsViewController()
         settingsVC.connectionManager = connectionManager
         settingsVC.onSettingsChanged = { [weak self] impact in
@@ -1283,13 +1283,13 @@ public final class MainViewController: UIViewController {
 // MARK: - ConnectionManagerDelegate
 
 extension MainViewController: ConnectionManagerDelegate {
-    public func connectionManager(_ manager: ConnectionManager, didChangeState state: ConnectionState) {
+    func connectionManager(_ manager: ConnectionManager, didChangeState state: ConnectionState) {
         DispatchQueue.main.async { [weak self] in
             self?.updateUIForConnectionState(state)
         }
     }
 
-    public func connectionManager(_ manager: ConnectionManager, didUpdateStatus status: String) {
+    func connectionManager(_ manager: ConnectionManager, didUpdateStatus status: String) {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             if self.connectionManager.state != .running {
@@ -1298,37 +1298,37 @@ extension MainViewController: ConnectionManagerDelegate {
         }
     }
 
-    public func connectionManager(_ manager: ConnectionManager, didDiscoverDevice device: DiscoveredDevice) {
+    func connectionManager(_ manager: ConnectionManager, didDiscoverDevice device: DiscoveredDevice) {
         DispatchQueue.main.async { [weak self] in
             self?.connectionManager.connect(to: device, userInitiated: true)
         }
     }
 
-    public func connectionManager(_ manager: ConnectionManager, didReceiveVideoData data: Data) {
+    func connectionManager(_ manager: ConnectionManager, didReceiveVideoData data: Data) {
         lastVideoFrameTs = Date().timeIntervalSince1970
         videoRenderer.feed(naluData: data)
     }
 
-    public func connectionManager(_ manager: ConnectionManager, didReceiveAudioData data: Data, on channel: UInt8) {
+    func connectionManager(_ manager: ConnectionManager, didReceiveAudioData data: Data, on channel: UInt8) {
         audioPlayer.write(pcmData: data, on: channel)
     }
 
-    public func connectionManager(_ manager: ConnectionManager, didReceiveAudioData data: Data, on channel: UInt8, isAac: Bool) {
+    func connectionManager(_ manager: ConnectionManager, didReceiveAudioData data: Data, on channel: UInt8, isAac: Bool) {
         audioPlayer.write(audioData: data, on: channel, isAac: isAac)
     }
 
-    public func connectionManager(_ manager: ConnectionManager, didReceiveAudioCodecConfig data: Data, on channel: UInt8) {
+    func connectionManager(_ manager: ConnectionManager, didReceiveAudioCodecConfig data: Data, on channel: UInt8) {
         audioPlayer.configureAacDecoder(with: data, on: channel)
     }
 }
 
 // MARK: - QuickSpecTileView
 
-public final class QuickSpecTileView: UIControl {
+final class QuickSpecTileView: UIControl {
 
-    public var onTap: (() -> Void)?
+    var onTap: (() -> Void)?
 
-    public var value: String = "" {
+    var value: String = "" {
         didSet {
             valueLabel.text = value
         }
@@ -1366,7 +1366,7 @@ public final class QuickSpecTileView: UIControl {
         return l
     }()
 
-    public init(icon: String, title: String, tint: UIColor) {
+    init(icon: String, title: String, tint: UIColor) {
         super.init(frame: .zero)
         backgroundColor = .secondarySystemBackground
         layer.cornerRadius = 14
@@ -1382,7 +1382,7 @@ public final class QuickSpecTileView: UIControl {
         setupViews()
     }
 
-    public required init?(coder: NSCoder) {
+    required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
 
@@ -1428,7 +1428,7 @@ public final class QuickSpecTileView: UIControl {
         onTap?()
     }
 
-    public override var isHighlighted: Bool {
+    override var isHighlighted: Bool {
         didSet {
             UIView.animate(withDuration: 0.1) {
                 self.alpha = self.isHighlighted ? 0.7 : 1.0
@@ -1437,3 +1437,4 @@ public final class QuickSpecTileView: UIControl {
         }
     }
 }
+
