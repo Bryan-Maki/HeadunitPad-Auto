@@ -43,6 +43,61 @@ final class ViewControllersSmokeTests: XCTestCase {
         XCTAssertNotNil(videoOnlyVC.view)
     }
 
+    @MainActor
+    func testMainViewControllerDashboardResponsiveLayout() {
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 1024, height: 768))
+        let mainVC = MainViewController()
+        window.rootViewController = mainVC
+        window.makeKeyAndVisible()
+
+        // 1. Landscape layout (1024x768)
+        mainVC.view.frame = CGRect(x: 0, y: 0, width: 1024, height: 768)
+        mainVC.loadViewIfNeeded()
+        mainVC.view.layoutIfNeeded()
+        mainVC.viewDidLayoutSubviews()
+
+        mainVC.refreshQuickSpecTiles()
+        XCTAssertNotNil(mainVC.view)
+
+        // 2. Portrait layout (768x1024)
+        mainVC.view.frame = CGRect(x: 0, y: 0, width: 768, height: 1024)
+        mainVC.view.layoutIfNeeded()
+        mainVC.viewDidLayoutSubviews()
+
+        mainVC.refreshQuickSpecTiles()
+        XCTAssertNotNil(mainVC.view)
+    }
+
+    @MainActor
+    func testSettingsViewControllerLoadsAndRendersAllSections() {
+        let settingsVC = SettingsViewController()
+        settingsVC.loadViewIfNeeded()
+        settingsVC.view.layoutIfNeeded()
+
+        guard let tableView = settingsVC.view.subviews.first(where: { $0 is UITableView }) as? UITableView else {
+            XCTFail("SettingsViewController must contain a UITableView")
+            return
+        }
+
+        let sectionCount = settingsVC.numberOfSections(in: tableView)
+        XCTAssertEqual(sectionCount, SettingsViewController.SettingsSection.allCases.count)
+
+        // Section 0 is Active Session (0 when disconnected, >0 when connected)
+        let s0Rows = settingsVC.tableView(tableView, numberOfRowsInSection: 0)
+        XCTAssertEqual(s0Rows, 0, "Active Session section should have 0 rows when disconnected")
+
+        // Verify non-zero row count and cell rendering for all remaining sections
+        for s in 1..<sectionCount {
+            let rowCount = settingsVC.tableView(tableView, numberOfRowsInSection: s)
+            XCTAssertGreaterThan(rowCount, 0, "Section \(s) should have rows")
+
+            for r in 0..<rowCount {
+                let cell = settingsVC.tableView(tableView, cellForRowAt: IndexPath(row: r, section: s))
+                XCTAssertNotNil(cell, "Cell at [\(s), \(r)] must not be nil")
+            }
+        }
+    }
+
     func testDpiPreviewViewScalesElementsDynamically() {
         let previewView = DpiPreviewView(frame: CGRect(x: 0, y: 0, width: 400, height: 300))
         previewView.panelWidthPx = 1920

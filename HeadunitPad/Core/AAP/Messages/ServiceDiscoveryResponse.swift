@@ -172,8 +172,8 @@ public final class AapServiceDiscoveryResponseMessage {
         services.append(ControlService(id: UInt32(Channel.ID_NAV), navigationStatusService: navService))
 
         // 8. HeadUnitInfo
-        let effectiveVehicleType: Int32 = useMic ? 1 : 3 // 1: Car, 3: Motorcycle
-        let effectiveVehicleId = useMic ? vehicleId : "\(vehicleId)-moto"
+        let effectiveVehicleType: Int32 = 1 // Always 1 (Car) - never split into Motorcycle (3)
+        let effectiveVehicleId = vehicleId  // Always "iPad-HeadunitPad"
 
         let huInfo = HeadUnitInfo(
             make: vehicleMake,

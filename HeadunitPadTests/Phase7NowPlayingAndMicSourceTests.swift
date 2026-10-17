@@ -93,7 +93,7 @@ final class Phase7NowPlayingAndMicSourceTests: XCTestCase {
         XCTAssertFalse(proto.vehicleId.hasSuffix("-moto"))
     }
 
-    func testServiceDiscoveryResponseWithMicDisabledDeclaresMotorcycle() throws {
+    func testServiceDiscoveryResponseWithMicDisabledMaintainsCarIdentity() throws {
         let message = AapServiceDiscoveryResponseMessage.make(
             useMic: false,
             vehicleId: "iPad-HeadunitPad"
@@ -102,15 +102,15 @@ final class Phase7NowPlayingAndMicSourceTests: XCTestCase {
         var reader = ProtoReader(data: message.payload)
         let proto = try ServiceDiscoveryResponseProto(from: &reader)
 
-        // Must NOT announce Channel.ID_MIC (7)
+        // Must NOT announce Channel.ID_MIC (7) when useMic is explicitly false
         let micService = proto.services.first(where: { $0.id == UInt32(Channel.ID_MIC) })
         XCTAssertNil(micService, "Service discovery response must omit MIC service when useMic is false")
 
-        // Motorcycle profile to prevent Android Auto handshake abort: vehicleType == 3, vehicleId has "-moto" suffix
-        XCTAssertEqual(proto.headunitInfo?.vehicleType, 3, "Vehicle type must be MOTORCYCLE (3) when mic is omitted")
-        XCTAssertEqual(proto.headunitInfo?.vehicleId, "iPad-HeadunitPad-moto")
-        XCTAssertEqual(proto.vehicleId, "iPad-HeadunitPad-moto")
-        XCTAssertTrue(proto.vehicleId.hasSuffix("-moto"))
+        // Constant Car profile: vehicleType == 1, vehicleId == "iPad-HeadunitPad" (never split into Motorcycle (3) or "-moto")
+        XCTAssertEqual(proto.headunitInfo?.vehicleType, 1, "Vehicle type must remain CAR (1) even when mic is omitted")
+        XCTAssertEqual(proto.headunitInfo?.vehicleId, "iPad-HeadunitPad")
+        XCTAssertEqual(proto.vehicleId, "iPad-HeadunitPad")
+        XCTAssertFalse(proto.vehicleId.hasSuffix("-moto"))
     }
 
     // MARK: - 3. PlaybackProto Strong-Type Serialization & Parsing

@@ -143,9 +143,9 @@
 | **Phase 4** | 多音轨混音、AAC 硬解与麦克风 | `AudioToolbox` AAC-LC 硬解、三声道独立混音、导航 30% 自动压音（Ducking）、48k->16k 麦克风降采样 | ✅ 已完成 |
 | **Phase 5** | 日夜模式、GPS 与行车解除 | `SensorBatch (0x8003)` 日夜切换、`DrivingStatus = UNRESTRICTED`、CoreLocation GPS 透传 | ✅ 已完成 |
 | **Phase 6** | 纯净全屏与诊断工具箱 | 移除投屏遮挡按钮、左上角穿透式 `PerformanceOverlayView`、`AudioStreamTester`、故障横幅、`AppLog` 导出与 JSON 备份、全新 AppIcon | ✅ 已完成 |
-| **Phase 7** | **锁屏 Now Playing 修复与麦克风源路由** | **修复 `.mixWithOthers` 导致 iOS 锁屏/控制中心无歌曲信息 Bug、重构 `NowPlayingCoordinator`、新增 `MicrophoneSource`（Follow / iPad / Phone + Motorcycle 协议策略）与 JSON 备份补齐** | ✅ 已完成 |
-| **Phase 8** | **现代车载仪表盘主页与原生分组设置中心** | **重构 `MainViewController` 为双栏卡片式车载仪表盘（含状态呼吸灯胶囊与 6 大配置速览磁贴）、新建 `.insetGrouped` 原生 `SettingsViewController`（内嵌实时 `DpiPreviewView`）、投屏防熄屏常亮** | 🎯 当前待执行 |
-| **Phase 9** | **智能网络感知、天文日夜、方控映射与解码降级** | **实现 `F8` (`NetworkReachabilityMonitor`)、`F4` (`TwilightCalculator` 日出日落算法 + GPS 负经纬度修复)、`F3` (`KeymapManager` 蓝牙方控/键盘映射)、`F10` (`DecoderConfigLadder` 运行时自动降级闭环)** | ⏳ 待执行 |
+| **Phase 7** | **锁屏 Now Playing 修复与麦克风源路由** | **修复 `.mixWithOthers` 导致 iOS 锁屏/控制中心无歌曲信息 Bug、重构 `NowPlayingCoordinator`、新增 `MicrophoneSource`（Follow / iPad / Phone）与恒定 Car (1) 车载身份** | ✅ 已完成 |
+| **Phase 8** | **现代车载仪表盘主页与原生分组设置中心** | **重构 `MainViewController` 为双栏卡片式车载仪表盘（含状态呼吸灯胶囊与 6 大配置速览磁贴）、新建 `.insetGrouped` 原生 `SettingsViewController`（内嵌实时 `DpiPreviewView`）、投屏防熄屏常亮** | ✅ 已完成 (100% 闭环收官) |
+| **Phase 9** | **智能网络感知、天文日夜、方控映射与解码降级** | **实现 `F8` (`NetworkReachabilityMonitor`)、`F4` (`TwilightCalculator` 日出日落算法 + GPS 负经纬度修复)、`F3` (`KeymapManager` 蓝牙方控/键盘映射)、`F10` (`DecoderConfigLadder` 运行时自动降级闭环)** | 🎯 当前待执行 |
 
 ### Phase 0 — USB purge and standard IPA foundation
 
@@ -220,7 +220,7 @@
 
 **Gate**：单元测试 100% 通过（Covering `effectiveUseIpadMic`、Motorcycle 车型伪装协议、`PlaybackProto` 编解码及 JSON 备份往返）；连接后锁屏与控制中心实时显示曲目与封面；切换麦克风模式协议响应无断连。
 
-### Phase 8 — Modern Dual-Column Inset-Grouped Dashboard & Settings Center (P1) [⏳ 待执行]
+### Phase 8 — Modern Dual-Column Inset-Grouped Dashboard & Settings Center (P1) [✅ 已完成 (100% 闭环收官)]
 
 1. **现代车载卡片式双栏仪表盘主页 (`MainViewController.swift`)**：
    - 顶部品牌与动态状态胶囊栏（带呼吸指示灯状态胶囊、IP 徽标与毛玻璃 Settings 按钮）。
@@ -230,9 +230,9 @@
 2. **原生 iPadOS 分组设置中心 (`SettingsViewController.swift`)**：
    - 模态弹出 `.insetGrouped` 样式原生控制器，内嵌实时 `DpiPreviewView`、全量音视频管线、智能传感器、网络看门狗与备份管理。
 
-**Gate**：界面视觉对标新能源原生车机设计；全功能设置项平滑交互；投屏常亮与熄屏保护正常。
+**Gate**：界面视觉对标新能源原生车机设计；全功能设置项平滑交互；投屏常亮与熄屏保护正常；ViewControllers 冒烟测试 100% 通过。
 
-### Phase 9 — Smart Network Reachability, Twilight Night Mode, Keymap & Decoder Fallback Ladder (P2) [⏳ 待执行]
+### Phase 9 — Smart Network Reachability, Twilight Night Mode, Keymap & Decoder Fallback Ladder (P2) [🎯 当前待执行]
 
 1. **动态网络常驻监听器 (`NetworkReachabilityMonitor`)**：基于 `NWPathMonitor` 常驻感知 Wi-Fi 断开/接入手机热点，自动刷新网关并触发自动重连。
 2. **天文日出日落算法 (`TwilightCalculator`) & GPS 负坐标修复**：NOAA 太阳算法 + 4 分钟防眩光修正日夜切换；修复 AAP 负经纬度补码。

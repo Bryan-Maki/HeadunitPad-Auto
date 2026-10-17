@@ -1502,7 +1502,7 @@ class AapTransport {
             fpsLimit: ProjectionSettings.effectiveFpsLimit.rawValue,
             rightHandDrive: isRhd,
             useGps: useGps,
-            useMic: ProjectionSettings.effectiveUseIpadMic,
+            useMic: true,
             requestedDpi: ProjectionSettings.effectiveDpi,
             enableAudioSink: ProjectionSettings.isAudioSinkEnabled
         )
@@ -1852,9 +1852,7 @@ class AapTransport {
             payload += ProtoWire.fieldBytes(1, value: audioServiceMedia)
             payload += ProtoWire.fieldBytes(1, value: audioServiceSpeech)
         }
-        if ProjectionSettings.effectiveUseIpadMic {
-            payload += ProtoWire.fieldBytes(1, value: micService)
-        }
+        payload += ProtoWire.fieldBytes(1, value: micService)
         payload += ProtoWire.fieldBytes(1, value: navService)
         payload += ProtoWire.fieldBytes(1, value: mediaPlaybackService)
 
@@ -2315,6 +2313,9 @@ enum ProtoWire {
             AppLog.i("Microphone request open=\(shouldOpen)", tag: "AapTransport")
             if !ProjectionSettings.effectiveUseIpadMic {
                 delegate?.aapTransport(self, didRequestMicrophoneCapture: false)
+                if !shouldOpen {
+                    sendAudioFocusGainUnsolicited()
+                }
                 sendMicrophoneResponse(on: message.channelUInt8, status: shouldOpen ? 1 : 0)
                 break
             }
