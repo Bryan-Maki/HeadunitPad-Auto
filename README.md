@@ -1,252 +1,150 @@
 # HeadunitPad-Auto
 
-**Transform your iPad into a High-Performance, Pure Wireless Android Auto Receiver.**
+[![standard-readme compliant](https://img.shields.io/badge/readme%20style-standard-brightgreen.svg?style=flat-square)](https://github.com/RichardLitt/standard-readme)
+[![Build Unsigned IPA](https://img.shields.io/github/actions/workflow/status/bryan-maki/headunitpad-auto/build-ipa.yml?branch=main&style=flat-square&label=Build%20IPA)](.github/workflows/build-ipa.yml)
+[![Platform](https://img.shields.io/badge/platform-iPadOS-blue.svg?style=flat-square)]()
+[![Release](https://img.shields.io/badge/version-v0.4.1--beta-orange.svg?style=flat-square)]()
 
-[![Platform](https://img.shields.io/badge/Platform-iPadOS%2016.6%2B-blue?logo=apple)](https://www.apple.com/ipados/)
-[![Swift](https://img.shields.io/badge/Swift-5.9%2B-orange?logo=swift)](https://swift.org)
-[![Architecture](https://img.shields.io/badge/Architecture-100%25%20Pure%20Wireless-success)]()
-[![Sideloading](https://img.shields.io/badge/Install-AltStore%20%7C%20SideStore%20%7C%20Sideloadly%20%7C%20TrollStore-purple)]()
-[![License](https://img.shields.io/badge/License-AGPL--3.0-green.svg)](LICENSE)
+A native, pure-wireless Android Auto head unit receiver for iPadOS with full-screen adaptation.
 
----
+**HeadunitPad-Auto** transforms your iPad into a high-performance, wireless Android Auto head unit without requiring jailbreak, TrollStore, or wired USB hardware privileges. Built natively in Swift, it features a complete AAP (Android Auto Protocol) and WPP (Wireless Projection Protocol) stack, hardware-accelerated low-latency video decoding, multi-channel audio mixing with adaptive jitter buffering, and end-to-end watchdog recovery mechanisms.
 
-## Overview
+## Table of Contents
 
-**HeadunitPad-Auto** is a native, high-performance wireless Android Auto Head Unit receiver built specifically for iPadOS. Engineered to benchmark against the core protocol stack and policy engine of [open-headunit](https://github.com/open-headunit/open-headunit), it transforms any regular iPad (especially iPad mini 6, iPad Air, or iPad Pro) into a responsive, edge-to-edge in-car dashboard display.
+- [Security](#security)
+- [Background](#background)
+- [Features](#features)
+- [Install](#install)
+  - [Option 1: Sideload Prebuilt IPA (Recommended)](#option-1-sideload-prebuilt-ipa-recommended)
+  - [Option 2: Build from Source](#option-2-build-from-source)
+- [Usage](#usage)
+  - [Wireless Connection](#wireless-connection)
+  - [Display & Geometry Configuration](#display--geometry-configuration)
+  - [Interaction Modes & Diagnostics](#interaction-modes--diagnostics)
+- [Architecture](#architecture)
+- [Testing](#testing)
+- [Maintainers](#maintainers)
+- [Contributing](#contributing)
+- [License](#license)
 
-By completely decoupling from private USB accessory entitlements (`com.apple.developer.usb`) and jailbreak/TrollStore requirements, **HeadunitPad-Auto** runs seamlessly inside the standard iOS application sandbox. It can be installed using popular sideloading utilities (AltStore, SideStore, Sideloadly) or a personal Apple ID developer certificate.
+## Security
 
----
+**HeadunitPad-Auto** performs local TLS handshakes required by the Android Auto protocol using embedded credentials (`HeadunitPad/Resources/Raw/cert` and `privkey`) managed by `OpenSslTlsHandler`. All projection streams, touch inputs, microphone audio, and location updates are transmitted strictly over your local Wi-Fi network or personal hotspot between your iPad and Android phone—no external servers or cloud relays are involved.
 
-## Key Features
+## Background
 
-### 1. Pure Wireless 5277 Headunit Server Engine
-- **Direct & Zero-Overhead Connection**: Connects directly to Android Auto's native Head Unit Server on TCP port `5277` over personal hotspot or local Wi-Fi.
-- **Smart Concurrent Subnet Probing**: Automatically discovers the head unit server across subnet ranges, featuring probe socket zero-loss reuse and a 3.0-second silent redial dual-insurance mechanism.
-- **One-Tap Direct Connect**: Automatically identifies phone hotspot gateway addresses (`192.168.43.1`, `172.20.10.1`, etc.) for instant, zero-configuration connection.
+Running Android Auto on an iPad traditionally suffers from wired USB accessory limitations, 16:9 letterboxed black bars, audio routing glitches, and stream freezes over unstable wireless links. **HeadunitPad-Auto** was engineered from the ground up across six development phases to provide a pure-wireless experience over Wi-Fi hotspot or LAN subnet discovery (`WPP-over-TCP`), native iPad aspect ratio and DPI geometry negotiation, and resilient audio/video pipelines tailored for in-vehicle environments.
 
-### 2. Zero-Disconnect Orientation Adaptation & 1:1 Full-Screen Display
-- **Edge-to-Edge Margin Cropping (`FillMargin`)**: Eliminates 16:9 black letterbox bars on iPad 4:3 and 3:2 displays by reporting custom geometric margins to Android Auto for native full-screen rendering without distortion.
-- **Dynamic Cross-Orientation Margin Reflow**: When rotating the iPad between landscape and portrait, the app dynamically dispatches `UpdateUiConfigRequest (0x8009)` across the video channel and adjusts `overscanLayerFrame` clipping in real time—**no session teardown, no reconnection, and zero aspect distortion**.
-- **Pixel-Perfect Touch Reverse-Mapping**: The `TouchCoordinateMapper` accurately reverse-maps normalized UIKit touch points to Android Auto display coordinates:
-  $$\text{X}_{\text{AA}} = \frac{\text{widthMargin}}{2} + \text{normX} \times (\text{containerWidth} - \text{widthMargin})$$
-- **Multi-Touch & Pinch-to-Zoom**: Full multi-pointer tracking supporting fluid two-finger map gestures (pinch-to-zoom, pan, rotate).
+## Features
 
-### 3. Hardware-Accelerated Low-Latency Video Pipeline
-- **Dual Hardware Video Decoders (H.264 & HEVC / H.265)**: Native hardware-accelerated video decoding via Apple's `VideoToolbox` (`VTDecompressionSession` + `AVSampleBufferDisplayLayer`) supporting up to 4K @ 60 FPS. HEVC cuts wireless bandwidth consumption by up to 50%.
-- **Wireless Packet Loss Healing**: Active NAL continuity monitoring via `KeyframeRepairTracker`. If packet drop occurs over Wi-Fi, corrupted frames are concealed immediately and Picture Loss Indication (PLI / `VideoFocusEvent`) keyframe refreshes are requested within milliseconds to prevent green screens or macroblocking.
-- **Warm Relaunch Recovery**: Automatically requests a fresh keyframe when returning to the app from background or multitasking.
+- **Pure-Wireless Connectivity & Auto-Reconnect**: Full Wireless Projection Protocol support (`WppTcpServer`, `WppHandshakeSession`), helper server discovery (`WirelessHelperServer`), and seamless link-loss auto-reconnect with playback state restoration (`AutomaticReconnect`, `AutoResumePlaybackPolicy`).
+- **Full-Screen iPad Geometry & Live DPI Preview**:Eliminates black bars via dynamic resolution negotiation (`NegotiatedResolutionPolicy`), canvas/margin policies (`ProjectionCanvasPolicy`, `MarginStrategyPolicy`), orientation handling (`ScreenOrientationPolicy`), and a real-time interactive DPI previewer (`DpiPreviewView`).
+- **Hardware-Accelerated Video & Self-Healing Pipeline**: Low-latency rendering (`H264VideoRendererView`, `VideoFrameBus`) backed by an adaptive decoder configuration ladder (`DecoderConfigLadder`), SPS/PPS tracking (`ParameterSetTracker`), keyframe scanning/repair (`VideoKeyframeScanner`, `KeyframeRepairTracker`), and stall/corruption recovery policies.
+- **Multi-Channel Audio Engine & Voice Assistant Uplink**: Supports AAC and PCM decoding (`AacAudioDecoder`, `PCMAudioPlayer`), adaptive jitter buffering (`AdaptiveJitterPolicy`, `AdaptivePcmBuffer`), multi-stream audio mixing with smooth ducking and soft clipping (`AudioMixer`, `MixerDuckingEnvelope`, `MixerSoftClipper`), and flow-controlled microphone capture with PCM decimation (`MicSessionController`, `MicPcmDecimator`).
+- **Multiple Interaction Modes & Vehicle Integration**: Switch between the main dashboard (`MainViewController`), immersive full-screen projection (`VideoOnlyViewController`), and gesture trackpad mode (`TrackpadViewController`, `TrackpadInputBridge`), complete with CoreLocation GPS forwarding (`LocationCapture`) and system media integration (`NowPlayingCoordinator`).
+- **Built-In Diagnostics & Configuration Backup**: Real-time performance HUD (`PerformanceOverlayView`), standalone audio pipeline tester (`AudioStreamTester`), connection issue guidance banners (`ConnectionIssueBannerPolicy`), settings backup/restore (`SettingsBackupManager`), and one-tap log export (`LogExporter`).
 
-### 4. Multi-Track Audio Engine with Smart Ducking
-- **Independent Audio Channels**: Managed by `AVAudioEngine`, routing Media (`Channel.ID_AUD`), Guidance (`Channel.ID_AU1`), and System alerts (`Channel.ID_AU2`) separately.
-- **Navigation Audio Ducking**: Background music volume smoothly attenuates to 30% during turn-by-turn voice prompts (`MixerDuckingEnvelope`) and seamlessly restores once speech finishes.
-- **Dual Audio Codec Support**: Supports compressed AAC-LC hardware decoding via `AudioToolbox` alongside raw PCM.
-- **Anti-Aliased Microphone Decimator**: Downsamples the iPad's 48 kHz hardware microphone input to 16 kHz mono PCM (`MicPcmDecimator`) with chunk accumulation for Google Assistant voice input.
+## Install
 
-### 5. Day/Night Mode & Sensor Interlock
-- **Multi-Mode Lighting**: Sends `SensorBatch (0x8003)` over `Channel.ID_SEN (1)` supporting:
-  - **Auto**: Timed switching between 07:00 and 19:00.
-  - **System**: Follows iPadOS Dark/Light appearance.
-  - **Day / Night**: Manually forces light or dark map themes.
-- **CoreLocation GPS Passthrough**: Streams real-time latitude, longitude, altitude, bearing, and speed from cellular iPad GPS to Android Auto navigation apps.
-- **Unrestricted Driving Status**: Asserts `DrivingStatus = UNRESTRICTED (0)` upon channel negotiation, permanently bypassing phone keyboard input lockouts while stopped or parked.
-- **Bi-Directional Media Synchronization**: Synchronizes track title, artist, album name, and album artwork with iOS Control Center and Lockscreen via `MPNowPlayingInfoCenter`, and relays remote playback commands (play/pause/prev/next).
+### Option 1: Sideload Prebuilt IPA (Recommended)
 
-### 6. Distraction-Free Fullscreen & Phase 6 Diagnostics
-- **100% Clean Projection Viewport**: Zero floating buttons or translucent balls obstructing your in-car map display. The settings button is exclusively accessible from the home screen.
-- **Pass-Through Performance HUD**: A translucent top-left overlay providing real-time FPS, incoming bitrate (Mbps), frame size, decode latency, and link health without blocking touch interactions.
-- **Independent Audio Stream Tester**: Built-in 440 Hz / 880 Hz / 1200 Hz tone generator to test Media, Guidance, System streams and ducking behavior individually.
-- **Connection Issue Diagnostic Banner**: Real-time diagnostic banner displaying actionable troubleshooting guidance when port 5277 is refused or TLS handshake encounters issues.
-- **Full AppLog Sharing & JSON Configuration Backup**: Export ring-buffered application logs via the iOS system Share Sheet, with full JSON settings export, restore, and reset capabilities.
+1. Download the latest unsigned `HeadunitPad.ipa` from the [Releases](../../releases) page (current release: `v0.4.1-beta`).
+2. Sign and install the `.ipa` onto your iPad using your preferred sideloading tool (**SideStore**, **AltStore**, **Sideloadly**, or an Apple Developer certificate).
+3. On first launch, grant **Local Network**, **Microphone**, and **Location** permissions when prompted.
 
----
+### Option 2: Build from Source
 
-## Architecture & Channel Breakdown
-
-```
-┌─────────────────────────────────┐                     ┌─────────────────────────────────┐
-│        Android Phone            │                     │          iPad (Receiver)        │
-│    (Hotspot / Wi-Fi Client)     │                     │        (HeadunitPad-Auto)       │
-└────────────────┬────────────────┘                     └────────────────┬────────────────┘
-                 │                                                       │
-                 │ ── 1. TCP Connection (Target Port: 5277) ───────────► │
-                 │ ◄─ 2. AAP Version Negotiation (v1.6) ───────────────► │
-                 │ ◄─ 3. OpenSSL TLS Handshake (Channel 0, Type 3) ────► │
-                 │ ── 4. Service Discovery Request ────────────────────► │
-                 │ ◄─ 5. Service Discovery Response (DPI, Margin, Codec) │
-                 │ ── 6. Channel Open Requests (Video, Audio, Input, Mic)►│
-                 │                                                       │
-                 │ ════════════════ Encrypted AAP Streams ══════════════ │
-                 │ ── Video Stream (H.264 / HEVC) ─────────────────────► │ ── VideoToolbox Hardware Decode
-                 │ ── Audio Stream (AAC-LC / PCM) ─────────────────────► │ ── AVAudioEngine & Ducking
-                 │ ◄─ Multi-Touch Events (Normalized Coordinates) ────── │ ◄─ TouchCoordinateMapper
-                 │ ◄─ Voice Input (16 kHz Resampled PCM) ─────────────── │ ◄─ MicPcmDecimator
-                 │ ◄─ Sensor & Driving Status (Unrestricted) ─────────── │ ◄─ SensorBatch (0x8003)
-                 │ ◄─ Dynamic Margin Reflow ──────────────────────────── │ ◄─ UpdateUiConfig (0x8009)
-                 │ ◄─ Heartbeat Ping/Pong Watchdogs ───────────────────► │ ◄─ LinkGapMonitor & Recovery
-```
-
-### AAP Channel Mapping
-
-| Channel ID | Identifier | Purpose | Description |
-| :---: | :---: | :---: | :--- |
-| **0** | `ID_CTR` (Control) | Session Lifecycle & TLS | OpenSSL TLS handshake, version exchange, service discovery, ping/pong |
-| **1** | `ID_SEN` (Sensors) | Vehicle & Environment | GPS coordinates, speed, day/night mode, and unrestricted driving status |
-| **2** | `ID_VID` (Video) | Video & Dynamic UI | H.264 / HEVC hardware decoding, dynamic margin updates (`0x8009`), keyframe requests |
-| **3** | `ID_INP` (Input) | Touch & Media Keys | Multi-pointer touch reports (`TouchEvent`), remote media key events (`KeyEvent`) |
-| **6** | `ID_AUD` (Media) | Music & Audio | High-fidelity 48 kHz stereo audio stream (AAC-LC or uncompressed PCM) |
-| **4** | `ID_AU1` (Guidance) | Spoken Navigation | 16 kHz mono turn-by-turn prompts, triggers smooth media ducking |
-| **5** | `ID_AU2` (System) | System Audio | 16 kHz mono system notification chimes and ringtones |
-| **7** | `ID_MIC` (Microphone) | Voice Input | 48 kHz $\rightarrow$ 16 kHz decimated mono PCM upstream audio |
-| **9** | `ID_MPB` (Media Playback) | Playback Metadata | Track title, artist, album name, and album artwork synced to iOS Lockscreen |
-| **10**| `ID_NAV` (Navigation) | Navigation Metadata | Next turn road name, maneuver icon, distance, and ETA |
-
----
-
-## How to Start Head Unit Server on Android
-
-Connecting requires only four simple steps:
-
-```
-  [Step 1: Developer Mode] ──► [Step 2: Start Server] ──► [Step 3: Enable Hotspot] ──► [Step 4: Connect on iPad]
-```
-
-### Step 1: Unlock Android Auto Developer Settings
-1. On your Android phone, go to **Settings** $\rightarrow$ search for **Android Auto**.
-2. Scroll to the bottom to find the **Version** information.
-3. **Tap the Version information 10 consecutive times** until a prompt confirms Developer Mode has been enabled.
-
-### Step 2: Start Head Unit Server
-1. In Android Auto settings, tap the **three dots menu (⋮)** in the top right corner.
-2. Select **Start head unit server**. A persistent notification will appear in your Android notification shade confirming the server is running.
-
-### Step 3: Enable Personal Hotspot
-1. Turn on **Personal Hotspot** on your Android phone (5 GHz AP band recommended for optimal low-latency streaming).
-2. Connect your iPad's Wi-Fi to this hotspot network.
-
-### Step 4: Launch HeadunitPad & Connect
-1. Open **HeadunitPad** on your iPad.
-2. The app automatically detects the hotspot gateway address (e.g., `192.168.43.1` or `172.20.10.1`).
-3. Tap **Direct Connect (Phone Hotspot IP)** or tap **Scan for Headunit Server (Port 5277)**.
-4. On first launch, grant **Local Network** and **Microphone** permissions when prompted by iPadOS. Android Auto projection will start within 1–2 seconds!
-
----
-
-## Installation & Sideloading
-
-Because HeadunitPad-Auto requires **no private entitlements and no jailbreak**, you can install it on any iPad running iPadOS 16.6 or later:
-
-### Option 1: Sideloading via AltStore / SideStore / Sideloadly (Recommended)
-
-1. Download the unsigned `HeadunitPad.ipa` artifact from the latest [GitHub Actions](https://github.com/andyching168/HeadunitPad-Auto/actions) run or release page.
-2. Install the IPA onto your iPad using your preferred sideloading utility:
-   - **[AltStore](https://altstore.io/)** / **[SideStore](https://sidestore.io/)**: Wireless on-device refreshing.
-   - **[Sideloadly](https://sideloadly.io/)**: One-click desktop signing and installation.
-   - **[TrollStore](https://github.com/opa334/TrollStore)** (if supported by your iOS version): Permanent installation without certificate expiration.
-   - **Personal Apple ID / Developer Certificate**: Re-sign with Xcode or iOS App Signer.
-3. On your iPad, navigate to **Settings $\rightarrow$ General $\rightarrow$ VPN & Device Management** and trust your developer certificate.
-
-### Option 2: Build from Source with Xcode
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/andyching168/HeadunitPad-Auto.git
-   cd HeadunitPad-Auto
-   ```
-2. Install CocoaPods dependencies:
-   ```bash
-   pod install
-   ```
-3. Open `HeadunitPad.xcworkspace` in Xcode.
-4. Select the `HeadunitPad` target, go to **Signing & Capabilities**, and select your personal Apple ID or Developer Team.
-5. Select your iPad as the run destination and click **Run** ($\mathbf{\Command + R}$).
-
-### Option 3: Package Unsigned IPA via Script
-
-Build an unsigned IPA package locally using the provided release packaging script:
+**Prerequisites:**
+- macOS with Xcode 15.0 or later
+- CocoaPods
 
 ```bash
-chmod +x scripts/build_unsigned_ipa.sh
-./scripts/build_unsigned_ipa.sh build_output
+# 1. Clone the repository
+git clone https://github.com/Bryan-Maki/HeadunitPad-Auto.git
+cd headunitpad-auto
+
+# 2. Install CocoaPods dependencies
+pod install
+
+# 3. Open the workspace in Xcode
+open HeadunitPad.xcworkspace
+
+# Or build an unsigned IPA directly via the helper script:
+bash scripts/build_unsigned_ipa.sh
+
 ```
 
-The script compiles the project in Release configuration, strips code signatures, verifies entitlement purity, and produces an unsigned `.ipa` ready for sideloading.
+## Usage
 
----
+### Wireless Connection
 
-## Settings Reference
+1. **Network Setup**: Connect your iPad to your Android phone's personal Wi-Fi hotspot, or connect both devices to the same local Wi-Fi subnet (`DiscoverySubnetPolicy` automatically detects gateway and subnet addresses).
+2. **Start Projection**:
+* **Automatic / WPP Discovery**: Enable Wireless Android Auto on your phone. `ConnectionManager` and `WppTcpServer` on the iPad will automatically negotiate protocol versions, complete the TLS handshake, and open media/input channels.
 
-Access the settings menu by tapping the gear icon on the home screen (the projection view remains completely clean and button-free):
 
-| Setting | Options | Description |
-| :--- | :--- | :--- |
-| **Display Fit Mode** | `Fill (Margin Crop)` *(Default)*, `Fit`, `Stretch` | `Fill (Margin Crop)` reports custom margins to Android Auto for native full-screen rendering on 4:3 iPads without distortion; `Fit` preserves original 16:9 ratio with letterbox bars; `Stretch` stretches video to fill screen dimensions. |
-| **Coolwalk DPI Preview** | `100` – `320` (Default: `160`) | Interactive visual layout editor. Simulates Android Auto's Coolwalk multi-card split-screen dashboard, sidebar positioning, and card scaling in real time. |
-| **Video Codec** | `Auto`, `H.264`, `HEVC (H.265)` | Choose between H.264 or HEVC hardware decoding. HEVC saves approximately 50% bandwidth on high-resolution streams. |
-| **Resolution** | `Auto`, `480p`, `720p`, `1080p`, `1440p`, `4K` | Automatically negotiates or manually forces projection resolution. |
-| **FPS Limit** | `60 FPS`, `30 FPS` | Select 60 FPS for maximum fluidity, or 30 FPS to reduce power consumption on older iPad hardware. |
-| **Driving Position** | `LHD (Left-Hand Drive)`, `RHD (Right-Hand Drive)` | Toggles the docking side of the Coolwalk dashboard sidebar (left vs. right). |
-| **Night Mode** | `Auto (07:00–19:00)`, `System`, `Day`, `Night` | Controls map day/night theme. `Auto` switches based on time; `System` follows iPadOS Dark Mode appearance. |
-| **GPS Source** | `Phone GPS`, `iPad GPS` | Cellular iPad models can stream high-accuracy iPad GPS data directly to Android Auto. |
-| **Audio Output Target** | `iPad (Speaker / iPad BT)`, `Phone (Original Device)` | Switch between iPad audio output or phone native audio (useful when the phone is paired directly to your car's factory Bluetooth speaker system). |
-| **Performance HUD** | `On`, `Off` | Displays a lightweight, translucent diagnostic HUD at the top-left showing FPS, bitrate, frame size, and latency. Fully pass-through to touch. |
-| **Configuration Backup** | `Export JSON`, `Import JSON`, `Reset Defaults` | Export your personalized configuration as a JSON string, restore backups, or reset settings to factory defaults. |
 
----
+### Display & Geometry Configuration
 
-## Troubleshooting
+* Open the Settings panel to customize target resolution, screen density (DPI), video fit mode (`VideoFitPolicy`), and margin strategy (`MarginStrategyPolicy`).
+* Use the **Live DPI Preview (`DpiPreviewView`)** to inspect UI scaling and layout proportions in real time before starting a projection session.
+* Export or restore your custom head unit profile anytime via `SettingsBackupManager`.
 
-<details>
-<summary><b>1. App displays "iPad IP: No Wi-Fi"</b></summary>
+### Interaction Modes & Diagnostics
 
-Ensure your iPad is connected to your phone's personal hotspot or to the same Wi-Fi network. On first launch, grant HeadunitPad permission to access the **Local Network** when prompted. If inadvertently denied, navigate to iPad **Settings $\rightarrow$ Privacy & Security $\rightarrow$ Local Network $\rightarrow$ HeadunitPad** and enable it.
-</details>
+* **View Modes**: Use `MainViewController` for connection management and diagnostics, `VideoOnlyViewController` for distraction-free driving, or `TrackpadViewController` for relative cursor/trackpad input.
+* **Performance & Troubleshooting**: Toggle `PerformanceOverlayView` to monitor live FPS, decode latency, network throughput, and audio buffer levels. Use `AudioStreamTester` to verify audio output routing, or tap **Export Logs** (`LogExporter`) to generate a diagnostic bundle for bug reports.
 
-<details>
-<summary><b>2. "Connection Refused (Port 5277)"</b></summary>
+## Architecture
 
-This indicates the Head Unit Server is not currently running or listening on your phone:
-1. Open Android Auto settings on your Android phone.
-2. Tap the three-dot menu (⋮) in the top-right corner and verify that **Start head unit server** is active.
-3. Ensure the notification shade displays an active Android Auto server notification.
-4. Verify that the IP address matches your phone's personal hotspot gateway (typically `192.168.43.1` or `172.20.10.1`).
-</details>
+```text
+HeadunitPad/
+├── Core/
+│   ├── AAP/          # Frame reassembly, custom ProtoWire codec, channel multiplexing & 18 link watchdogs
+│   ├── Audio/        # AAC/PCM decoders, adaptive jitter buffers, multi-track mixer, NowPlaying & mic uplink
+│   ├── Diagnostics/  # AppLog, audio stream tester, connection issue banners & log exporter
+│   ├── Location/     # CoreLocation GPS capture & AAP sensor channel reporting
+│   ├── Network/      # ConnectionArbiter, subnet/gateway discovery, WPP server, TCP & OpenSSL TLS handlers
+│   ├── Settings/     # Resolution, DPI, margin, canvas geometry policies & settings backup manager
+│   ├── UI/           # Touch coordinate mapping, trackpad bridge, live DPI preview & HUD overlay
+│   └── Video/        # H.264 NAL parser, decoder config ladder, 20 video recovery policies & renderer view
+├── Resources/Raw/    # Embedded TLS certificate and private key for AAP handshakes
+├── MainViewController.swift
+├── VideoOnlyViewController.swift
+└── TrackpadViewController.swift
 
-<details>
-<summary><b>3. Does rotating the iPad interrupt or disconnect projection?</b></summary>
+```
 
-No. HeadunitPad-Auto features seamless zero-disconnect rotation. Rotating your iPad triggers dynamic `UpdateUiConfigRequest (0x8009)` margin recalculation and `overscanLayerFrame` clipping, keeping your video session uninterrupted and free from geometric distortion.
-</details>
+## Testing
 
-<details>
-<summary><b>4. Audio stutters, drops, or has high latency</b></summary>
+The repository includes a comprehensive unit and smoke test suite in `HeadunitPadTests/` covering all six engineering phases:
 
-Wi-Fi 2.4 GHz environments are prone to vehicular interference:
-1. Configure your phone's personal hotspot to use the **5 GHz band** for lower latency and higher bandwidth.
-2. Set **Audio Codec** to `AAC-LC` in settings to reduce audio bandwidth consumption.
-3. If you prefer vehicle factory speakers, select **Phone** as the **Audio Output Target** so your phone directly streams audio to your car via Bluetooth.
-</details>
+* `ByteStreamConnectionTests` & `H264NALParserTests`: Core byte stream and NAL unit parsing verification
+* `Phase1ScreenAndFramingTests`: Screen geometry adaptation and AAP fragmented frame reassembly
+* `Phase2WirelessAndWatchdogTests`: Wireless discovery, WPP handshakes, and link watchdog policies
+* `Phase3VideoAndRecoveryTests`: Decoder configuration ladder, keyframe repair, and stall recovery
+* `Phase4AudioAndMicTests`: Adaptive audio jitter buffering, mixer ducking, and microphone decimation
+* `Phase5SystemIntegrationTests`: Location forwarding, playback focus leases, and system integration
+* `Phase6DiagnosticsAndPolishTests` & `ViewControllersSmokeTests`: Diagnostics, backup management, and UI smoke tests
 
----
+Run all tests in Xcode by pressing `Cmd + U`.
 
-## Disclaimers
+## Maintainers
 
-This project is an independent open-source receiver intended for personal, educational, and research use:
-- Android Auto is a trademark of Google LLC.
-- Apple, iPad, iPadOS, and VideoToolbox are trademarks of Apple Inc.
-- This project is not affiliated with, sponsored by, or endorsed by Google LLC or Apple Inc.
+* [@bryan-maki](https://github.com/Bryan-Maki)
 
----
+## Contributing
+
+Issues and Pull Requests are welcome! When submitting a bug report, please attach a diagnostic log exported via `LogExporter`. Before opening a Pull Request, please ensure:
+
+1. New protocol or recovery logic follows the modular `*Policy` architecture.
+2. All unit test suites under `HeadunitPadTests` pass without regressions.
 
 ## Acknowledgments
 
-- **[open-headunit](https://github.com/open-headunit/open-headunit)** by André Rinas & contributors: The foundational reference architecture, Protobuf schema definitions, and policies that made this project possible.
-- **[Headunit Revived](https://github.com/andreknieriem/headunit-revived)** by Andre Knieriem: The Android Auto Server engine powering wireless projection.
-- **Mike Reid** (In Memoriam): Original open-source headunit pioneer whose protocol reverse-engineering paved the way for the ecosystem.
-- **[OpenSSL](https://www.openssl.org/)** & [OpenSSL-Universal](https://github.com/krzyzanowskim/OpenSSL): Industry-standard TLS cryptography toolkit.
-
----
+- [open-headunit](https://github.com/andreknieriem/open-headunit) - The Android Auto Server engine powering wireless projection.
+- [HeadunitPad](https://github.com/andyching168/HeadunitPad) - The original project.
 
 ## License
 
-This project is licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**. See the [LICENSE](LICENSE) file for complete details.
+See [LICENSE.txt](LICENSE.txt) for license details.
