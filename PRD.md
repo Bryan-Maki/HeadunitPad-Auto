@@ -143,8 +143,8 @@
 | **Phase 4** | 多音轨混音、AAC 硬解与麦克风 | `AudioToolbox` AAC-LC 硬解、三声道独立混音、导航 30% 自动压音（Ducking）、48k->16k 麦克风降采样 | ✅ 已完成 |
 | **Phase 5** | 日夜模式、GPS 与行车解除 | `SensorBatch (0x8003)` 日夜切换、`DrivingStatus = UNRESTRICTED`、CoreLocation GPS 透传 | ✅ 已完成 |
 | **Phase 6** | 纯净全屏与诊断工具箱 | 移除投屏遮挡按钮、左上角穿透式 `PerformanceOverlayView`、`AudioStreamTester`、故障横幅、`AppLog` 导出与 JSON 备份、全新 AppIcon | ✅ 已完成 |
-| **Phase 7** | **锁屏 Now Playing 修复与麦克风源路由** | **修复 `.mixWithOthers` 导致 iOS 锁屏/控制中心无歌曲信息 Bug、重构 `NowPlayingCoordinator`、新增 `MicrophoneSource`（Follow / iPad / Phone + Motorcycle 协议策略）与 JSON 备份补齐** | 🎯 **当前进行中** |
-| **Phase 8** | **现代车载仪表盘主页与原生分组设置中心** | **重构 `MainViewController` 为双栏卡片式车载仪表盘（含状态呼吸灯胶囊与 6 大配置速览磁贴）、新建 `.insetGrouped` 原生 `SettingsViewController`（内嵌实时 `DpiPreviewView`）、投屏防熄屏常亮** | ⏳ 待执行 |
+| **Phase 7** | **锁屏 Now Playing 修复与麦克风源路由** | **修复 `.mixWithOthers` 导致 iOS 锁屏/控制中心无歌曲信息 Bug、重构 `NowPlayingCoordinator`、新增 `MicrophoneSource`（Follow / iPad / Phone + Motorcycle 协议策略）与 JSON 备份补齐** | ✅ 已完成 |
+| **Phase 8** | **现代车载仪表盘主页与原生分组设置中心** | **重构 `MainViewController` 为双栏卡片式车载仪表盘（含状态呼吸灯胶囊与 6 大配置速览磁贴）、新建 `.insetGrouped` 原生 `SettingsViewController`（内嵌实时 `DpiPreviewView`）、投屏防熄屏常亮** | 🎯 当前待执行 |
 | **Phase 9** | **智能网络感知、天文日夜、方控映射与解码降级** | **实现 `F8` (`NetworkReachabilityMonitor`)、`F4` (`TwilightCalculator` 日出日落算法 + GPS 负经纬度修复)、`F3` (`KeymapManager` 蓝牙方控/键盘映射)、`F10` (`DecoderConfigLadder` 运行时自动降级闭环)** | ⏳ 待执行 |
 
 ### Phase 0 — USB purge and standard IPA foundation
@@ -204,7 +204,7 @@
 
 **Gate**：性能监控 HUD 穿透显示且指标刷新准确；声道测试器发声与压音正常；日志导出与设置 JSON 备份/恢复闭环验证通过；全部 Phase 1-6 单元测试 100% 通过。
 
-### Phase 7 — Audio Focus, Lockscreen Now Playing Restoration & Microphone Source Routing (P1) [🎯 进行中]
+### Phase 7 — Audio Focus, Lockscreen Now Playing Restoration & Microphone Source Routing (P1) [✅ 已完成 (100% 闭环收官)]
 
 1. **彻底修复 iOS 锁屏与控制中心不显示歌曲信息与专辑封面**：
    - 根因消除：彻底移除 `NowPlayingCoordinator`、`PCMAudioPlayer`、`MicrophoneCapture` 中所有 `AVAudioSession.setCategory` 调用里的 `.mixWithOthers` 伴音标志，恢复系统级主媒体播放器锁屏焦点资格。
